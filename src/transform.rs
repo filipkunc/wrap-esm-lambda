@@ -41,14 +41,12 @@ impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
   fn enter_program(&mut self, program: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
     let mut new_stmts = ctx.ast.vec_with_capacity(program.body.len() * 2);
     for stmt in program.body.drain(..) {
-      match stmt {
-        Statement::ExportNamedDeclaration(export) => {
-          self.transform_export_named_declaration(&mut new_stmts, export, ctx);
-        }
-        _ => {
-          new_stmts.push(stmt);
+      if let Statement::ExportNamedDeclaration(export) = &stmt {
+        if self.transform_export_named_declaration(&mut new_stmts, export, ctx) {
+          continue;
         }
       }
+      new_stmts.push(stmt);
     }
     program.body = new_stmts;
   }
@@ -120,35 +118,39 @@ impl<'a> LambdaTransform<'a> {
   fn transform_export_named_declaration(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
-    export: ArenaBox<'a, ExportNamedDeclaration<'a>>,
+    export: &ArenaBox<'a, ExportNamedDeclaration<'a>>,
     ctx: &mut TraverseCtx<'a, ()>,
-  ) {
-    let export = export.unbox();
-    if let Some(declaration) = export.declaration {
-      if let Declaration::VariableDeclaration(var) = &declaration {
-        let found = var
-          .declarations
-          .iter()
-          .find(|x| x.id.get_identifier_name() == Some(self.handler));
-        if found.is_some() {
-          let init = &found.unwrap().init;
-          assert!(init.is_some());
-          self.write_orig_handler(new_stmts, init, ctx);
-          self.write_wrap_handler(new_stmts, ctx);
-          return;
+  ) -> bool {
+    let export = export.as_ref();
+    if let Some(declaration) = &export.declaration {
+      match &declaration {
+        Declaration::VariableDeclaration(var) => {
+          let found = var
+            .declarations
+            .iter()
+            .find(|x| x.id.get_identifier_name() == Some(self.handler));
+          if found.is_some() {
+            let init = &found.unwrap().init;
+            assert!(init.is_some());
+            self.write_orig_handler(new_stmts, init, ctx);
+            self.write_wrap_handler(new_stmts, ctx);
+            return true;
+          }
         }
+        Declaration::FunctionDeclaration(func) => {
+          if func.name().is_some_and(|x| x == self.handler) {
+            let mut func = func.clone_in_with_semantic_ids(ctx.ast.allocator);
+            func.id = None;
+            let init = Some(Expression::FunctionExpression(func));
+            self.write_orig_handler(new_stmts, &init, ctx);
+            self.write_wrap_handler(new_stmts, ctx);
+            return true;
+          }
+        }
+        _ => (),
       };
-      new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
-        ExportNamedDeclaration {
-          span: SPAN,
-          source: export.source,
-          specifiers: export.specifiers,
-          declaration: Some(declaration),
-          with_clause: export.with_clause,
-          export_kind: export.export_kind,
-        },
-      )));
     }
+    return false;
   }
 }
 
@@ -162,4 +164,45 @@ pub fn transform_lambda_source(source_text: String, handler: String, wrapper: St
     .into_scoping();
   LambdaTransform::new(&allocator, handler, wrapper).transform(&allocator, &mut program, scoping);
   Codegen::new().build(&program).code
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_var_transform() {
+    let source_text = r#"
+      export const handler = async function(event) {
+        return "Hi from AWS Lambda";
+      };
+    "#
+    .to_string();
+    let expected_text = "const orig_handler = async function(event) {\n\treturn \"Hi from AWS Lambda\";\n};\nexport const handler = wrapper(orig_handler);\n".to_string();
+    let handler = "handler".to_string();
+    let wrapper = "wrapper".to_string();
+
+    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    assert!(transformed.contains("orig_handler"));
+    assert!(transformed.contains("wrapper"));
+    assert!(transformed == expected_text);
+  }
+
+  #[test]
+  fn test_fn_transform() {
+    let source_text = r#"
+      export async function handler(event) {
+        return "Hi from AWS Lambda";
+      }
+    "#
+    .to_string();
+    let expected_text = "const orig_handler = async function(event) {\n\treturn \"Hi from AWS Lambda\";\n};\nexport const handler = wrapper(orig_handler);\n".to_string();
+    let handler = "handler".to_string();
+    let wrapper = "wrapper".to_string();
+
+    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    assert!(transformed.contains("orig_handler"));
+    assert!(transformed.contains("wrapper"));
+    assert!(transformed == expected_text);
+  }
 }
