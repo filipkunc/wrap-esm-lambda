@@ -150,7 +150,7 @@ impl<'a> LambdaTransform<'a> {
         _ => (),
       };
     }
-    return false;
+    false
   }
 }
 

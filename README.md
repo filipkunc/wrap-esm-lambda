@@ -9,7 +9,7 @@ Based on [napi-rs/package-template](https://github.com/napi-rs/package-template)
 1. Run `yarn install` to install dependencies.
 2. Run `yarn build` to build.
 3. Run `yarn test` to run Node binding tests with [`ava`](https://github.com/avajs/ava)
-4. Run `cargo fmt` before committing
+4. Run `cargo fmt` and `cargo clippy` before committing
 5. Run `cargo test` to run Rust tests
 
 ### CI
