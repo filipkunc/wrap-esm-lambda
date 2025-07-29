@@ -11,7 +11,7 @@ test('lambda is transformed correctly', (t) => {
 };
 export const handler = WrapAwsLambda(orig_handler);
 `;
-  const output = transformLambda(input);
+  const output = transformLambda(input, 'handler', 'WrapAwsLambda');
   console.log(output);
   t.deepEqual(output, expected);
 });

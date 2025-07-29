@@ -4,6 +4,6 @@ use napi_derive::napi;
 mod transform;
 
 #[napi]
-pub fn transform_lambda(input: String) -> String {
-  transform::transform_lambda_source(input)
+pub fn transform_lambda(input: String, handler: String, wrapper: String) -> String {
+  transform::transform_lambda_source(input, handler, wrapper)
 }

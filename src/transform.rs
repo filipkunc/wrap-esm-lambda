@@ -12,13 +12,21 @@ use oxc_semantic::{Scoping, SemanticBuilder, SymbolFlags};
 use oxc_span::{Atom, SPAN, SourceType};
 use oxc_traverse::{Traverse, TraverseCtx, traverse_mut};
 
-pub struct LambdaTransform {}
+pub struct LambdaTransform<'a> {
+  handler: Atom<'a>,
+  wrapper: Atom<'a>,
+  orig_handler: Atom<'a>,
+}
 
-impl LambdaTransform {
-  pub fn new() -> Self {
-    Self {}
+impl<'a> LambdaTransform<'a> {
+  pub fn new(allocator: &'a Allocator, handler: String, wrapper: String) -> Self {
+    Self {
+      handler: Atom::from_strs_array_in([&handler], allocator),
+      wrapper: Atom::from_strs_array_in([&wrapper], allocator),
+      orig_handler: Atom::from_strs_array_in(["orig_", &handler], allocator),
+    }
   }
-  pub fn transform<'a>(
+  pub fn transform(
     mut self,
     allocator: &'a Allocator,
     program: &mut Program<'a>,
@@ -28,7 +36,7 @@ impl LambdaTransform {
   }
 }
 
-impl<'a> Traverse<'a, ()> for LambdaTransform {
+impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
   #[inline]
   fn enter_program(&mut self, program: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
     let mut new_stmts = ctx.ast.vec_with_capacity(program.body.len() * 2);
@@ -46,16 +54,15 @@ impl<'a> Traverse<'a, ()> for LambdaTransform {
   }
 }
 
-impl LambdaTransform {
-  fn write_orig_handler<'a>(
+impl<'a> LambdaTransform<'a> {
+  fn write_orig_handler(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
     init: &Option<Expression<'a>>,
     ctx: &mut TraverseCtx<'a, ()>,
   ) {
     let kind = VariableDeclarationKind::Const;
-    let binding =
-      ctx.generate_binding_in_current_scope(Atom::new_const("orig_handler"), SymbolFlags::empty());
+    let binding = ctx.generate_binding_in_current_scope(self.orig_handler, SymbolFlags::empty());
     let declarator = ctx.ast.variable_declarator(
       SPAN,
       kind,
@@ -72,27 +79,20 @@ impl LambdaTransform {
       },
     )));
   }
-}
 
-impl LambdaTransform {
-  fn write_wrap_handler<'a>(
+  fn write_wrap_handler(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
     ctx: &mut TraverseCtx<'a, ()>,
   ) {
-    let callee = ctx
-      .ast
-      .expression_identifier(SPAN, Atom::new_const("WrapAwsLambda"));
+    let callee = ctx.ast.expression_identifier(SPAN, self.wrapper);
     let arguments = ctx.ast.vec_from_array([Argument::from(
-      ctx
-        .ast
-        .expression_identifier(SPAN, Atom::new_const("orig_handler")),
+      ctx.ast.expression_identifier(SPAN, self.orig_handler),
     )]);
     let init = ctx
       .ast
       .expression_call(SPAN, callee, NONE, arguments, false);
-    let binding =
-      ctx.generate_binding_in_current_scope(Atom::new_const("handler"), SymbolFlags::empty());
+    let binding = ctx.generate_binding_in_current_scope(self.handler, SymbolFlags::empty());
     let kind = VariableDeclarationKind::Const;
     let declarator = ctx.ast.variable_declarator(
       SPAN,
@@ -116,10 +116,8 @@ impl LambdaTransform {
       },
     )));
   }
-}
 
-impl LambdaTransform {
-  fn transform_export_named_declaration<'a>(
+  fn transform_export_named_declaration(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
     export: ArenaBox<'a, ExportNamedDeclaration<'a>>,
@@ -131,7 +129,7 @@ impl LambdaTransform {
         let found = var
           .declarations
           .iter()
-          .find(|x| x.id.get_identifier_name() == Some(Atom::new_const("handler")));
+          .find(|x| x.id.get_identifier_name() == Some(self.handler));
         if found.is_some() {
           let init = &found.unwrap().init;
           assert!(init.is_some());
@@ -154,7 +152,7 @@ impl LambdaTransform {
   }
 }
 
-pub fn transform_lambda_source(source_text: String) -> String {
+pub fn transform_lambda_source(source_text: String, handler: String, wrapper: String) -> String {
   let allocator = Allocator::default();
   let parsed = Parser::new(&allocator, &source_text, SourceType::mjs()).parse();
   let mut program = parsed.program;
@@ -162,6 +160,6 @@ pub fn transform_lambda_source(source_text: String) -> String {
     .build(&program)
     .semantic
     .into_scoping();
-  LambdaTransform::new().transform(&allocator, &mut program, scoping);
+  LambdaTransform::new(&allocator, handler, wrapper).transform(&allocator, &mut program, scoping);
   Codegen::new().build(&program).code
 }
