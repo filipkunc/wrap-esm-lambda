@@ -1,8 +1,9 @@
 #![deny(clippy::all)]
 
 use napi_derive::napi;
+mod transform;
 
 #[napi]
-pub fn plus_100(input: u32) -> u32 {
-  input + 100
+pub fn transform_lambda(input: String) -> String {
+  transform::transform_lambda_source(input)
 }

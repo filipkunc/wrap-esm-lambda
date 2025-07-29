@@ -393,4 +393,4 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.plus100 = nativeBinding.plus100
+module.exports.transformLambda = nativeBinding.transformLambda

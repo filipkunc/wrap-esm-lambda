@@ -1,8 +1,17 @@
 import test from 'ava'
 
-import { plus100 } from '../index'
+import { transformLambda } from '../index'
 
-test('sync function from native code', (t) => {
-  const fixture = 42
-  t.is(plus100(fixture), fixture + 100)
-})
+test('lambda is transformed correctly', (t) => {
+  const input = `export const handler = async function(event) {
+	return "Hi from AWS Lambda";
+}`;
+  const expected = `const orig_handler = async function(event) {
+	return "Hi from AWS Lambda";
+};
+export const handler = WrapAwsLambda(orig_handler);
+`;
+  const output = transformLambda(input);
+  console.log(output);
+  t.deepEqual(output, expected);
+});

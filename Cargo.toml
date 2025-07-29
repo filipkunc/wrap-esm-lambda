@@ -1,7 +1,7 @@
 
 [package]
-authors = ["LongYinan <lynweklm@gmail.com>"]
-edition = "2021"
+authors = ["Filip Kunc <kunc.filip@gmail.com>"]
+edition = "2024"
 name = "wrap_esm_lambda"
 version = "0.1.0"
 
@@ -9,8 +9,17 @@ version = "0.1.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = "3.0.0"
-napi-derive = "3.0.0"
+napi = "3.1.3"
+napi-derive = "3.1.1"
+oxc = "0.78.0"
+oxc_allocator = "0.78.0"
+oxc_ast = "0.78.0"
+oxc_codegen = "0.78.0"
+oxc_parser = "0.78.0"
+oxc_semantic = "0.78.0"
+oxc_span = "0.78.0"
+oxc_transformer = "0.78.0"
+oxc_traverse = "0.78.0"
 
 [build-dependencies]
 napi-build = "2"
