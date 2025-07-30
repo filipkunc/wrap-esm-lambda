@@ -8,6 +8,8 @@ env:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
     #tags-ignore:
     #  - '**'
     paths-ignore:
