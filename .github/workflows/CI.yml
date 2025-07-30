@@ -257,10 +257,11 @@ jobs:
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
+          append_body: true
+          body_path: benchmark.txt
           files: |
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm
-            benchmark.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
