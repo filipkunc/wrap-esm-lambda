@@ -1,19 +1,35 @@
 import { Bench } from 'tinybench'
 
-import { plus100 } from '../index.js'
+import { transformLambda as transformBabel } from './babel-transform.js';
+import { transformLambda as transformOxc } from '../index.js'
 
-function add(a: number) {
-  return a + 100
+function transformReplace(input: string, handler: string, wrapper: string): string {
+  const exportNamedDecl = `export const ${handler}`;
+  const origHandler = `orig_${handler}`;
+    if (input.includes(exportNamedDecl)) {
+        let transformed = input.replace(exportNamedDecl, `const ${origHandler}`);
+        transformed += `\n${exportNamedDecl} = ${wrapper}(${origHandler});`;
+        return transformed;
+    }
+    return input;
 }
 
 const b = new Bench()
 
-b.add('Native a + 100', () => {
-  plus100(10)
+const testInput = `export const handler = async function(event) {
+	return "Hi from AWS Lambda";
+}`;
+
+b.add('transform using Babel', () => {
+  transformBabel(testInput, 'handler', 'wrapper');
 })
 
-b.add('JavaScript a + 100', () => {
-  add(10)
+b.add('transform using oxc.rs', () => {
+  transformOxc(testInput, 'handler', 'wrapper');
+})
+
+b.add('transform using replace', () => {
+  transformReplace(testInput, 'handler', 'wrapper');
 })
 
 await b.run()

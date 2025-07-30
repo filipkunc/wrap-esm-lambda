@@ -48,12 +48,14 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@babel/core": "^7.28.0",
     "@emnapi/core": "^1.4.5",
     "@emnapi/runtime": "^1.4.5",
     "@napi-rs/cli": "^3.0.3",
     "@oxc-node/core": "^0.0.30",
     "@taplo/cli": "^0.7.0",
     "@tybys/wasm-util": "^0.10.0",
+    "@types/babel__core": "^7.20.5",
     "ava": "^6.4.1",
     "chalk": "^5.4.1",
     "husky": "^9.1.7",
