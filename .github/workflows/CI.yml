@@ -246,11 +246,13 @@ jobs:
           else
             echo "Not a release, skipping publish"
           fi
-      - name: Upload release assets
+      - name: Release
         if: github.ref_type == 'tag'
-        run: |
-          gh release upload ${{github.ref_name}} ${{ env.APP_NAME }}.*.node
-          gh release upload ${{github.ref_name}} ${{ env.APP_NAME }}.*.wasm
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/${{ env.APP_NAME }}.*.node
+            artifacts/${{ env.APP_NAME }}.*.wasm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
