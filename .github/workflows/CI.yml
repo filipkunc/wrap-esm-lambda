@@ -251,8 +251,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/${{ env.APP_NAME }}.*.node
-            artifacts/${{ env.APP_NAME }}.*.wasm
+            ${{ env.APP_NAME }}.*.node
+            ${{ env.APP_NAME }}.*.wasm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
