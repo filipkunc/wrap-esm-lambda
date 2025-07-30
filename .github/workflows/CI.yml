@@ -8,8 +8,8 @@ env:
   push:
     branches:
       - main
-    tags-ignore:
-      - '**'
+    #tags-ignore:
+    #  - '**'
     paths-ignore:
       - '**/*.md'
       - LICENSE
@@ -244,6 +244,11 @@ jobs:
           else
             echo "Not a release, skipping publish"
           fi
+      - name: Upload release assets
+        if: github.ref_type == 'tag'
+        run: |
+          gh release upload ${{github.ref_name}} ${{ env.APP_NAME }}.*.node
+          gh release upload ${{github.ref_name}} ${{ env.APP_NAME }}.*.wasm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
