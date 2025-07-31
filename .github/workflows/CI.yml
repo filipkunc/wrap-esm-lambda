@@ -239,7 +239,7 @@ jobs:
         run: sudo apt update && sudo apt install -y hyperfine
       - name: Benchmark
         run: |
-          cd hooks_bench && ./bench_hooks.sh
+          cd hooks_bench && ./bench_hooks.sh && cd ..
           cat hooks_bench/benchTable.md
       - name: Publish
         run: |
