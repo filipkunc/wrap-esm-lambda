@@ -130,4 +130,4 @@ Cargo.lock
 /npm
 
 /benchmark/lib
-/hooks_bench/benchTable.md
+/hooks/benchTable.md
