@@ -45,7 +45,8 @@
     "prepublishOnly": "napi prepublish -t npm",
     "test": "ava",
     "version": "napi version",
-    "prepare": "husky"
+    "prepare": "husky",
+    "compile:bench": "tsc --project benchmark/tsconfig.json"
   },
   "devDependencies": {
     "@babel/core": "^7.28.0",

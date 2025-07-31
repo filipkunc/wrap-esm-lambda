@@ -235,10 +235,12 @@ jobs:
       - name: List packages
         run: ls -R ./npm
         shell: bash
+      - name: Install hyperfine
+        run: sudo apt update && sudo apt install -y hyperfine
       - name: Benchmark
         run: |
-          yarn bench > benchTable.md
-          cat benchTable.md
+          cd hooks_bench && ./bench_hooks.sh
+          cat hooks_bench/benchTable.md
       - name: Publish
         run: |
           npm config set provenance true
@@ -258,7 +260,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           append_body: true
-          body_path: benchTable.md
+          body_path: hooks_bench/benchTable.md
           files: |
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm

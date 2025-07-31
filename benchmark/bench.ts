@@ -34,15 +34,4 @@ b.add('String replace', () => {
 
 await b.run()
 
-//console.table(b.table());
-
-let mdTableContent = "| Task             | Latency avg (ns) | Throughput avg (ops/sec) |\n";
-mdTableContent    += "|------------------|-----------------:|-------------------------:|\n";
-
-b.tasks.forEach(task => {
-  const latency = Math.round(task.result?.latency.mean! * 1e6);
-  const opsPerSec = Math.round(task.result?.throughput.mean!);
-  mdTableContent += `| ${task.name.padEnd(16)} | ${latency.toString().padStart(16)} | ${opsPerSec.toString().padStart(24)} |\n`;
-});
-
-console.log(mdTableContent);
+console.table(b.table());
