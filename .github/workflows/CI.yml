@@ -237,8 +237,8 @@ jobs:
         shell: bash
       - name: Benchmark
         run: |
-          yarn bench > benchmark.txt
-          cat benchmark.txt
+          yarn bench > benchTable.md
+          cat benchTable.md
       - name: Publish
         run: |
           npm config set provenance true
@@ -258,7 +258,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           append_body: true
-          body_path: benchmark.txt
+          body_path: benchTable.md
           files: |
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm

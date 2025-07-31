@@ -20,18 +20,29 @@ const testInput = `export const handler = async function(event) {
 	return "Hi from AWS Lambda";
 }`;
 
-b.add('transform using Babel', () => {
+b.add('Babel', () => {
   transformBabel(testInput, 'handler', 'wrapper');
 })
 
-b.add('transform using oxc.rs', () => {
+b.add('oxc.rs', () => {
   transformOxc(testInput, 'handler', 'wrapper');
 })
 
-b.add('transform using replace', () => {
+b.add('String replace', () => {
   transformReplace(testInput, 'handler', 'wrapper');
 })
 
 await b.run()
 
-console.table(b.table())
+//console.table(b.table());
+
+let mdTableContent = "| Task             | Latency avg (ns) | Throughput avg (ops/sec) |\n";
+mdTableContent    += "|------------------|-----------------:|-------------------------:|\n";
+
+b.tasks.forEach(task => {
+  const latency = Math.round(task.result?.latency.mean! * 1e6);
+  const opsPerSec = Math.round(task.result?.throughput.mean!);
+  mdTableContent += `| ${task.name.padEnd(16)} | ${latency.toString().padStart(16)} | ${opsPerSec.toString().padStart(24)} |\n`;
+});
+
+console.log(mdTableContent);
