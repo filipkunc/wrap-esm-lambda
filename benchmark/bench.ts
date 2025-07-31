@@ -2,17 +2,7 @@ import { Bench } from 'tinybench'
 
 import { transformLambda as transformBabel } from './babel-transform.js';
 import { transformLambda as transformOxc } from '../index.js'
-
-function transformReplace(input: string, handler: string, wrapper: string): string {
-  const exportNamedDecl = `export const ${handler}`;
-  const origHandler = `orig_${handler}`;
-    if (input.includes(exportNamedDecl)) {
-        let transformed = input.replace(exportNamedDecl, `const ${origHandler}`);
-        transformed += `\n${exportNamedDecl} = ${wrapper}(${origHandler});`;
-        return transformed;
-    }
-    return input;
-}
+import { transformLambda as transformReplace } from './replace-transform.js';
 
 const b = new Bench()
 
