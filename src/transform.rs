@@ -37,14 +37,31 @@ impl<'a> LambdaTransform<'a> {
 }
 
 impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
-  #[inline]
   fn enter_program(&mut self, program: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
+    self.update_handler_name(&mut program.body, ctx);
+
     let mut new_stmts = ctx.ast.vec_with_capacity(program.body.len() * 2);
     for stmt in program.body.drain(..) {
-      if let Statement::ExportNamedDeclaration(export) = &stmt {
-        if self.transform_export_named_declaration(&mut new_stmts, export, ctx) {
-          continue;
+      match &stmt {
+        Statement::ExportNamedDeclaration(export) => {
+          if self.transform_export_named_declaration(&mut new_stmts, export, ctx) {
+            continue;
+          }
         }
+        Statement::VariableDeclaration(var) => {
+          let found = var
+            .declarations
+            .iter()
+            .find(|x| x.id.get_identifier_name() == Some(self.handler));
+          if found.is_some() {
+            let init = &found.unwrap().init;
+            assert!(init.is_some());
+            self.write_orig_handler(&mut new_stmts, init, ctx);
+            self.write_wrap_handler(&mut new_stmts, false, ctx);
+            continue;
+          }
+        }
+        _ => (),
       }
       new_stmts.push(stmt);
     }
@@ -53,6 +70,27 @@ impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
 }
 
 impl<'a> LambdaTransform<'a> {
+  fn update_handler_name(
+    &mut self,
+    stmts: &mut ArenaVec<'a, Statement<'a>>,
+    ctx: &mut TraverseCtx<'a, ()>,
+  ) {
+    for stmt in stmts {
+      if let Statement::ExportNamedDeclaration(export) = stmt {
+        for specifier in &export.specifiers {
+          if let Some(name) = specifier.exported.identifier_name() {
+            if name == self.handler {
+              self.handler = Atom::from_strs_array_in([&specifier.local.name()], ctx.ast.allocator);
+              self.orig_handler =
+                Atom::from_strs_array_in(["orig_", &self.handler], ctx.ast.allocator);
+              return;
+            }
+          }
+        }
+      }
+    }
+  }
+
   fn write_orig_handler(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
@@ -81,6 +119,7 @@ impl<'a> LambdaTransform<'a> {
   fn write_wrap_handler(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
+    add_export: bool,
     ctx: &mut TraverseCtx<'a, ()>,
   ) {
     let callee = ctx.ast.expression_identifier(SPAN, self.wrapper);
@@ -103,16 +142,20 @@ impl<'a> LambdaTransform<'a> {
       ctx
         .ast
         .alloc_variable_declaration(SPAN, kind, ctx.ast.vec1(declarator), false);
-    new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
-      ExportNamedDeclaration {
-        span: SPAN,
-        source: None,
-        specifiers: ctx.ast.vec(),
-        declaration: Some(Declaration::VariableDeclaration(declaration)),
-        with_clause: None,
-        export_kind: ImportOrExportKind::Value,
-      },
-    )));
+    if add_export {
+      new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
+        ExportNamedDeclaration {
+          span: SPAN,
+          source: None,
+          specifiers: ctx.ast.vec(),
+          declaration: Some(Declaration::VariableDeclaration(declaration)),
+          with_clause: None,
+          export_kind: ImportOrExportKind::Value,
+        },
+      )));
+    } else {
+      new_stmts.push(Statement::VariableDeclaration(declaration));
+    }
   }
 
   fn transform_export_named_declaration(
@@ -133,7 +176,7 @@ impl<'a> LambdaTransform<'a> {
             let init = &found.unwrap().init;
             assert!(init.is_some());
             self.write_orig_handler(new_stmts, init, ctx);
-            self.write_wrap_handler(new_stmts, ctx);
+            self.write_wrap_handler(new_stmts, true, ctx);
             return true;
           }
         }
@@ -143,7 +186,7 @@ impl<'a> LambdaTransform<'a> {
             func.id = None;
             let init = Some(Expression::FunctionExpression(func));
             self.write_orig_handler(new_stmts, &init, ctx);
-            self.write_wrap_handler(new_stmts, ctx);
+            self.write_wrap_handler(new_stmts, true, ctx);
             return true;
           }
         }
@@ -183,6 +226,7 @@ mod tests {
     let wrapper = "wrapper".to_string();
 
     let transformed = transform_lambda_source(source_text, handler, wrapper);
+    println!("{}", transformed);
     assert!(transformed.contains("orig_handler"));
     assert!(transformed.contains("wrapper"));
     assert!(transformed == expected_text);
@@ -201,8 +245,45 @@ mod tests {
     let wrapper = "wrapper".to_string();
 
     let transformed = transform_lambda_source(source_text, handler, wrapper);
+    println!("{}", transformed);
     assert!(transformed.contains("orig_handler"));
     assert!(transformed.contains("wrapper"));
     assert!(transformed == expected_text);
+  }
+
+  #[test]
+  fn test_export_list() {
+    let source_text = r#"
+      const x = 1;
+      const y = async (event) => "Hi from AWS Lambda";
+      export { x, y };
+    "#
+    .to_string();
+    let handler = "y".to_string();
+    let wrapper = "wrapper".to_string();
+
+    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    println!("{}", transformed);
+    assert!(transformed.contains("const orig_y = async (event) => \"Hi from AWS Lambda\";"));
+    assert!(transformed.contains("const y = wrapper(orig_y)"));
+    assert!(transformed.contains("export { x, y };"));
+  }
+
+  #[test]
+  fn test_export_renames() {
+    let source_text = r#"
+      const x = 1;
+      const y = async (event) => "Hi from AWS Lambda";
+      export { x, y as z };
+    "#
+    .to_string();
+    let handler = "z".to_string();
+    let wrapper = "wrapper".to_string();
+
+    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    println!("{}", transformed);
+    assert!(transformed.contains("const orig_y = async (event) => \"Hi from AWS Lambda\";"));
+    assert!(transformed.contains("const y = wrapper(orig_y)"));
+    assert!(transformed.contains("export { x, y as z };"));
   }
 }
