@@ -3,7 +3,7 @@
 authors = ["Filip Kunc <kunc.filip@gmail.com>"]
 edition = "2024"
 name = "wrap_esm_lambda"
-version = "0.1.0"
+version = "0.1.1"
 
 [lib]
 crate-type = ["cdylib"]
