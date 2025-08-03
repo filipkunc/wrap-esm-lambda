@@ -16,7 +16,6 @@ use oxc_traverse::{Traverse, TraverseCtx, traverse_mut};
 pub struct LambdaTransform<'a> {
   handler: Atom<'a>,
   wrapper: Atom<'a>,
-  orig_handler: Atom<'a>,
 }
 
 impl<'a> LambdaTransform<'a> {
@@ -24,7 +23,6 @@ impl<'a> LambdaTransform<'a> {
     Self {
       handler: Atom::from_strs_array_in([&handler], allocator),
       wrapper: Atom::from_strs_array_in([&wrapper], allocator),
-      orig_handler: Atom::from_strs_array_in(["orig_", &handler], allocator),
     }
   }
   pub fn transform(
@@ -57,8 +55,13 @@ impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
           if found.is_some() {
             let init = &found.unwrap().init;
             assert!(init.is_some());
-            self.write_orig_handler(&mut new_stmts, init, ctx);
-            self.write_wrap_handler(&mut new_stmts, false, ctx);
+            let wrapped_expr = self.wrap_expression(
+              init.clone_in_with_semantic_ids(ctx.ast.allocator).unwrap(),
+              ctx,
+            );
+            new_stmts.push(Statement::VariableDeclaration(ctx.ast.alloc(
+              self.var_handler(&Some(wrapped_expr), ctx),
+            )));
             continue;
           }
         }
@@ -82,8 +85,6 @@ impl<'a> LambdaTransform<'a> {
           if let Some(name) = specifier.exported.identifier_name() {
             if name == self.handler {
               self.handler = Atom::from_strs_array_in([&specifier.local.name()], ctx.ast.allocator);
-              self.orig_handler =
-                Atom::from_strs_array_in(["orig_", &self.handler], ctx.ast.allocator);
               return;
             }
           }
@@ -92,14 +93,13 @@ impl<'a> LambdaTransform<'a> {
     }
   }
 
-  fn write_orig_handler(
+  fn var_handler(
     &mut self,
-    new_stmts: &mut ArenaVec<'a, Statement<'a>>,
     init: &Option<Expression<'a>>,
     ctx: &mut TraverseCtx<'a, ()>,
-  ) {
+  ) -> VariableDeclaration<'a> {
     let kind = VariableDeclarationKind::Const;
-    let binding = ctx.generate_binding_in_current_scope(self.orig_handler, SymbolFlags::empty());
+    let binding = ctx.generate_binding_in_current_scope(self.handler, SymbolFlags::empty());
     let declarator = ctx.ast.variable_declarator(
       SPAN,
       kind,
@@ -107,55 +107,11 @@ impl<'a> LambdaTransform<'a> {
       init.clone_in_with_semantic_ids(ctx.ast.allocator),
       false,
     );
-    new_stmts.push(Statement::VariableDeclaration(ctx.ast.alloc(
-      VariableDeclaration {
-        span: SPAN,
-        kind,
-        declarations: ctx.ast.vec1(declarator),
-        declare: false,
-      },
-    )));
-  }
-
-  fn write_wrap_handler(
-    &mut self,
-    new_stmts: &mut ArenaVec<'a, Statement<'a>>,
-    add_export: bool,
-    ctx: &mut TraverseCtx<'a, ()>,
-  ) {
-    let callee = ctx.ast.expression_identifier(SPAN, self.wrapper);
-    let arguments = ctx.ast.vec_from_array([Argument::from(
-      ctx.ast.expression_identifier(SPAN, self.orig_handler),
-    )]);
-    let init = ctx
-      .ast
-      .expression_call(SPAN, callee, NONE, arguments, false);
-    let binding = ctx.generate_binding_in_current_scope(self.handler, SymbolFlags::empty());
-    let kind = VariableDeclarationKind::Const;
-    let declarator = ctx.ast.variable_declarator(
-      SPAN,
+    VariableDeclaration {
+      span: SPAN,
       kind,
-      binding.create_binding_pattern(ctx),
-      Some(init),
-      false,
-    );
-    let declaration =
-      ctx
-        .ast
-        .alloc_variable_declaration(SPAN, kind, ctx.ast.vec1(declarator), false);
-    if add_export {
-      new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
-        ExportNamedDeclaration {
-          span: SPAN,
-          source: None,
-          specifiers: ctx.ast.vec(),
-          declaration: Some(Declaration::VariableDeclaration(declaration)),
-          with_clause: None,
-          export_kind: ImportOrExportKind::Value,
-        },
-      )));
-    } else {
-      new_stmts.push(Statement::VariableDeclaration(declaration));
+      declarations: ctx.ast.vec1(declarator),
+      declare: false,
     }
   }
 
@@ -253,8 +209,6 @@ impl<'a> LambdaTransform<'a> {
                     if name == self.handler {
                       let init = &decl.init;
                       assert!(init.is_some());
-                      //self.write_orig_handler(new_stmts, init, ctx);
-                      //self.write_wrap_handler(new_stmts, true, ctx);
                       return false;
                     }
                   }
@@ -271,9 +225,18 @@ impl<'a> LambdaTransform<'a> {
           if func.name().is_some_and(|x| x == self.handler) {
             let mut func = func.clone_in_with_semantic_ids(ctx.ast.allocator);
             func.id = None;
-            let init = Some(Expression::FunctionExpression(func));
-            self.write_orig_handler(new_stmts, &init, ctx);
-            self.write_wrap_handler(new_stmts, true, ctx);
+            let init = self.wrap_expression(Expression::FunctionExpression(func), ctx);
+            let var_decl = self.var_handler(&Some(init), ctx);
+            new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
+              ExportNamedDeclaration {
+                span: SPAN,
+                source: None,
+                specifiers: ctx.ast.vec(),
+                declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
+                with_clause: None,
+                export_kind: ImportOrExportKind::Value,
+              },
+            )));
             return true;
           }
         }
@@ -326,13 +289,12 @@ mod tests {
       }
     "#
     .to_string();
-    let expected_text = "const orig_handler = async function(event) {\n\treturn \"Hi from AWS Lambda\";\n};\nexport const handler = wrapper(orig_handler);\n".to_string();
+    let expected_text = "export const handler = wrapper(async function(event) {\n\treturn \"Hi from AWS Lambda\";\n});\n".to_string();
     let handler = "handler".to_string();
     let wrapper = "wrapper".to_string();
 
     let transformed = transform_lambda_source(source_text, handler, wrapper);
     println!("{}", transformed);
-    assert!(transformed.contains("orig_handler"));
     assert!(transformed.contains("wrapper"));
     assert!(transformed == expected_text);
   }
@@ -350,8 +312,7 @@ mod tests {
 
     let transformed = transform_lambda_source(source_text, handler, wrapper);
     println!("{}", transformed);
-    assert!(transformed.contains("const orig_y = async (event) => \"Hi from AWS Lambda\";"));
-    assert!(transformed.contains("const y = wrapper(orig_y)"));
+    assert!(transformed.contains("const y = wrapper(async (event) => \"Hi from AWS Lambda\");"));
     assert!(transformed.contains("export { x, y };"));
   }
 
@@ -368,8 +329,7 @@ mod tests {
 
     let transformed = transform_lambda_source(source_text, handler, wrapper);
     println!("{}", transformed);
-    assert!(transformed.contains("const orig_y = async (event) => \"Hi from AWS Lambda\";"));
-    assert!(transformed.contains("const y = wrapper(orig_y)"));
+    assert!(transformed.contains("const y = wrapper(async (event) => \"Hi from AWS Lambda\");"));
     assert!(transformed.contains("export { x, y as z };"));
   }
 
@@ -386,7 +346,5 @@ export const { handler } = {
 
     let transformed = transform_lambda_source(source_text, handler, wrapper);
     println!("{}", transformed);
-    //assert!(transformed.contains("orig_handler"));
-    //assert!(transformed.contains("wrapper"));
   }
 }

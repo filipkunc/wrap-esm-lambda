@@ -8,10 +8,9 @@ test('variable export', (t) => {
   const input = `export const handler = async function(event) {
 	return "Hi from AWS Lambda";
 }`;
-  const expected = `const orig_handler = async function(event) {
+  const expected = `export const handler = WrapAwsLambda(async function(event) {
 	return "Hi from AWS Lambda";
-};
-export const handler = WrapAwsLambda(orig_handler);
+});
 `;
   const output = transformLambda(input, 'handler', 'WrapAwsLambda');
   t.deepEqual(output, expected);
@@ -21,10 +20,9 @@ test('function export', (t) => {
   const input = `export async function handler(event) {
 	return "Hi from AWS Lambda";
 }`;
-  const expected = `const orig_handler = async function(event) {
+  const expected = `export const handler = WrapAwsLambda(async function(event) {
 	return "Hi from AWS Lambda";
-};
-export const handler = WrapAwsLambda(orig_handler);
+});
 `;
   const output = transformLambda(input, 'handler', 'WrapAwsLambda');
   t.deepEqual(output, expected);
@@ -37,8 +35,7 @@ test('export renames', (t) => {
   export { x, y as z };
 `
 const expected = `const x = 1;
-const orig_y = async (event) => "Hi from AWS Lambda";
-const y = WrapAwsLambda(orig_y);
+const y = WrapAwsLambda(async (event) => "Hi from AWS Lambda");
 export { x, y as z };
 `;
   const output = transformLambda(input, 'z', 'WrapAwsLambda');
