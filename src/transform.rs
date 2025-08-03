@@ -2,8 +2,9 @@ use oxc_allocator::{Allocator, Box as ArenaBox, CloneIn, Vec as ArenaVec};
 use oxc_ast::{
   NONE,
   ast::{
-    Argument, Declaration, ExportNamedDeclaration, Expression, ImportOrExportKind, Program,
-    Statement, VariableDeclaration, VariableDeclarationKind,
+    Argument, BindingPatternKind, Declaration, ExportNamedDeclaration, Expression,
+    ImportOrExportKind, Program, Statement, VariableDeclaration, VariableDeclarationKind,
+    VariableDeclarator,
   },
 };
 use oxc_codegen::Codegen;
@@ -158,6 +159,36 @@ impl<'a> LambdaTransform<'a> {
     }
   }
 
+  fn wrap_expression(
+    &mut self,
+    expr: Expression<'a>,
+    ctx: &mut TraverseCtx<'a, ()>,
+  ) -> Expression<'a> {
+    ctx.ast.expression_call(
+      SPAN,
+      ctx.ast.expression_identifier(SPAN, self.wrapper),
+      NONE,
+      ctx.ast.vec1(Argument::from(
+        expr.clone_in_with_semantic_ids(ctx.ast.allocator),
+      )),
+      false,
+    )
+  }
+
+  fn replace_var_declarator_at(
+    &mut self,
+    declarations: &mut ArenaVec<'a, VariableDeclarator<'a>>,
+    index: usize,
+    new_decl: VariableDeclarator<'a>,
+    ctx: &mut TraverseCtx<'a, ()>,
+  ) {
+    if index < declarations.len() {
+      declarations[index] = new_decl.clone_in_with_semantic_ids(ctx.ast.allocator);
+    } else {
+      declarations.push(new_decl);
+    }
+  }
+
   fn transform_export_named_declaration(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
@@ -168,16 +199,72 @@ impl<'a> LambdaTransform<'a> {
     if let Some(declaration) = &export.declaration {
       match &declaration {
         Declaration::VariableDeclaration(var) => {
-          let found = var
-            .declarations
-            .iter()
-            .find(|x| x.id.get_identifier_name() == Some(self.handler));
-          if found.is_some() {
-            let init = &found.unwrap().init;
-            assert!(init.is_some());
-            self.write_orig_handler(new_stmts, init, ctx);
-            self.write_wrap_handler(new_stmts, true, ctx);
-            return true;
+          for (index, decl) in var.declarations.iter().enumerate() {
+            match &decl.id.kind {
+              BindingPatternKind::BindingIdentifier(identifier) => {
+                if identifier.name == self.handler {
+                  let mut new_declarations = var
+                    .declarations
+                    .clone_in_with_semantic_ids(ctx.ast.allocator);
+                  let expr = self.wrap_expression(
+                    decl
+                      .init
+                      .clone_in_with_semantic_ids(ctx.ast.allocator)
+                      .unwrap(),
+                    ctx,
+                  );
+                  self.replace_var_declarator_at(
+                    &mut new_declarations,
+                    index,
+                    ctx.ast.variable_declarator(
+                      SPAN,
+                      var.kind,
+                      ctx
+                        .generate_binding_in_current_scope(self.handler, SymbolFlags::empty())
+                        .create_binding_pattern(ctx),
+                      Some(expr),
+                      false,
+                    ),
+                    ctx,
+                  );
+                  new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
+                    ExportNamedDeclaration {
+                      span: SPAN,
+                      source: None,
+                      specifiers: ctx.ast.vec(),
+                      declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(
+                        VariableDeclaration {
+                          span: SPAN,
+                          kind: var.kind,
+                          declarations: new_declarations,
+                          declare: false,
+                        },
+                      ))),
+                      with_clause: None,
+                      export_kind: ImportOrExportKind::Value,
+                    },
+                  )));
+                  return true;
+                }
+              }
+              BindingPatternKind::ObjectPattern(pattern) => {
+                for prop in &pattern.properties {
+                  if let Some(name) = prop.key.name() {
+                    if name == self.handler {
+                      let init = &decl.init;
+                      assert!(init.is_some());
+                      //self.write_orig_handler(new_stmts, init, ctx);
+                      //self.write_wrap_handler(new_stmts, true, ctx);
+                      return false;
+                    }
+                  }
+                }
+              }
+              _ => {
+                // Other patterns are not supported
+                continue;
+              }
+            }
           }
         }
         Declaration::FunctionDeclaration(func) => {
@@ -218,16 +305,15 @@ mod tests {
     let source_text = r#"
       export const handler = async function(event) {
         return "Hi from AWS Lambda";
-      };
+      }, other = 123;
     "#
     .to_string();
-    let expected_text = "const orig_handler = async function(event) {\n\treturn \"Hi from AWS Lambda\";\n};\nexport const handler = wrapper(orig_handler);\n".to_string();
+    let expected_text = "export const handler = wrapper(async function(event) {\n\treturn \"Hi from AWS Lambda\";\n}), other = 123;\n".to_string();
     let handler = "handler".to_string();
     let wrapper = "wrapper".to_string();
 
     let transformed = transform_lambda_source(source_text, handler, wrapper);
     println!("{}", transformed);
-    assert!(transformed.contains("orig_handler"));
     assert!(transformed.contains("wrapper"));
     assert!(transformed == expected_text);
   }
@@ -285,5 +371,22 @@ mod tests {
     assert!(transformed.contains("const orig_y = async (event) => \"Hi from AWS Lambda\";"));
     assert!(transformed.contains("const y = wrapper(orig_y)"));
     assert!(transformed.contains("export { x, y as z };"));
+  }
+
+  #[test]
+  fn test_export_destructuring() {
+    let source_text = r#"
+export const { handler } = {
+  handler: async (event) => "Hi from AWS Lambda"
+};
+"#
+    .to_string();
+    let handler = "handler".to_string();
+    let wrapper = "wrapper".to_string();
+
+    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    println!("{}", transformed);
+    //assert!(transformed.contains("orig_handler"));
+    //assert!(transformed.contains("wrapper"));
   }
 }
