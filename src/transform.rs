@@ -59,9 +59,9 @@ impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
               init.clone_in_with_semantic_ids(ctx.ast.allocator).unwrap(),
               ctx,
             );
-            new_stmts.push(Statement::VariableDeclaration(ctx.ast.alloc(
-              self.var_handler(&Some(wrapped_expr), ctx),
-            )));
+            new_stmts.push(Statement::VariableDeclaration(
+              ctx.ast.alloc(self.var_handler(&Some(wrapped_expr), ctx)),
+            ));
             continue;
           }
         }
