@@ -131,4 +131,5 @@ Cargo.lock
 
 /benchmark/lib
 /hooks/benchTable.md
+/hooks/.swc/
 *.wasm

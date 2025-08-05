@@ -1,5 +1,5 @@
 import { registerHooks } from "node:module";
-import { transformLambda } from "../index.js";
+import { transformLambda } from "./swc-wrapper.cjs";
 
 let patched = false;
 registerHooks({
@@ -8,6 +8,7 @@ registerHooks({
     if (!patched && url.endsWith("/handler.mjs")) {
       patched = true;
       const transformed = transformLambda(result.source.toString(), "handler", "WrapAwsLambda");
+      //console.log("Transformed source:\n", transformed);
       return {
         format: "module",
         shortCircuit: true,
