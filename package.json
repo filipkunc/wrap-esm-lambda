@@ -1,6 +1,6 @@
 {
   "name": "wrap-esm-lambda",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Native Node.js addon to wrap AWS Lambda handler written in ESM.",
   "main": "index.js",
   "repository": "git@github.com:filipkunc/wrap-esm-lambda.git",
