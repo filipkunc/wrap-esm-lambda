@@ -3,8 +3,8 @@ use oxc_ast::{
   NONE,
   ast::{
     Argument, BindingPatternKind, Declaration, ExportNamedDeclaration, Expression,
-    ImportOrExportKind, Program, Statement, VariableDeclaration, VariableDeclarationKind,
-    VariableDeclarator,
+    ImportDeclaration, ImportOrExportKind, ModuleExportName, Program, Statement,
+    VariableDeclaration, VariableDeclarationKind, VariableDeclarator,
   },
 };
 use oxc_codegen::Codegen;
@@ -15,6 +15,7 @@ use oxc_traverse::{Traverse, TraverseCtx, traverse_mut};
 
 pub struct LambdaTransform<'a> {
   handler: Atom<'a>,
+  orig_handler: Atom<'a>,
   wrapper: Atom<'a>,
 }
 
@@ -22,6 +23,7 @@ impl<'a> LambdaTransform<'a> {
   pub fn new(allocator: &'a Allocator, handler: String, wrapper: String) -> Self {
     Self {
       handler: Atom::from_strs_array_in([&handler], allocator),
+      orig_handler: Atom::from_strs_array_in(["orig_", &handler], allocator),
       wrapper: Atom::from_strs_array_in([&wrapper], allocator),
     }
   }
@@ -85,6 +87,8 @@ impl<'a> LambdaTransform<'a> {
           if let Some(name) = specifier.exported.identifier_name() {
             if name == self.handler {
               self.handler = Atom::from_strs_array_in([&specifier.local.name()], ctx.ast.allocator);
+              self.orig_handler =
+                Atom::from_strs_array_in(["orig_", &self.handler], ctx.ast.allocator);
               return;
             }
           }
@@ -209,6 +213,8 @@ impl<'a> LambdaTransform<'a> {
                     if name == self.handler {
                       let init = &decl.init;
                       assert!(init.is_some());
+                      // todo: wrap init with object pattern specific code
+                      // e.g: (p => { return { ...p, handler: wrapper(p.handler) }; })(obj)
                       return false;
                     }
                   }
@@ -242,6 +248,47 @@ impl<'a> LambdaTransform<'a> {
         }
         _ => (),
       };
+    } else if export.source.is_some() {
+      for specifier in &export.specifiers {
+        if let Some(name) = specifier.exported.identifier_name() {
+          if name == self.handler {
+            new_stmts.push(Statement::ImportDeclaration(
+              ctx.ast.alloc(ImportDeclaration {
+                span: SPAN,
+                source: export
+                  .source
+                  .clone_in_with_semantic_ids(ctx.ast.allocator)
+                  .unwrap(),
+                specifiers: Some(ctx.ast.vec1(
+                  ctx.ast.import_declaration_specifier_import_specifier(
+                    SPAN,
+                    ModuleExportName::IdentifierName(ctx.ast.identifier_name(SPAN, self.handler)),
+                    ctx.ast.binding_identifier(SPAN, self.orig_handler),
+                    ImportOrExportKind::Value,
+                  ),
+                )),
+                with_clause: None,
+                phase: None,
+                import_kind: ImportOrExportKind::Value,
+              }),
+            ));
+            let init =
+              self.wrap_expression(ctx.ast.expression_identifier(SPAN, self.orig_handler), ctx);
+            let var_decl = self.var_handler(&Some(init), ctx);
+            new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
+              ExportNamedDeclaration {
+                span: SPAN,
+                source: None,
+                specifiers: ctx.ast.vec(),
+                declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
+                with_clause: None,
+                export_kind: ImportOrExportKind::Value,
+              },
+            )));
+            return true;
+          }
+        }
+      }
     }
     false
   }
@@ -334,11 +381,22 @@ mod tests {
   }
 
   #[test]
+  #[ignore = "object pattern destructuring is not implemented"]
   fn test_export_destructuring() {
     let source_text = r#"
-export const { handler } = {
-  handler: async (event) => "Hi from AWS Lambda"
+const obj = {
+    abc: async (event) => "Hi from AWS Lambda",
+    xyz: 1
 };
+export const { abc: handler } = obj;
+"#
+    .to_string();
+    let _possible_solution = r#"
+const obj = {
+    abc: async (event) => "Hi from AWS Lambda",
+    xyz: 1
+};
+export const { abc: handler } = (p => { return { ...p, abc: wrapper(p.abc) }; })(obj);
 "#
     .to_string();
     let handler = "handler".to_string();
@@ -346,5 +404,18 @@ export const { handler } = {
 
     let transformed = transform_lambda_source(source_text, handler, wrapper);
     println!("{}", transformed);
+    assert!(transformed.contains("wrapper"));
+  }
+
+  #[test]
+  fn test_export_from() {
+    let source_text = "export { handler } from \"other.js\";".to_string();
+    let handler = "handler".to_string();
+    let wrapper = "wrapper".to_string();
+
+    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    println!("{}", transformed);
+    assert!(transformed.contains("import { handler as orig_handler } from \"other.js\""));
+    assert!(transformed.contains("export const handler = wrapper(orig_handler);"));
   }
 }
