@@ -1,6 +1,7 @@
 yarn run compile:bench
 
 cd ../swc-plugin-esm-lambda
+rustup target add wasm32-wasip1
 cargo build-wasip1 --release
 cd ../hooks
 
