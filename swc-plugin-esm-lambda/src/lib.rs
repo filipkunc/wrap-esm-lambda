@@ -1,10 +1,10 @@
 use swc_core::ecma::ast::ExprOrSpread;
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 use swc_core::{
-  atoms::{atom, Atom},
-  common::{Span, DUMMY_SP},
+  atoms::{atom},
+  common::{DUMMY_SP},
   ecma::{
-    ast::{CallExpr, Callee, Decl, ExportDecl, Expr, Id, Ident, Pat, Program},
+    ast::{CallExpr, Callee, Decl, ExportDecl, Expr, Ident, Pat, Program},
     transforms::testing::test_inline,
     visit::{visit_mut_pass, VisitMut, VisitMutWith},
   },

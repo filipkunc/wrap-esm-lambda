@@ -1,5 +1,11 @@
 yarn run compile:bench
 
+cd ../swc-plugin-esm-lambda
+cargo build-wasip1 --release
+cd ../hooks
+
+rm -r .swc/
+
 hyperfine --warmup 5 --export-markdown=benchTable.md \
 'node runtime.mjs' \
 'node --import ./sync-hooks-babel.mjs runtime.mjs' \
