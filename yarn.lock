@@ -1503,6 +1503,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@slimio/is@npm:^2.0.0":
+  version: 2.0.0
+  resolution: "@slimio/is@npm:2.0.0"
+  checksum: 10c0/3d05acf48b4b7904bfb9a7def5673f06595d860b536273f461f912beac95ded3de9638a65daf7694936ce145ec2958aaf88c4c5036b477d548c1c7c5f416c670
+  languageName: node
+  linkType: hard
+
 "@swc/core-darwin-arm64@npm:1.13.3":
   version: 1.13.3
   resolution: "@swc/core-darwin-arm64@npm:1.13.3"
@@ -1627,11 +1634,11 @@ __metadata:
   linkType: hard
 
 "@swc/types@npm:^0.1.23":
-  version: 0.1.23
-  resolution: "@swc/types@npm:0.1.23"
+  version: 0.1.24
+  resolution: "@swc/types@npm:0.1.24"
   dependencies:
     "@swc/counter": "npm:^0.1.3"
-  checksum: 10c0/edbfe4a72257f40137e27b537bc17d47ccab28de7727471b859c00a1e67f5feac5e01e4b4e0a2365907ce024bb8c3de4b26b6260733e1b601094db54ae9b7477
+  checksum: 10c0/4ca95a338f070f48303e705996bacfc1219f606c45274bed4f6e3488b86b7b20397bd52792e58fdea0fa924fc939695b5eb5ff7f3ff4737382148fe6097e235a
   languageName: node
   linkType: hard
 
@@ -1694,7 +1701,16 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/estree@npm:^1.0.0":
+"@types/estraverse@npm:^5":
+  version: 5.1.7
+  resolution: "@types/estraverse@npm:5.1.7"
+  dependencies:
+    "@types/estree": "npm:*"
+  checksum: 10c0/9198c86f3657096179c33942074e354508506f5ea3ec6966d28ae7de69b60891236652bd351b296a8519091da3262cace82e700b98773914019d4b677049a0e2
+  languageName: node
+  linkType: hard
+
+"@types/estree@npm:*, @types/estree@npm:^1.0.0":
   version: 1.0.8
   resolution: "@types/estree@npm:1.0.8"
   checksum: 10c0/39d34d1afaa338ab9763f37ad6066e3f349444f9052b9676a7cc0252ef9485a41c6d81c9c4e0d26e9077993354edf25efc853f3224dd4b447175ef62bdcc86a5
@@ -1846,6 +1862,15 @@ __metadata:
   version: 3.0.0
   resolution: "arrify@npm:3.0.0"
   checksum: 10c0/2e26601b8486f29780f1f70f7ac05a226755814c2a3ab42e196748f650af1dc310cd575a11dd4b9841c70fd7460b2dd2b8fe6fb7a3375878e2660706efafa58e
+  languageName: node
+  linkType: hard
+
+"astring@npm:^1.9.0":
+  version: 1.9.0
+  resolution: "astring@npm:1.9.0"
+  bin:
+    astring: bin/astring
+  checksum: 10c0/e7519544d9824494e80ef0e722bb3a0c543a31440d59691c13aeaceb75b14502af536b23f08db50aa6c632dafaade54caa25f0788aa7550b6b2d6e2df89e0830
   languageName: node
   linkType: hard
 
@@ -2306,6 +2331,13 @@ __metadata:
     esparse: ./bin/esparse.js
     esvalidate: ./bin/esvalidate.js
   checksum: 10c0/ad4bab9ead0808cf56501750fd9d3fb276f6b105f987707d059005d57e182d18a7c9ec7f3a01794ebddcca676773e42ca48a32d67a250c9d35e009ca613caba3
+  languageName: node
+  linkType: hard
+
+"estraverse@npm:^5.3.0":
+  version: 5.3.0
+  resolution: "estraverse@npm:5.3.0"
+  checksum: 10c0/1ff9447b96263dec95d6d67431c5e0771eb9776427421260a3e2f0fdd5d6bd4f8e37a7338f5ad2880c9f143450c9b1e4fc2069060724570a49cf9cf0312bd107
   languageName: node
   linkType: hard
 
@@ -2929,6 +2961,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"node-estree@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "node-estree@npm:4.0.0"
+  dependencies:
+    "@slimio/is": "npm:^2.0.0"
+  checksum: 10c0/b9fada0d9f0a25a0205a4a40086510f5c84829c5a02cc536de8ad0684a4a735fd5aaf9e415c8e96a5888743038beac1253990af2565b1fb6db319dc161c4e5e8
+  languageName: node
+  linkType: hard
+
 "node-fetch@npm:^2.6.7":
   version: 2.7.0
   resolution: "node-fetch@npm:2.7.0"
@@ -3367,6 +3408,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"source-map@npm:^0.7.6":
+  version: 0.7.6
+  resolution: "source-map@npm:0.7.6"
+  checksum: 10c0/59f6f05538539b274ba771d2e9e32f6c65451982510564438e048bc1352f019c6efcdc6dd07909b1968144941c14015c2c7d4369fb7c4d7d53ae769716dcc16c
+  languageName: node
+  linkType: hard
+
 "sprintf-js@npm:~1.0.2":
   version: 1.0.3
   resolution: "sprintf-js@npm:1.0.3"
@@ -3700,13 +3748,19 @@ __metadata:
     "@taplo/cli": "npm:^0.7.0"
     "@tybys/wasm-util": "npm:^0.10.0"
     "@types/babel__core": "npm:^7.20.5"
+    "@types/estraverse": "npm:^5"
+    acorn: "npm:^8.15.0"
+    astring: "npm:^1.9.0"
     ava: "npm:^6.4.1"
     chalk: "npm:^5.4.1"
+    estraverse: "npm:^5.3.0"
     husky: "npm:^9.1.7"
     lint-staged: "npm:^16.1.2"
+    node-estree: "npm:^4.0.0"
     npm-run-all2: "npm:^8.0.4"
     oxlint: "npm:^1.8.0"
     prettier: "npm:^3.6.2"
+    source-map: "npm:^0.7.6"
     tinybench: "npm:^4.0.1"
     typescript: "npm:^5.8.3"
   languageName: unknown
