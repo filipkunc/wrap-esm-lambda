@@ -1,5 +1,5 @@
 import { registerHooks } from "node:module";
-import { transformLambda } from "../benchmark/lib/replace-transform.js";
+import { transformLambda } from "../benchmark/lib/regex-transform.js";
 
 let patched = false;
 registerHooks({

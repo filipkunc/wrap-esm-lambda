@@ -32,12 +32,12 @@ Example output in `hooks/benchTable.md`:
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `node runtime.mjs` | 33.4 ± 3.4 | 27.8 | 44.9 | 1.00 |
-| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 235.3 ± 18.5 | 215.8 | 284.4 | 7.03 ± 0.91 |
-| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 48.2 ± 4.1 | 40.1 | 65.4 | 1.44 ± 0.19 |
-| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 52.7 ± 3.9 | 45.1 | 64.3 | 1.57 ± 0.20 |
-| `node --import ./sync-hooks-replace.mjs runtime.mjs` | 34.2 ± 5.1 | 26.7 | 55.7 | 1.02 ± 0.18 |
-| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 427.5 ± 15.7 | 406.2 | 459.8 | 12.78 ± 1.39 |
-| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 276.1 ± 13.9 | 259.3 | 300.7 | 8.26 ± 0.94 |
-| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 98.5 ± 5.7 | 91.6 | 114.3 | 2.95 ± 0.35 |
-| `node --import ./register-async-hooks-replace.mjs runtime.mjs` | 81.1 ± 4.7 | 71.9 | 93.0 | 2.42 ± 0.28 |
+| `node runtime.mjs` | 34.3 ± 3.5 | 27.9 | 45.5 | 1.00 |
+| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 228.4 ± 8.4 | 219.2 | 250.6 | 6.67 ± 0.73 |
+| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 49.3 ± 3.2 | 42.7 | 55.7 | 1.44 ± 0.18 |
+| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 56.2 ± 7.3 | 42.6 | 88.7 | 1.64 ± 0.27 |
+| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 34.6 ± 3.6 | 28.3 | 46.3 | 1.01 ± 0.15 |
+| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 437.4 ± 31.9 | 404.3 | 515.1 | 12.77 ± 1.61 |
+| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 277.7 ± 14.0 | 262.0 | 309.6 | 8.11 ± 0.93 |
+| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 104.0 ± 9.6 | 90.1 | 133.0 | 3.04 ± 0.42 |
+| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 83.4 ± 6.7 | 73.7 | 108.8 | 2.43 ± 0.32 |
