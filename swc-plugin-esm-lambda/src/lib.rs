@@ -1,8 +1,8 @@
+use swc_core::atoms::Atom;
 use swc_core::ecma::ast::ExprOrSpread;
 use swc_core::plugin::{plugin_transform, proxies::TransformPluginProgramMetadata};
 use swc_core::{
-  atoms::{atom},
-  common::{DUMMY_SP},
+  common::DUMMY_SP,
   ecma::{
     ast::{CallExpr, Callee, Decl, ExportDecl, Expr, Ident, Pat, Program},
     transforms::testing::test_inline,
@@ -10,7 +10,24 @@ use swc_core::{
   },
 };
 
-pub struct TransformVisitor;
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct PluginConfig {
+  handler: String,
+  wrapper: String,
+}
+
+pub struct TransformVisitor {
+  handler: String,
+  wrapper: String,
+}
+
+impl TransformVisitor {
+  pub fn new(handler: String, wrapper: String) -> Self {
+    Self { handler, wrapper }
+  }
+}
 
 impl VisitMut for TransformVisitor {
   // Implement necessary visit_mut_* methods for actual custom transform.
@@ -21,12 +38,11 @@ impl VisitMut for TransformVisitor {
     if let Decl::Var(var_decl) = &mut node.decl {
       let var_decl = &mut var_decl.decls[0];
       if let Pat::Ident(i) = &mut var_decl.name {
-        if &*i.sym == "handler" {
-          //i.sym = "abc".into();
+        if *i.sym == self.handler {
           var_decl.init = Some(Box::new(Expr::Call(CallExpr {
             span: DUMMY_SP,
             callee: Callee::Expr(Box::new(Expr::Ident(Ident::new_no_ctxt(
-              atom!("WrapAwsLambda"),
+              Atom::new(self.wrapper.clone()),
               DUMMY_SP,
             )))),
             args: vec![ExprOrSpread {
@@ -58,7 +74,10 @@ impl VisitMut for TransformVisitor {
 /// Refer swc_plugin_macro to see how does it work internally.
 #[plugin_transform]
 pub fn process_transform(program: Program, _metadata: TransformPluginProgramMetadata) -> Program {
-  program.apply(&mut visit_mut_pass(TransformVisitor))
+  let config_string = _metadata.get_transform_plugin_config();
+  let config: PluginConfig = serde_json::from_str(&config_string.unwrap()).expect("Missing config");
+  let visitor = TransformVisitor::new(config.handler, config.wrapper);
+  program.apply(&mut visit_mut_pass(visitor))
 }
 
 // An example to test plugin transform.
@@ -67,10 +86,13 @@ pub fn process_transform(program: Program, _metadata: TransformPluginProgramMeta
 // unless explicitly required to do so.
 test_inline!(
   Default::default(),
-  |_| visit_mut_pass(TransformVisitor),
-  boo,
+  |_| visit_mut_pass(TransformVisitor::new(
+    "handler".to_string(),
+    "wrapper".to_string()
+  )),
+  var_transform,
   // Input codes
   r#"export const handler = async () => { return "Hi from AWS Lambda"; };"#,
   // Output codes after transformed with plugin
-  r#"export const abc = async () => { return "Hi from AWS Lambda"; };"#
+  r#"export const handler = wrapper(async () => { return "Hi from AWS Lambda"; });"#
 );

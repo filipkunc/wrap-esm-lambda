@@ -1,6 +1,6 @@
 const swc = require("@swc/core");
 
-exports.transformLambda = function (sourceCode) {
+exports.transformLambda = function (sourceCode, handler, wrapper) {
   const output = swc.transformSync(sourceCode, {
     // Some options cannot be specified in .swcrc
     filename: "handler.mjs",
@@ -12,9 +12,10 @@ exports.transformLambda = function (sourceCode) {
     jsc: {
       target: "esnext",
       experimental: {
-        cacheRoot: undefined,
+        cacheRoot: undefined, //< TODO: set `cacheRoot` to set .swc/ folder location
         plugins: [
-          [require.resolve("../swc-plugin-esm-lambda/target/wasm32-wasip1/release/swc_plugin_esm_lambda.wasm"), {}]
+          [require.resolve("../swc-plugin-esm-lambda/target/wasm32-wasip1/release/swc_plugin_esm_lambda.wasm"),
+          { handler, wrapper }]
         ]
       }
     },

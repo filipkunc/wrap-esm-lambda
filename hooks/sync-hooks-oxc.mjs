@@ -8,6 +8,7 @@ registerHooks({
     if (!patched && url.endsWith("/handler.mjs")) {
       patched = true;
       const transformed = transformLambda(result.source.toString(), "handler", "WrapAwsLambda");
+      // console.log("Transformed source:\n", transformed);
       return {
         format: "module",
         shortCircuit: true,
