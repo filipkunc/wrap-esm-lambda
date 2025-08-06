@@ -1717,6 +1717,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/node@npm:^24.2.0":
+  version: 24.2.0
+  resolution: "@types/node@npm:24.2.0"
+  dependencies:
+    undici-types: "npm:~7.10.0"
+  checksum: 10c0/0b55af4d7b37fea47bbeffffaff908462fa19ea9b1a18f92d9ed6d8415d97971b254f8cb3f629cd238916e94711fdb6ac939aa750cb353dfd6df6c0339435740
+  languageName: node
+  linkType: hard
+
 "@vercel/nft@npm:^0.29.4":
   version: 0.29.4
   resolution: "@vercel/nft@npm:0.29.4"
@@ -3609,6 +3618,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"undici-types@npm:~7.10.0":
+  version: 7.10.0
+  resolution: "undici-types@npm:7.10.0"
+  checksum: 10c0/8b00ce50e235fe3cc601307f148b5e8fb427092ee3b23e8118ec0a5d7f68eca8cee468c8fc9f15cbb2cf2a3797945ebceb1cbd9732306a1d00e0a9b6afa0f635
+  languageName: node
+  linkType: hard
+
 "unicorn-magic@npm:^0.1.0":
   version: 0.1.0
   resolution: "unicorn-magic@npm:0.1.0"
@@ -3749,6 +3765,7 @@ __metadata:
     "@tybys/wasm-util": "npm:^0.10.0"
     "@types/babel__core": "npm:^7.20.5"
     "@types/estraverse": "npm:^5"
+    "@types/node": "npm:^24.2.0"
     acorn: "npm:^8.15.0"
     astring: "npm:^1.9.0"
     ava: "npm:^6.4.1"
