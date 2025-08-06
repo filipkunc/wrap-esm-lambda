@@ -3694,6 +3694,7 @@ __metadata:
     "@emnapi/core": "npm:^1.4.5"
     "@emnapi/runtime": "npm:^1.4.5"
     "@napi-rs/cli": "npm:^3.0.3"
+    "@napi-rs/wasm-runtime": "npm:^1.0.1"
     "@oxc-node/core": "npm:^0.0.30"
     "@swc/core": "npm:^1.13.3"
     "@taplo/cli": "npm:^0.7.0"
