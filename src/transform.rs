@@ -54,8 +54,8 @@ impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
             .declarations
             .iter()
             .find(|x| x.id.get_identifier_name() == Some(self.handler));
-          if found.is_some() {
-            let init = &found.unwrap().init;
+          if let Some(found) = found {
+            let init = &found.init;
             assert!(init.is_some());
             let wrapped_expr = self.wrap_expression(
               init.clone_in_with_semantic_ids(ctx.ast.allocator).unwrap(),
@@ -84,13 +84,13 @@ impl<'a> LambdaTransform<'a> {
     for stmt in stmts {
       if let Statement::ExportNamedDeclaration(export) = stmt {
         for specifier in &export.specifiers {
-          if let Some(name) = specifier.exported.identifier_name() {
-            if name == self.handler {
-              self.handler = Atom::from_strs_array_in([&specifier.local.name()], ctx.ast.allocator);
-              self.orig_handler =
-                Atom::from_strs_array_in(["orig_", &self.handler], ctx.ast.allocator);
-              return;
-            }
+          if let Some(name) = specifier.exported.identifier_name()
+            && name == self.handler
+          {
+            self.handler = Atom::from_strs_array_in([&specifier.local.name()], ctx.ast.allocator);
+            self.orig_handler =
+              Atom::from_strs_array_in(["orig_", &self.handler], ctx.ast.allocator);
+            return;
           }
         }
       }
@@ -209,14 +209,14 @@ impl<'a> LambdaTransform<'a> {
               }
               BindingPatternKind::ObjectPattern(pattern) => {
                 for prop in &pattern.properties {
-                  if let Some(name) = prop.key.name() {
-                    if name == self.handler {
-                      let init = &decl.init;
-                      assert!(init.is_some());
-                      // todo: wrap init with object pattern specific code
-                      // e.g: (p => { return { ...p, handler: wrapper(p.handler) }; })(obj)
-                      return false;
-                    }
+                  if let Some(name) = prop.key.name()
+                    && name == self.handler
+                  {
+                    let init = &decl.init;
+                    assert!(init.is_some());
+                    // todo: wrap init with object pattern specific code
+                    // e.g: (p => { return { ...p, handler: wrapper(p.handler) }; })(obj)
+                    return false;
                   }
                 }
               }
@@ -250,43 +250,43 @@ impl<'a> LambdaTransform<'a> {
       };
     } else if export.source.is_some() {
       for specifier in &export.specifiers {
-        if let Some(name) = specifier.exported.identifier_name() {
-          if name == self.handler {
-            new_stmts.push(Statement::ImportDeclaration(
-              ctx.ast.alloc(ImportDeclaration {
-                span: SPAN,
-                source: export
-                  .source
-                  .clone_in_with_semantic_ids(ctx.ast.allocator)
-                  .unwrap(),
-                specifiers: Some(ctx.ast.vec1(
-                  ctx.ast.import_declaration_specifier_import_specifier(
-                    SPAN,
-                    ModuleExportName::IdentifierName(ctx.ast.identifier_name(SPAN, self.handler)),
-                    ctx.ast.binding_identifier(SPAN, self.orig_handler),
-                    ImportOrExportKind::Value,
-                  ),
-                )),
-                with_clause: None,
-                phase: None,
-                import_kind: ImportOrExportKind::Value,
-              }),
-            ));
-            let init =
-              self.wrap_expression(ctx.ast.expression_identifier(SPAN, self.orig_handler), ctx);
-            let var_decl = self.var_handler(&Some(init), ctx);
-            new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
-              ExportNamedDeclaration {
-                span: SPAN,
-                source: None,
-                specifiers: ctx.ast.vec(),
-                declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
-                with_clause: None,
-                export_kind: ImportOrExportKind::Value,
-              },
-            )));
-            return true;
-          }
+        if let Some(name) = specifier.exported.identifier_name()
+          && name == self.handler
+        {
+          new_stmts.push(Statement::ImportDeclaration(
+            ctx.ast.alloc(ImportDeclaration {
+              span: SPAN,
+              source: export
+                .source
+                .clone_in_with_semantic_ids(ctx.ast.allocator)
+                .unwrap(),
+              specifiers: Some(ctx.ast.vec1(
+                ctx.ast.import_declaration_specifier_import_specifier(
+                  SPAN,
+                  ModuleExportName::IdentifierName(ctx.ast.identifier_name(SPAN, self.handler)),
+                  ctx.ast.binding_identifier(SPAN, self.orig_handler),
+                  ImportOrExportKind::Value,
+                ),
+              )),
+              with_clause: None,
+              phase: None,
+              import_kind: ImportOrExportKind::Value,
+            }),
+          ));
+          let init =
+            self.wrap_expression(ctx.ast.expression_identifier(SPAN, self.orig_handler), ctx);
+          let var_decl = self.var_handler(&Some(init), ctx);
+          new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
+            ExportNamedDeclaration {
+              span: SPAN,
+              source: None,
+              specifiers: ctx.ast.vec(),
+              declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
+              with_clause: None,
+              export_kind: ImportOrExportKind::Value,
+            },
+          )));
+          return true;
         }
       }
     }
