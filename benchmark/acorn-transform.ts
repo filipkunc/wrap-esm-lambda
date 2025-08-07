@@ -1,7 +1,7 @@
 import * as acorn from "acorn";
 import * as estraverse from "estraverse";
 import * as ESTree from "estree";
-import * as NESTree from "node-estree";
+import { ESTree as NESTree, Helpers }  from "node-estree";
 import * as astring from "astring";
 
 export function transformLambda(code: string, handler: string, wrapper: string): string {
@@ -12,8 +12,8 @@ export function transformLambda(code: string, handler: string, wrapper: string):
       if (node.type === "ExportNamedDeclaration" && node.declaration?.type === "VariableDeclaration") {
         const varDecl = node.declaration.declarations[0];
         if (varDecl.id.type === "Identifier" && varDecl.id.name === handler) {
-          varDecl.init = NESTree.ESTree.CallExpression(NESTree.Helpers.AutoChain(wrapper),
-            [varDecl.init as NESTree.ESTree.Expression]) as ESTree.Expression;
+          varDecl.init = NESTree.CallExpression(Helpers.AutoChain(wrapper),
+            [varDecl.init as NESTree.Expression]) as ESTree.Expression;
         }
         return { ...node };
       }

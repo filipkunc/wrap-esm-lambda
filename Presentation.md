@@ -138,17 +138,18 @@ ExportNamedDeclaration(path) {
 
 # Acorn => estraverse => astring
 
-Acorn is only a parser, `estraverse` and `astring` add traversing and codegen.
+Acorn is only a parser, `estraverse` and `astring` adds traversing and codegen.
 
 ```ts
 const ast = acorn.parse(code, { ecmaVersion: 2020, sourceType: "module" });
 estraverse.replace(ast as ESTree.Node, {
   enter: function (node) {
-    if (node.type === "ExportNamedDeclaration" && node.declaration?.type === "VariableDeclaration") {
+    if (node.type === "ExportNamedDeclaration" 
+     && node.declaration?.type === "VariableDeclaration") {
       const varDecl = node.declaration.declarations[0];
       if (varDecl.id.type === "Identifier" && varDecl.id.name === handler) {
-        varDecl.init = NESTree.ESTree.CallExpression(NESTree.Helpers.AutoChain(wrapper),
-          [varDecl.init as NESTree.ESTree.Expression]) as ESTree.Expression;
+        varDecl.init = NESTree.CallExpression(Helpers.AutoChain(wrapper),
+          [varDecl.init as NESTree.Expression]) as ESTree.Expression;
       }
       return { ...node };
     }
