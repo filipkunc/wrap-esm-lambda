@@ -5,9 +5,7 @@ rustup target add wasm32-wasip1
 cargo build-wasip1 --release
 cd ../hooks
 
-rm -rf .swc/
-
-hyperfine --warmup 5 --export-markdown=benchTable.md \
+hyperfine --warmup 5 --prepare 'rm -rf .swc/' --export-markdown=benchTable.md \
 'node runtime.mjs' \
 'node --import ./sync-hooks-babel.mjs runtime.mjs' \
 'node --import ./sync-hooks-oxc.mjs runtime.mjs' \

@@ -32,14 +32,15 @@ Example output in `hooks/benchTable.md`:
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `node runtime.mjs` | 25.7 ± 2.0 | 22.0 | 33.3 | 1.00 |
-| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 177.5 ± 6.6 | 168.6 | 188.9 | 6.91 ± 0.60 |
-| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 37.4 ± 2.2 | 32.8 | 46.3 | 1.46 ± 0.14 |
-| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 70.4 ± 4.0 | 64.1 | 81.8 | 2.74 ± 0.26 |
-| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 42.5 ± 5.1 | 35.7 | 72.8 | 1.65 ± 0.24 |
-| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 48.7 ± 4.5 | 41.1 | 59.5 | 1.90 ± 0.23 |
-| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 26.6 ± 4.4 | 21.5 | 58.4 | 1.04 ± 0.19 |
-| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 334.9 ± 11.2 | 321.4 | 361.6 | 13.04 ± 1.10 |
-| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 217.7 ± 8.0 | 205.2 | 231.6 | 8.48 ± 0.73 |
-| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 78.9 ± 5.1 | 69.5 | 93.7 | 3.07 ± 0.31 |
-| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 67.4 ± 5.3 | 58.8 | 80.0 | 2.62 ± 0.29 |
+| `node runtime.mjs` | 20.9 ± 1.9 | 16.8 | 26.2 | 1.00 |
+| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 142.2 ± 4.1 | 134.0 | 148.2 | 6.81 ± 0.64 |
+| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 33.6 ± 2.6 | 27.9 | 39.2 | 1.61 ± 0.19 |
+| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 60.5 ± 3.6 | 54.6 | 70.5 | 2.90 ± 0.31 |
+| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 122.1 ± 6.9 | 110.9 | 143.1 | 5.85 ± 0.62 |
+| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 47.0 ± 5.2 | 39.1 | 63.4 | 2.25 ± 0.32 |
+| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 24.9 ± 3.8 | 18.0 | 36.0 | 1.19 ± 0.21 |
+| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 292.5 ± 7.8 | 282.0 | 305.5 | 14.01 ± 1.30 |
+| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 189.5 ± 6.0 | 177.1 | 197.6 | 9.08 ± 0.86 |
+| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 73.7 ± 7.0 | 62.0 | 98.1 | 3.53 ± 0.46 |
+| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 59.3 ± 4.7 | 49.9 | 69.5 | 2.84 ± 0.34 |
+

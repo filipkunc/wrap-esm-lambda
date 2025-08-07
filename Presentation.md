@@ -110,8 +110,7 @@ export function transformLambda(input: string, handler: string, wrapper: string)
 }
 ```
 
-This is the fastest way, which we will use as baseline for AST transformations:
-`node --import ./sync-hooks-regex.mjs runtime.mjs => 26.6 ± 4.4 ms`
+This is the fastest way, which we will use as baseline for AST transformations.
 
 ---
 
@@ -134,8 +133,6 @@ ExportNamedDeclaration(path) {
   }
 }
 ```
-
-`node --import ./sync-hooks-babel.mjs runtime.mjs => 177.5 ± 6.6 ms`
 
 ---
 
@@ -160,8 +157,6 @@ estraverse.replace(ast as ESTree.Node, {
 return astring.generate(ast);
 ```
 
-`node --import ./sync-hooks-acorn.mjs runtime.mjs => 48.7 ± 4.5 ms`
-
 ---
 
 # Rust native addon using `oxc.rs`
@@ -184,8 +179,6 @@ pub fn transform_lambda(input: String) -> String {
 const output = transformLambda(input);
 ```
 
-`node --import ./sync-hooks-oxc.mjs runtime.mjs => 37.4 ± 2.2 ms`
-
 ---
 
 # Rust wasm plugin for `swc.rs`
@@ -207,14 +200,17 @@ exports.transformLambda = function (sourceCode, handler, wrapper) {
 };
 ```
 
-`node --import ./sync-hooks-swc.mjs runtime.mjs => 42.5 ± 5.1 ms`
-
 ---
 
-# Conclusion
+# Benchmark
 
-Asynchronous hooks are very slow, whenever possible use synchronous hooks.
+Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and sync hooks:
 
-Rust based solution beats pure JavaScript solution, but it is harder to write and maintain. From the JavaScript solutions the `acorn` + `astring` are very fast.
-
-There is no big difference between `oxc.rs` and `swc.rs` in speed. Main difference is much bigger size of `swc.rs` package and caching to `.swc` folder which kills cold start.
+| Hooks | Mean [ms] | Min [ms] | Max [ms] | Relative |
+|:---|---:|---:|---:|---:|
+| N/A | 20.9 ± 1.9 | 16.8 | 26.2 | 1.00 |
+| RegExp | 24.9 ± 3.8 | 18.0 | 36.0 | 1.19 ± 0.21 |
+| oxc.rs | 33.6 ± 2.6 | 27.9 | 39.2 | 1.61 ± 0.19 |
+| Acorn | 47.0 ± 5.2 | 39.1 | 63.4 | 2.25 ± 0.32 |
+| swc.rs | 122.1 ± 6.9 | 110.9 | 143.1 | 5.85 ± 0.62 |
+| Babel | 142.2 ± 4.1 | 134.0 | 148.2 | 6.81 ± 0.64 |
