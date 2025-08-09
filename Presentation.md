@@ -215,3 +215,7 @@ Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/b
 | Acorn | 65.2 ± 9.3 | 54.9 | 96.3 | 1.94 ± 0.34 | 54.76 |
 | swc.rs | 214.0 ± 25.1 | 162.8 | 253.0 | 6.37 ± 1.00 | 314.00 |
 | Babel | 216.4 ± 27.5 | 174.4 | 279.3 | 6.44 ± 1.06 | 77.45 |
+
+---
+
+![bg contain](BenchmarkChart.svg)

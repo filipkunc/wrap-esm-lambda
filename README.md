@@ -66,3 +66,22 @@ Example output in `hooks/benchTable.md`:
 | `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 269.4 ± 7.0 | 260.2 | 282.5 | 8.02 ± 0.87 | 88.05 |
 | `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 100.2 ± 6.5 | 89.8 | 120.3 | 2.98 ± 0.37 | 68.13 |
 | `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 82.8 ± 6.7 | 71.0 | 101.5 | 2.46 ± 0.33 | 58.13 |
+
+```mermaid
+---
+config:
+  xyChart:
+    chartOrientation: vertical
+    xAxis:
+      labelPadding: 20
+  themeVariables:
+    xyChart:
+      plotColorPalette: '#c0c0f9ff, #fc5ddfff'
+---
+xychart-beta
+    title "Hooks"
+    x-axis [None, RegExp, oxc.rs, Acorn, swc.rs, Babel]
+    y-axis "Mean [ms] Bar / Rss [MB] Line" 0 --> 300
+    bar [33.6, 34.5, 47.5, 65.2, 214.0, 216.4]
+    line [44.53, 44.69, 56.09, 54.76, 314.00, 77.45]
+```
