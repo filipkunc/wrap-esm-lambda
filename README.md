@@ -2,7 +2,30 @@
 
 ![https://github.com/filipkunc/wrap-esm-lambda/actions](https://github.com/filipkunc/wrap-esm-lambda/workflows/CI/badge.svg)
 
-Based on [napi-rs/package-template](https://github.com/napi-rs/package-template).
+## Wrapping AWS Lambda ESM `handler`
+
+The problem: How to transform AWS Lambda `handler` below?
+
+```js
+// input.js
+export const handler = async(event) => {
+    return "Hi from AWS Lambda";
+};
+```
+
+To the following, notice the `WrapAwsLambda` wrapper:
+
+```js
+// transformed.js
+export const handler = WrapAwsLambda(async(event) => {
+    return "Hi from AWS Lambda";
+});
+```
+
+Wrapping uses [async and sync loader hooks from Node.js](https://nodejs.org/api/module.html#customization-hooks).
+
+This library uses [napi.rs](https://napi.rs/) and [oxc.rs](https://oxc.rs/).
+For comparison the minimal wrapping code is re-implemented using [Babel](https://babeljs.io/), [Acorn](https://github.com/acornjs/acorn) and [swc.rs](https://swc.rs/).
 
 ## Usage
 
@@ -30,17 +53,16 @@ cd hooks && ./bench_hooks.sh
 
 Example output in `hooks/benchTable.md`:
 
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-|:---|---:|---:|---:|---:|
-| `node runtime.mjs` | 20.9 ± 1.9 | 16.8 | 26.2 | 1.00 |
-| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 142.2 ± 4.1 | 134.0 | 148.2 | 6.81 ± 0.64 |
-| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 33.6 ± 2.6 | 27.9 | 39.2 | 1.61 ± 0.19 |
-| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 60.5 ± 3.6 | 54.6 | 70.5 | 2.90 ± 0.31 |
-| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 122.1 ± 6.9 | 110.9 | 143.1 | 5.85 ± 0.62 |
-| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 47.0 ± 5.2 | 39.1 | 63.4 | 2.25 ± 0.32 |
-| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 24.9 ± 3.8 | 18.0 | 36.0 | 1.19 ± 0.21 |
-| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 292.5 ± 7.8 | 282.0 | 305.5 | 14.01 ± 1.30 |
-| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 189.5 ± 6.0 | 177.1 | 197.6 | 9.08 ± 0.86 |
-| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 73.7 ± 7.0 | 62.0 | 98.1 | 3.53 ± 0.46 |
-| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 59.3 ± 4.7 | 49.9 | 69.5 | 2.84 ± 0.34 |
-
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
+|:---|---:|---:|---:|---:|---:|
+| `node runtime.mjs` | 33.6 ± 3.5 | 29.0 | 46.1 | 1.00 | 44.53 |
+| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 216.4 ± 27.5 | 174.4 | 279.3 | 6.44 ± 1.06 | 77.45 |
+| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 47.5 ± 3.4 | 42.9 | 57.5 | 1.41 ± 0.18 | 56.09 |
+| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 88.2 ± 6.1 | 79.5 | 104.8 | 2.63 ± 0.33 | 59.72 |
+| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 214.0 ± 25.1 | 162.8 | 253.0 | 6.37 ± 1.00 | 314.00 |
+| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 65.2 ± 9.3 | 54.9 | 96.3 | 1.94 ± 0.34 | 54.76 |
+| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 34.5 ± 3.7 | 28.3 | 46.4 | 1.03 ± 0.15 | 44.69 |
+| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 424.2 ± 17.7 | 399.4 | 455.2 | 12.63 ± 1.43 | 112.95 |
+| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 269.4 ± 7.0 | 260.2 | 282.5 | 8.02 ± 0.87 | 88.05 |
+| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 100.2 ± 6.5 | 89.8 | 120.3 | 2.98 ± 0.37 | 68.13 |
+| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 82.8 ± 6.7 | 71.0 | 101.5 | 2.46 ± 0.33 | 58.13 |

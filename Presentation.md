@@ -205,13 +205,13 @@ exports.transformLambda = function (sourceCode, handler, wrapper) {
 
 # Benchmark
 
-Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and sync hooks:
+Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/bin/time -v` for Max RSS:
 
-| Hooks | Mean [ms] | Min [ms] | Max [ms] | Relative |
-|:---|---:|---:|---:|---:|
-| N/A | 20.9 ± 1.9 | 16.8 | 26.2 | 1.00 |
-| RegExp | 24.9 ± 3.8 | 18.0 | 36.0 | 1.19 ± 0.21 |
-| oxc.rs | 33.6 ± 2.6 | 27.9 | 39.2 | 1.61 ± 0.19 |
-| Acorn | 47.0 ± 5.2 | 39.1 | 63.4 | 2.25 ± 0.32 |
-| swc.rs | 122.1 ± 6.9 | 110.9 | 143.1 | 5.85 ± 0.62 |
-| Babel | 142.2 ± 4.1 | 134.0 | 148.2 | 6.81 ± 0.64 |
+| Hooks | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
+|:---|---:|---:|---:|---:|---:|
+| N/A | 33.6 ± 3.5 | 29.0 | 46.1 | 1.00 | 44.53 |
+| RegExp | 34.5 ± 3.7 | 28.3 | 46.4 | 1.03 ± 0.15 | 44.69 |
+| oxc.rs | 47.5 ± 3.4 | 42.9 | 57.5 | 1.41 ± 0.18 | 56.09 |
+| Acorn | 65.2 ± 9.3 | 54.9 | 96.3 | 1.94 ± 0.34 | 54.76 |
+| swc.rs | 214.0 ± 25.1 | 162.8 | 253.0 | 6.37 ± 1.00 | 314.00 |
+| Babel | 216.4 ± 27.5 | 174.4 | 279.3 | 6.44 ± 1.06 | 77.45 |
