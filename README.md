@@ -29,11 +29,16 @@ For comparison the minimal wrapping code is re-implemented using [Babel](https:/
 
 ## Usage
 
-1. Run `yarn install` to install dependencies.
-2. Run `yarn build` to build.
-3. Run `yarn test` to run Node binding tests with [`ava`](https://github.com/avajs/ava)
-4. Run `cargo fmt` and `cargo clippy` before committing
-5. Run `cargo test` to run Rust tests
+  1. Run `yarn install` to install dependencies.
+  2. Run `yarn build` to build.
+  3. Run `yarn test` to run Node binding tests with [`ava`](https://github.com/avajs/ava)
+  4. Run `cargo fmt` and `cargo clippy` before committing
+  5. Run `cargo test` to run Rust tests
+
+### WebAssembly
+
+  1. Run `rustup target add wasm32-wasip1-threads` to install build target
+  2. Run `yarn build --target wasm32-wasip1-threads` to create `.wasm` file
 
 ### CI
 
