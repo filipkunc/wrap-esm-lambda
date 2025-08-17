@@ -9,6 +9,11 @@ version = "0.1.2"
 crate-type = ["cdylib"]
 
 [dependencies]
+ctor = "0.4.2"
+frida = { version = "0.17.0", features = [ "auto-download" ] }
+frida-gum = { version = "0.17.0", features = ["auto-download"] }
+lazy_static = "1.5.0"
+libc = "0.2.174"
 napi = "3.2.0"
 napi-derive = "3.2.0"
 oxc = "0.81.0"
@@ -21,6 +26,7 @@ oxc_span = "0.81.0"
 oxc_transformer = "0.81.0"
 oxc_traverse = "0.81.0"
 oxc-browserslist = "=2.0.15"
+libuv-sys2 = "1.51.0"
 
 [build-dependencies]
 napi-build = "2"

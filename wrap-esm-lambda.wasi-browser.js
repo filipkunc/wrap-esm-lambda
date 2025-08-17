@@ -56,4 +56,5 @@ const {
   },
 })
 export default __napiModule.exports
+export const installHooks = __napiModule.exports.installHooks
 export const transformLambda = __napiModule.exports.transformLambda

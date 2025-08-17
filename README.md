@@ -60,33 +60,21 @@ Example output in `hooks/benchTable.md`:
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
 |:---|---:|---:|---:|---:|---:|
-| `node runtime.mjs` | 33.6 ± 3.5 | 29.0 | 46.1 | 1.00 | 44.53 |
-| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 216.4 ± 27.5 | 174.4 | 279.3 | 6.44 ± 1.06 | 77.45 |
-| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 47.5 ± 3.4 | 42.9 | 57.5 | 1.41 ± 0.18 | 56.09 |
-| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 88.2 ± 6.1 | 79.5 | 104.8 | 2.63 ± 0.33 | 59.72 |
-| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 214.0 ± 25.1 | 162.8 | 253.0 | 6.37 ± 1.00 | 314.00 |
-| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 65.2 ± 9.3 | 54.9 | 96.3 | 1.94 ± 0.34 | 54.76 |
-| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 34.5 ± 3.7 | 28.3 | 46.4 | 1.03 ± 0.15 | 44.69 |
-| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 424.2 ± 17.7 | 399.4 | 455.2 | 12.63 ± 1.43 | 112.95 |
-| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 269.4 ± 7.0 | 260.2 | 282.5 | 8.02 ± 0.87 | 88.05 |
-| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 100.2 ± 6.5 | 89.8 | 120.3 | 2.98 ± 0.37 | 68.13 |
-| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 82.8 ± 6.7 | 71.0 | 101.5 | 2.46 ± 0.33 | 58.13 |
+| `node runtime.mjs` | 24.4 ± 1.2 | 22.6 | 31.1 | 1.00 | 43.82 |
+| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 184.4 ± 3.7 | 177.7 | 191.9 | 7.56 ± 0.41 | 79.12 |
+| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 37.8 ± 0.9 | 36.0 | 40.0 | 1.55 ± 0.09 | 57.82 |
+| `node --import ./sync-hooks-oxc-frida.mjs runtime.mjs` | 36.5 ± 0.9 | 35.2 | 39.6 | 1.50 ± 0.08 | 56.62 |
+| `LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs` | 26.8 ± 0.7 | 25.4 | 29.1 | 1.10 ± 0.06 | 49.23 |
+| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 70.7 ± 2.4 | 68.1 | 77.5 | 2.90 ± 0.17 | 63.19 |
+| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 127.9 ± 2.6 | 123.0 | 132.2 | 5.24 ± 0.28 | 370.79 |
+| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 48.0 ± 1.0 | 46.3 | 51.1 | 1.97 ± 0.11 | 54.12 |
+| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 26.9 ± 1.1 | 24.7 | 32.5 | 1.10 ± 0.07 | 44.25 |
+| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 341.4 ± 2.3 | 339.7 | 346.9 | 14.00 ± 0.71 | 113.74 |
+| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 222.6 ± 3.1 | 216.4 | 227.3 | 9.13 ± 0.48 | 88.41 |
+| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 74.2 ± 1.8 | 72.0 | 80.9 | 3.04 ± 0.17 | 68.46 |
+| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 60.6 ± 1.6 | 58.2 | 64.3 | 2.48 ± 0.14 | 59.57 |
 
-```mermaid
----
-config:
-  xyChart:
-    chartOrientation: vertical
-    xAxis:
-      labelPadding: 20
-  themeVariables:
-    xyChart:
-      plotColorPalette: '#c0c0f9ff, #fc5ddfff'
----
-xychart-beta
-    title "Hooks"
-    x-axis [None, RegExp, oxc.rs, Acorn, swc.rs, Babel]
-    y-axis "Mean [ms] Bar / Rss [MB] Line" 0 --> 300
-    bar [33.6, 34.5, 47.5, 65.2, 214.0, 216.4]
-    line [44.53, 44.69, 56.09, 54.76, 314.00, 77.45]
-```
+### Frida hooking
+
+The https://frida.re/ is used for hooking into `open`, `read` and `uv_fs_stat` against Node v22.18.0.  
+Problematic function is `uv_fs_fstat` which does not have stable definition of `libuv_sys2::uv_fs_t` struct!
