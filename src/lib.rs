@@ -1,7 +1,7 @@
 #![deny(clippy::all)]
 
-#[cfg_attr(target_family = "unix", path = "detours.rs")]
-#[cfg_attr(target_family = "wasm", path = "no-detours.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "detours.rs")]
+#[cfg_attr(not(target_arch = "x86_64"), path = "no-detours.rs")]
 mod detours;
 
 use detours::transform;

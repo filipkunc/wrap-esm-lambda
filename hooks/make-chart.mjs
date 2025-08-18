@@ -19,7 +19,7 @@ for (let i = 0; i < benchTableLines.length; ++i) {
   }
   benchTableLines[i] = entries.join(',');
   if (i > 0 && benchTableLines[i].length > 0) {
-    commands.push(entries[0].replace("runtime.mjs", "").replace("node --import", ""));
+    commands.push(entries[0].replace("runtime.mjs", "").replace("node --import", "").replace(".node node", ".node"));
     times.push(+(entries[1].split('±')[0]));
     memory.push(+entries[entries.length - 1]);
   }

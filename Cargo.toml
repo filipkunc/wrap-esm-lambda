@@ -22,7 +22,7 @@ oxc_transformer = "0.81.0"
 oxc_traverse = "0.81.0"
 oxc-browserslist = "=2.0.15"
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(target_arch = "x86_64")'.dependencies]
 ctor = "0.4.2"
 frida = { version = "0.17.0", features = [ "auto-download" ] }
 frida-gum = { version = "0.17.0", features = ["auto-download"] }
