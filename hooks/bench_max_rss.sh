@@ -15,5 +15,6 @@ rm -rf .swc/
 /usr/bin/time -v -o time_async_regex.txt node --import ./register-async-hooks-regex.mjs runtime.mjs
 
 node update-bench-table.mjs
+node make-chart.mjs
 
 rm -rf time_*.txt

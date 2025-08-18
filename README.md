@@ -56,23 +56,9 @@ sudo apt update && sudo apt install -y hyperfine
 cd hooks && ./bench_hooks.sh
 ```
 
-Example output in `hooks/benchTable.md`:
+Example output is in [hooks/benchTable.md](hooks/benchTable.md):
 
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
-|:---|---:|---:|---:|---:|---:|
-| `node runtime.mjs` | 24.4 ± 1.2 | 22.6 | 31.1 | 1.00 | 43.82 |
-| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 184.4 ± 3.7 | 177.7 | 191.9 | 7.56 ± 0.41 | 79.12 |
-| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 37.8 ± 0.9 | 36.0 | 40.0 | 1.55 ± 0.09 | 57.82 |
-| `node --import ./sync-hooks-oxc-frida.mjs runtime.mjs` | 36.5 ± 0.9 | 35.2 | 39.6 | 1.50 ± 0.08 | 56.62 |
-| `LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs` | 26.8 ± 0.7 | 25.4 | 29.1 | 1.10 ± 0.06 | 49.23 |
-| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 70.7 ± 2.4 | 68.1 | 77.5 | 2.90 ± 0.17 | 63.19 |
-| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 127.9 ± 2.6 | 123.0 | 132.2 | 5.24 ± 0.28 | 370.79 |
-| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 48.0 ± 1.0 | 46.3 | 51.1 | 1.97 ± 0.11 | 54.12 |
-| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 26.9 ± 1.1 | 24.7 | 32.5 | 1.10 ± 0.07 | 44.25 |
-| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 341.4 ± 2.3 | 339.7 | 346.9 | 14.00 ± 0.71 | 113.74 |
-| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 222.6 ± 3.1 | 216.4 | 227.3 | 9.13 ± 0.48 | 88.41 |
-| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 74.2 ± 1.8 | 72.0 | 80.9 | 3.04 ± 0.17 | 68.46 |
-| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 60.6 ± 1.6 | 58.2 | 64.3 | 2.48 ± 0.14 | 59.57 |
+![Benchmark Chart](hooks/benchChart.png "Benchmark Chart")
 
 ### Frida hooking
 
