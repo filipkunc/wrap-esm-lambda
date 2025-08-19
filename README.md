@@ -58,7 +58,7 @@ cd hooks && ./bench_hooks.sh
 
 Example output is in [hooks/benchTable.md](hooks/benchTable.md):
 
-![Benchmark Chart](hooks/benchChart.png "Benchmark Chart")
+![Benchmark Chart](hooks/benchChart.svg "Benchmark Chart")
 
 ### Frida hooking
 

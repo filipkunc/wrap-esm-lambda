@@ -1,6 +1,5 @@
 import * as fs from "node:fs";
-import Chart from "chart.js/auto";
-import { Canvas } from 'skia-canvas';
+import { ChartJSNodeCanvas } from "chartjs-node-canvas";
 
 let commands = [];
 let times = [];
@@ -25,28 +24,30 @@ for (let i = 0; i < benchTableLines.length; ++i) {
   }
 }
 
-const canvas = new Canvas(800, 500);
-const chart = new Chart(
-  canvas,
-  {
-    type: 'bar',
-    data: {
-      datasets: [{
-        label: "Mean [ms]",
-        data: times,
-        borderWidth: 1
-      }, {
-        label: "Max RSS [MB]",
-        data: memory,
-        borderWidth: 1
-      }],
-      labels: commands
-    },
-    options: {
-      indexAxis: 'y',
-    }
+const canvas = new ChartJSNodeCanvas({ width: 800, height: 500, backgroundColour: "white", type: "svg" });
+
+/** @type { import("chart.js").ChartConfiguration } */
+const config = {
+  type: "bar",
+  data: {
+    datasets: [{
+      label: "Mean [ms]",
+      data: times,
+      borderWidth: 1,
+    }, {
+      label: "Max RSS [MB]",
+      data: memory,
+      borderWidth: 1,
+    }],
+    labels: commands
+  },
+  options: {
+    indexAxis: "y",
+    animation: false,
+    responsive: false,
+    maintainAspectRatio: false
   }
-);
-const pngBuffer = await canvas.toBuffer('png', { matte: 'white' });
-fs.writeFileSync('benchChart.png', pngBuffer);
-chart.destroy();
+};
+
+const buffer = canvas.renderToBufferSync(config);
+fs.writeFileSync("benchChart.svg", buffer);

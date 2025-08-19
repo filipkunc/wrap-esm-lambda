@@ -7,7 +7,7 @@ if (!benchTableLines[0].includes("Max RSS [MB]")) {
   benchTableLines[1] += "---:|";
   for (const file of files) {
     const content = fs.readFileSync(file, "utf-8");
-    const command = content.match(/Command being timed: \"(.+)\"/)[1];
+    const command = content.match(/Command being timed: "(.+)"/)[1];
     const maxRss = content.match(/Maximum resident set size \(kbytes\): ([0-9]+)/)[1];
     let index;
     if (command.includes("LD_PRELOAD")) {

@@ -266,7 +266,7 @@ jobs:
           files: |
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm
-            hooks/benchChart.png
+            hooks/benchChart.svg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
