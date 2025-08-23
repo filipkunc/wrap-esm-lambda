@@ -1,5 +1,5 @@
 import { register } from "node:module";
-register("./async-hooks-babel-one-file.mjs", import.meta.url);
+register(import.meta.url);
 
 import { transformLambda } from "../benchmark/lib/babel-transform.js";
 

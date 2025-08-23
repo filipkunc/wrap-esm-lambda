@@ -203,19 +203,41 @@ exports.transformLambda = function (sourceCode, handler, wrapper) {
 
 ---
 
+# LD_PRELOAD - hooking `open()`
+
+Hooking of [`open()`](https://man7.org/linux/man-pages/man2/openat.2.html) from `libc` allows us to redirect to temporary file or intercept the file descriptor and provide [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) and [`uv_fs_fstat()`](https://docs.libuv.org/en/v1.x/fs.html#c.uv_fs_fstat) hooks for reading and file size.
+
+This can be achieved using [Frida](https://frida.re/) and the [Rust bindings example](https://github.com/frida/frida-rust/blob/main/examples/gum/hook_open/src/lib.rs).
+
+The resulting library is preloaded before starting the Node process.
+
+```sh
+LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs
+```
+
+This is a little bit faster than using `require` + calling exported function:
+
+```js
+const { installHooks } = require("../wrap-esm-lambda.linux-x64-gnu.node");
+installHooks();
+```
+
+---
+
 # Benchmark
 
 Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/bin/time -v` for Max RSS:
 
-| Hooks | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
+| Hook | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
 |:---|---:|---:|---:|---:|---:|
-| N/A | 33.6 ± 3.5 | 29.0 | 46.1 | 1.00 | 44.53 |
-| RegExp | 34.5 ± 3.7 | 28.3 | 46.4 | 1.03 ± 0.15 | 44.69 |
-| oxc.rs | 47.5 ± 3.4 | 42.9 | 57.5 | 1.41 ± 0.18 | 56.09 |
-| Acorn | 65.2 ± 9.3 | 54.9 | 96.3 | 1.94 ± 0.34 | 54.76 |
-| swc.rs | 214.0 ± 25.1 | 162.8 | 253.0 | 6.37 ± 1.00 | 314.00 |
-| Babel | 216.4 ± 27.5 | 174.4 | 279.3 | 6.44 ± 1.06 | 77.45 |
+| regex | 24.3 ± 0.9 | 22.8 | 28.6 | 1.03 ± 0.06 | 44.24 |
+| LD_PRELOAD | 25.8 ± 0.7 | 24.4 | 28.2 | 1.10 ± 0.06 | 49.26 |
+| oxc | 35.6 ± 1.0 | 33.9 | 38.4 | 1.51 ± 0.09 | 54.92 |
+| acorn | 45.0 ± 1.4 | 43.2 | 50.5 | 1.91 ± 0.11 | 56.30 |
+| swc plugin | 127.4 ± 4.3 | 120.8 | 135.1 | 5.42 ± 0.33 | 371.61 |
+| babel | 180.0 ± 4.0 | 172.1 | 188.2 | 7.66 ± 0.42 | 82.51 |
+| async babel | 211.4 ± 4.2 | 205.9 | 220.3 | 9.00 ± 0.49 | 90.44 |
 
 ---
 
-![bg contain](BenchmarkChart.svg)
+![bg contain](hooks/benchChart.svg)

@@ -12,7 +12,7 @@ hyperfine --warmup 5 --prepare 'rm -rf .swc/' --export-markdown=benchTable.md \
 'node runtime.mjs' \
 'node --import ./sync-hooks-babel.mjs runtime.mjs' \
 'node --import ./sync-hooks-oxc.mjs runtime.mjs' \
-'node --import ./sync-hooks-oxc-frida.mjs runtime.mjs' \
+'node --require ./oxc-frida.cjs runtime.mjs' \
 'LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs' \
 'node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs' \
 'node --import ./sync-hooks-swc.mjs runtime.mjs' \

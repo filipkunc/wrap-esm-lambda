@@ -18,13 +18,22 @@ for (let i = 0; i < benchTableLines.length; ++i) {
   }
   benchTableLines[i] = entries.join(',');
   if (i > 0 && benchTableLines[i].length > 0) {
-    commands.push(entries[0].replace("runtime.mjs", "").replace("node --import", "").replace(".node node", ".node"));
+    if (entries[0].startsWith("LD_PRELOAD")) {
+      commands.push("LD_PRELOAD oxc-frida");
+    } else {
+      commands.push(entries[0].replace("runtime.mjs", "")
+      .replace("node --import", "")
+      .replace("node --require", "require")
+      .replace("./", "")
+      .replace(".mjs", "")
+      .replace(".cjs", ""));
+    }
     times.push(+(entries[1].split('±')[0]));
     memory.push(+entries[entries.length - 1]);
   }
 }
 
-const canvas = new ChartJSNodeCanvas({ width: 800, height: 500, backgroundColour: "white", type: "svg" });
+const canvas = new ChartJSNodeCanvas({ width: 800, height: 500, backgroundColour: "#333333", type: "svg" });
 
 /** @type { import("chart.js").ChartConfiguration } */
 const config = {
@@ -45,7 +54,33 @@ const config = {
     indexAxis: "y",
     animation: false,
     responsive: false,
-    maintainAspectRatio: false
+    maintainAspectRatio: false,
+    scales: {
+      x: {
+        grid: {
+          color: "#65656569",
+        },
+        ticks: {
+          color: "#f2f0f0ff"
+        }
+      },
+      y: {
+        grid: {
+          color: "#65656569",
+        },
+        ticks: {
+          color: "#f2f0f0ff"
+        }
+      }
+    },
+    plugins: {
+      legend: {
+        display: true,
+        labels: {
+          color: "#f2f0f0ff"
+        }
+      }
+    }
   }
 };
 
