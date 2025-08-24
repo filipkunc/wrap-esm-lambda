@@ -71,6 +71,28 @@ _Note: async hooks are usually 2x slower than sync hooks._
 
 ---
 
+# Async hooks - all in one file
+
+Having everything in one file is very convenient:
+
+```js
+// async-hooks-babel-one-file.mjs
+import { register } from "node:module";
+register(import.meta.url); //< no extra file!
+
+import { transformLambda } from "../benchmark/lib/babel-transform.js";
+export async function load(url, context, nextLoad) { ... }
+```
+
+```sh
+node --import ./async-hooks-babel-one-file.mjs runtime.mjs
+```
+but it adds significant overhead:
+ * `208.6 ± 6.1 ms` for separate register file + hook file using Babel
+ * `324.8 ± 5.3 ms` for all in one file using Babel
+
+---
+
 # Synchronous hooks `load` function
 
 ```js
@@ -203,9 +225,9 @@ exports.transformLambda = function (sourceCode, handler, wrapper) {
 
 ---
 
-# LD_PRELOAD - hooking `open()`
+# LD_PRELOAD - `open()` detour
 
-Hooking of [`open()`](https://man7.org/linux/man-pages/man2/openat.2.html) from `libc` allows us to redirect to temporary file or intercept the file descriptor and provide [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) and [`uv_fs_fstat()`](https://docs.libuv.org/en/v1.x/fs.html#c.uv_fs_fstat) hooks for reading and file size.
+Detour of [`open()`](https://man7.org/linux/man-pages/man2/openat.2.html) from `libc` allows us to redirect to temporary file or intercept the file descriptor and provide [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) and [`uv_fs_fstat()`](https://docs.libuv.org/en/v1.x/fs.html#c.uv_fs_fstat) detours for reading and file size.
 
 This can be achieved using [Frida](https://frida.re/) and the [Rust bindings example](https://github.com/frida/frida-rust/blob/main/examples/gum/hook_open/src/lib.rs).
 
@@ -215,11 +237,11 @@ The resulting library is preloaded before starting the Node process.
 LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs
 ```
 
-This is a little bit faster than using `require` + calling exported function:
+This is a little bit faster (1-2 ms) than using `require` + calling exported function:
 
 ```js
 const { installHooks } = require("../wrap-esm-lambda.linux-x64-gnu.node");
-installHooks();
+installHooks(); //< detours for `open()`, `read()` and `uv_fs_fstat()`
 ```
 
 ---
