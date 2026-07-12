@@ -14,7 +14,7 @@ import {
   transformLambdaMinimalCached as transformOrchestrionMinimalCached,
 } from './orchestrion-transform.js'
 import { transformOxcInlineMap, transformOxcChainedToTs } from './oxc-sourcemap.js'
-import { transformAcornInlineMap } from './acorn-sourcemap.js'
+import { transformAcornInlineMap, transformAcornChainedToTs } from './acorn-sourcemap.js'
 
 const testInput = `export const handler = async function(event) {
 	return "Hi from AWS Lambda";
@@ -43,6 +43,7 @@ const cases: { label: string; run: () => void }[] = [
   { label: 'oxc.rs + map chained to .ts', run: () => transformOxcChainedToTs() },
   { label: 'acorn', run: () => transformAcorn(testInput, 'handler', 'wrapper') },
   { label: 'acorn + source map', run: () => transformAcornInlineMap(testInput, 'handler', 'wrapper', 'handler.mjs') },
+  { label: 'acorn + map chained to .ts', run: () => transformAcornChainedToTs() },
   { label: 'orchestrion (cached selector)', run: () => transformOrchestrionMinimalCached(testInput) },
   { label: 'Babel', run: () => transformBabel(testInput, 'handler', 'wrapper') },
   { label: 'orchestrion (minimal wrap)', run: () => transformOrchestrionMinimal(testInput) },

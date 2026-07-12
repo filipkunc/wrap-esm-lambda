@@ -152,16 +152,18 @@ Notes on the transform-latency comparison:
 - `regex` is a string replace with no parser, so it is fastest but only handles
   the shapes its pattern anticipates. `oxc.rs` is the fastest approach that
   actually parses to an AST.
-- `oxc.rs + source map` adds oxc's inline map; it costs about 1 µs and is still
-  faster than acorn with no map. `oxc.rs + map chained to .ts` also transpiles a
-  TypeScript handler and composes the two maps with `@ampproject/remapping` (see
-  [Source maps](#source-maps)); the compose dominates, landing it next to
-  orchestrion's cached transform yet still ~10x under Babel.
-- `acorn + source map` uses astring feeding a
-  [`@jridgewell/source-map`](https://github.com/jridgewell/sourcemaps) generator.
-  Generating the map roughly doubles acorn's time (about +9 µs), where oxc's
-  native map costs only ~1 µs — the map is nearly free when the codegen builds it
-  in Rust rather than through a JS generator.
+- The `+ source map` bars emit a map that reaches the wrapped JS. oxc's native
+  map costs only ~1 µs, so `oxc.rs + source map` is still faster than acorn with
+  no map. `acorn + source map` (astring feeding a
+  [`@jridgewell/source-map`](https://github.com/jridgewell/sourcemaps) generator)
+  roughly doubles acorn's time — the map is nearly free when the codegen builds
+  it in Rust, but a real per-node cost through a JS generator.
+- The `+ map chained to .ts` bars go further: they transpile a TypeScript handler
+  and compose the wrap map with tsc's map via `@ampproject/remapping` so the
+  result reaches the original `.ts` (see [Source maps](#source-maps)). The
+  compose is the same parser-independent step for both, so the gap between them
+  (oxc ~28 µs vs acorn ~48 µs) is the parser/codegen difference, and oxc chained
+  still lands near orchestrion's cached, no-map transform.
 - `orchestrion (cached selector)` memoizes orchestrion's per-call
   `esquery.parse`, which its shipped code recompiles on every `transform()`.
   That one change accounts for the ~10x gap to `orchestrion (minimal wrap)`.

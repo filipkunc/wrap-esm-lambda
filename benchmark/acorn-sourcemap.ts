@@ -4,6 +4,7 @@ import type * as ESTree from 'estree'
 import { ESTree as NESTree, Helpers } from 'node-estree'
 import * as astring from 'astring'
 import { createRequire } from 'node:module'
+import { jsCode, chainToTs } from './ts-fixture.js'
 
 // astring's `sourceMap` option wants a classic `SourceMapGenerator` (an
 // `.addMapping()` method + a readable `.file`). `@jridgewell/source-map` is the
@@ -19,9 +20,15 @@ const { SourceMapGenerator } = createRequire(import.meta.url)('@jridgewell/sourc
   SourceMapGenerator: new (opts: { file: string }) => JridgewellGenerator
 }
 
-// Wrap the handler (acorn parse + estraverse) and emit an inline source map with
-// astring feeding a @jridgewell/source-map generator, mirroring oxc's inline map.
-export function transformAcornInlineMap(code: string, handler: string, wrapper: string, filename: string): string {
+// Wrap the handler (acorn parse + estraverse) and generate code plus a
+// `transformed -> filename` source map via astring feeding a
+// @jridgewell/source-map generator.
+function acornWrapWithMap(
+  code: string,
+  handler: string,
+  wrapper: string,
+  filename: string,
+): { code: string; map: string } {
   const ast = acorn.parse(code, { ecmaVersion: 2020, sourceType: 'module', locations: true, sourceFile: filename })
 
   estraverse.replace(ast as ESTree.Node, {
@@ -45,7 +52,21 @@ export function transformAcornInlineMap(code: string, handler: string, wrapper: 
   // astring's types want a classic `source-map` generator; at runtime it only
   // calls `.addMapping()` and reads `.file`, which the @jridgewell one provides.
   const options = { sourceMap: map } as unknown as Parameters<typeof astring.generate>[1]
-  const generated = astring.generate(ast as ESTree.Node, options)
-  const base64 = Buffer.from(map.toString(), 'utf8').toString('base64')
+  const generated = astring.generate(ast as ESTree.Node, options) as unknown as string
+  return { code: generated, map: map.toString() }
+}
+
+// Inline source map for the wrapped handler, mirroring oxc's inline map.
+export function transformAcornInlineMap(code: string, handler: string, wrapper: string, filename: string): string {
+  const { code: generated, map } = acornWrapWithMap(code, handler, wrapper, filename)
+  const base64 = Buffer.from(map, 'utf8').toString('base64')
   return `${generated}\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,${base64}\n`
+}
+
+// acorn wrap + composing its map with tsc's map so the result reaches the .ts,
+// the acorn counterpart of transformOxcChainedToTs (same @ampproject/remapping
+// compose, so any difference is the parser/codegen, not the chaining).
+export function transformAcornChainedToTs(): string {
+  const { map } = acornWrapWithMap(jsCode, 'handler', 'wrapper', 'handler.js')
+  return chainToTs(map)
 }

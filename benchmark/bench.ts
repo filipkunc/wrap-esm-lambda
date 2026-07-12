@@ -12,7 +12,7 @@ import {
   transformLambdaMinimalCached as transformOrchestrionMinimalCached,
 } from './orchestrion-transform.js'
 import { transformOxcInlineMap, transformOxcChainedToTs } from './oxc-sourcemap.js'
-import { transformAcornInlineMap } from './acorn-sourcemap.js'
+import { transformAcornInlineMap, transformAcornChainedToTs } from './acorn-sourcemap.js'
 
 const b = new Bench()
 
@@ -46,6 +46,10 @@ b.add('acorn', () => {
 
 b.add('acorn + source map', () => {
   transformAcornInlineMap(testInput, 'handler', 'wrapper', 'handler.mjs')
+})
+
+b.add('acorn + map chained to .ts', () => {
+  transformAcornChainedToTs()
 })
 
 b.add('regex', () => {
