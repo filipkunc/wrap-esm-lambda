@@ -7,7 +7,7 @@ use oxc_ast::{
     VariableDeclarator,
   },
 };
-use oxc_codegen::Codegen;
+use oxc_codegen::{Codegen, CodegenOptions};
 use oxc_parser::Parser;
 use oxc_semantic::{Scoping, SemanticBuilder, SymbolFlags};
 use oxc_span::{SPAN, SourceType};
@@ -293,21 +293,82 @@ impl<'a> LambdaTransform<'a> {
   }
 }
 
-pub fn transform_lambda_source(source_text: String, handler: String, wrapper: String) -> String {
+/// Parse `source_text`, wrap the handler, and generate code. When
+/// `source_map_path` is `Some`, oxc also emits a source map (relative to that
+/// path); the returned tuple is `(code, Some(inline_data_url))`. When `None`,
+/// no map is generated and the second element is `None` (the fast path used by
+/// callers that only need the transformed code).
+fn transform_and_generate(
+  source_text: &str,
+  handler: String,
+  wrapper: String,
+  source_map_path: Option<std::path::PathBuf>,
+) -> (String, Option<String>) {
   let allocator = Allocator::default();
-  let parsed = Parser::new(&allocator, &source_text, SourceType::mjs()).parse();
+  let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
   let mut program = parsed.program;
   let scoping = SemanticBuilder::new()
     .build(&program)
     .semantic
     .into_scoping();
   LambdaTransform::new(&allocator, handler, wrapper).transform(&allocator, &mut program, scoping);
-  Codegen::new().build(&program).code
+  let ret = Codegen::new()
+    .with_options(CodegenOptions {
+      source_map_path,
+      ..CodegenOptions::default()
+    })
+    .build(&program);
+  let data_url = ret.map.map(|map| map.to_data_url());
+  (ret.code, data_url)
+}
+
+pub fn transform_lambda_source(source_text: String, handler: String, wrapper: String) -> String {
+  transform_and_generate(&source_text, handler, wrapper, None).0
+}
+
+/// Same as [`transform_lambda_source`], but appends an inline
+/// `//# sourceMappingURL=` data-URL source map that maps the generated code
+/// back to `filename`. The wrapped handler body keeps its original spans, so an
+/// exception thrown inside the handler resolves to the original source line
+/// under Node's `--enable-source-maps`.
+pub fn transform_lambda_source_with_map(
+  source_text: String,
+  handler: String,
+  wrapper: String,
+  filename: String,
+) -> String {
+  let (mut code, data_url) = transform_and_generate(
+    &source_text,
+    handler,
+    wrapper,
+    Some(std::path::PathBuf::from(filename)),
+  );
+  if let Some(data_url) = data_url {
+    code.push_str("\n//# sourceMappingURL=");
+    code.push_str(&data_url);
+    code.push('\n');
+  }
+  code
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn test_source_map_inline() {
+    let source_text =
+      "export const handler = async (event) => {\n  throw new Error(\"boom\");\n};\n".to_string();
+    let transformed = transform_lambda_source_with_map(
+      source_text,
+      "handler".to_string(),
+      "WrapAwsLambda".to_string(),
+      "handler.mjs".to_string(),
+    );
+    println!("{}", transformed);
+    assert!(transformed.contains("WrapAwsLambda"));
+    assert!(transformed.contains("//# sourceMappingURL=data:application/json"));
+  }
 
   #[test]
   fn test_var_transform() {

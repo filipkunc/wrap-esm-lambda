@@ -6,3 +6,6 @@ package-template.wasi.cjs
 wasi-worker-browser.mjs
 wasi-worker.mjs
 .yarnrc.yml
+# Source-map demo fixture: the blank lines are load-bearing (they are what
+# codegen strips to shift the throw's line), so prettier must not touch them.
+hooks/sourcemap-demo/handler-throws.mjs

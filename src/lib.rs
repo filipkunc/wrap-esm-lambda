@@ -14,3 +14,13 @@ use napi_derive::napi;
 pub fn transform_lambda(input: String, handler: String, wrapper: String) -> String {
   transform::transform_lambda_source(input, handler, wrapper)
 }
+
+#[napi]
+pub fn transform_lambda_with_map(
+  input: String,
+  handler: String,
+  wrapper: String,
+  filename: String,
+) -> String {
+  transform::transform_lambda_source_with_map(input, handler, wrapper, filename)
+}

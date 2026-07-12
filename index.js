@@ -395,3 +395,4 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.installHooks = nativeBinding.installHooks
 module.exports.transformLambda = nativeBinding.transformLambda
+module.exports.transformLambdaWithMap = nativeBinding.transformLambdaWithMap

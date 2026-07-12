@@ -35,6 +35,40 @@ For comparison the minimal wrapping code is re-implemented using [Babel](https:/
 4. Run `cargo fmt` and `cargo clippy` before committing
 5. Run `cargo test` to run Rust tests
 
+### Source maps
+
+Wrapping the handler shifts its lines: an exception then reports the position in
+the transformed code, not the original file. `transformLambdaWithMap` fixes this
+by asking oxc to also emit a source map, appended to the output as an inline
+`//# sourceMappingURL=` data URL. The wrapped handler body keeps its original
+spans, so under Node's `--enable-source-maps` a thrown error resolves to the
+original line.
+
+```js
+import { transformLambdaWithMap } from 'wrap-esm-lambda'
+const source = transformLambdaWithMap(originalSource, 'handler', 'WrapAwsLambda', 'handler.mjs')
+```
+
+A runnable before/after demo is in [hooks/sourcemap-demo](hooks/sourcemap-demo):
+
+```sh
+./hooks/sourcemap-demo/run.sh
+```
+
+The handler throws on line 11, but codegen strips the blank lines above it. Without
+a map the stack points at line 4 (a comment); with the oxc map it points back at
+line 11:
+
+```
+=== WITHOUT source map (plain transformLambda) ===
+Error: boom for 42
+    at handler-throws.mjs:4:8
+
+=== WITH oxc source map (transformLambdaWithMap) ===
+Error: boom for 42
+    at handler-throws.mjs:11:9
+```
+
 ### WebAssembly
 
 1. Run `rustup target add wasm32-wasip1-threads` to install build target

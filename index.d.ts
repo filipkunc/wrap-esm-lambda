@@ -3,3 +3,5 @@
 export declare function installHooks(): void
 
 export declare function transformLambda(input: string, handler: string, wrapper: string): string
+
+export declare function transformLambdaWithMap(input: string, handler: string, wrapper: string, filename: string): string
