@@ -9,6 +9,7 @@ import { transformLambda as transformRegex } from './regex-transform.js'
 import {
   transformLambdaTracing as transformOrchestrionTracing,
   transformLambdaMinimal as transformOrchestrionMinimal,
+  transformLambdaMinimalCached as transformOrchestrionMinimalCached,
 } from './orchestrion-transform.js'
 
 const b = new Bench()
@@ -39,6 +40,10 @@ b.add('regex', () => {
 
 b.add('orchestrion (minimal wrap)', () => {
   transformOrchestrionMinimal(testInput)
+})
+
+b.add('orchestrion (minimal wrap, cached selector)', () => {
+  transformOrchestrionMinimalCached(testInput)
 })
 
 b.add('orchestrion (tracing)', () => {
