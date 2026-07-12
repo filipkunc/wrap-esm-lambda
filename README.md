@@ -46,8 +46,11 @@ CI tests against [`node@20`, `@node22`] x [`Linux`] matrix.
 
 ### Benchmarks
 
-The benchmark table in [releases](https://github.com/filipkunc/wrap-esm-lambda/releases) is generated via
-[`hyperfine`](https://github.com/sharkdp/hyperfine).
+Two things are measured. The first is process **cold start**: how much each
+hooking strategy adds to `node runtime.mjs`, timed with
+[`hyperfine`](https://github.com/sharkdp/hyperfine). The table in
+[releases](https://github.com/filipkunc/wrap-esm-lambda/releases) and the chart
+below come from this.
 
 To run it locally use:
 
@@ -58,7 +61,32 @@ cd hooks && ./bench_hooks.sh
 
 Example output is in [hooks/benchTable.md](hooks/benchTable.md):
 
-![Benchmark Chart](hooks/benchChart.svg 'Benchmark Chart')
+![Cold start benchmark chart](hooks/benchChart.svg 'Cold start benchmark chart')
+
+The second is raw **transform latency**: how long a single wrap costs each
+library in-process, amortized over many calls (`yarn bench` for the table,
+`yarn bench:chart` for the chart). The axis is logarithmic because the fastest
+and slowest approaches are three orders of magnitude apart.
+
+```sh
+yarn bench:chart
+```
+
+![Transform latency chart](hooks/transformChart.svg 'Transform latency chart')
+
+Notes on the transform-latency comparison:
+
+- `regex` is a string replace with no parser, so it is fastest but only handles
+  the shapes its pattern anticipates. `oxc.rs` is the fastest approach that
+  actually parses to an AST.
+- `orchestrion (cached selector)` memoizes orchestrion's per-call
+  `esquery.parse`, which its shipped code recompiles on every `transform()`.
+  That one change accounts for the ~10x gap to `orchestrion (minimal wrap)`.
+- `orchestrion (tracing)` is orchestrion's stock output (a full
+  `diagnostics_channel` wrapper), so it does more work than the minimal
+  `wrapper(...)` the others emit.
+- `swc.rs (wasm)` reflects the cost of calling the swc plugin across the wasm
+  boundary, not swc's native transform speed.
 
 ### Frida hooking
 
