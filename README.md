@@ -157,6 +157,11 @@ Notes on the transform-latency comparison:
   TypeScript handler and composes the two maps with `@ampproject/remapping` (see
   [Source maps](#source-maps)); the compose dominates, landing it next to
   orchestrion's cached transform yet still ~10x under Babel.
+- `acorn + source map` uses astring feeding a
+  [`@jridgewell/source-map`](https://github.com/jridgewell/sourcemaps) generator.
+  Generating the map roughly doubles acorn's time (about +9 µs), where oxc's
+  native map costs only ~1 µs — the map is nearly free when the codegen builds it
+  in Rust rather than through a JS generator.
 - `orchestrion (cached selector)` memoizes orchestrion's per-call
   `esquery.parse`, which its shipped code recompiles on every `transform()`.
   That one change accounts for the ~10x gap to `orchestrion (minimal wrap)`.
