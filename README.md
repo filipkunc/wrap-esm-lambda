@@ -152,6 +152,11 @@ Notes on the transform-latency comparison:
 - `regex` is a string replace with no parser, so it is fastest but only handles
   the shapes its pattern anticipates. `oxc.rs` is the fastest approach that
   actually parses to an AST.
+- `oxc.rs + source map` adds oxc's inline map; it costs about 1 µs and is still
+  faster than acorn with no map. `oxc.rs + map chained to .ts` also transpiles a
+  TypeScript handler and composes the two maps with `@ampproject/remapping` (see
+  [Source maps](#source-maps)); the compose dominates, landing it next to
+  orchestrion's cached transform yet still ~10x under Babel.
 - `orchestrion (cached selector)` memoizes orchestrion's per-call
   `esquery.parse`, which its shipped code recompiles on every `transform()`.
   That one change accounts for the ~10x gap to `orchestrion (minimal wrap)`.

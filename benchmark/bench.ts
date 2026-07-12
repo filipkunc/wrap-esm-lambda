@@ -11,6 +11,7 @@ import {
   transformLambdaMinimal as transformOrchestrionMinimal,
   transformLambdaMinimalCached as transformOrchestrionMinimalCached,
 } from './orchestrion-transform.js'
+import { transformOxcInlineMap, transformOxcChainedToTs } from './oxc-sourcemap.js'
 
 const b = new Bench()
 
@@ -24,6 +25,14 @@ b.add('Babel', () => {
 
 b.add('oxc.rs', () => {
   transformOxc(testInput, 'handler', 'wrapper')
+})
+
+b.add('oxc.rs + source map', () => {
+  transformOxcInlineMap(testInput)
+})
+
+b.add('oxc.rs + map chained to .ts', () => {
+  transformOxcChainedToTs()
 })
 
 b.add('swc.rs', () => {

@@ -13,6 +13,7 @@ import {
   transformLambdaMinimal as transformOrchestrionMinimal,
   transformLambdaMinimalCached as transformOrchestrionMinimalCached,
 } from './orchestrion-transform.js'
+import { transformOxcInlineMap, transformOxcChainedToTs } from './oxc-sourcemap.js'
 
 const testInput = `export const handler = async function(event) {
 	return "Hi from AWS Lambda";
@@ -37,6 +38,8 @@ function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): number {
 const cases: { label: string; run: () => void }[] = [
   { label: 'regex', run: () => transformRegex(testInput, 'handler', 'wrapper') },
   { label: 'oxc.rs (native)', run: () => transformOxc(testInput, 'handler', 'wrapper') },
+  { label: 'oxc.rs + source map', run: () => transformOxcInlineMap(testInput) },
+  { label: 'oxc.rs + map chained to .ts', run: () => transformOxcChainedToTs() },
   { label: 'acorn', run: () => transformAcorn(testInput, 'handler', 'wrapper') },
   { label: 'orchestrion (cached selector)', run: () => transformOrchestrionMinimalCached(testInput) },
   { label: 'Babel', run: () => transformBabel(testInput, 'handler', 'wrapper') },
