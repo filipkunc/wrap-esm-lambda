@@ -2,29 +2,30 @@ use oxc_allocator::{Allocator, Box as ArenaBox, CloneIn, Vec as ArenaVec};
 use oxc_ast::{
   NONE,
   ast::{
-    Argument, BindingPatternKind, Declaration, ExportNamedDeclaration, Expression,
-    ImportDeclaration, ImportOrExportKind, ModuleExportName, Program, Statement,
-    VariableDeclaration, VariableDeclarationKind, VariableDeclarator,
+    Argument, BindingPattern, Declaration, ExportNamedDeclaration, Expression, ImportOrExportKind,
+    ModuleExportName, Program, Statement, VariableDeclaration, VariableDeclarationKind,
+    VariableDeclarator,
   },
 };
 use oxc_codegen::Codegen;
 use oxc_parser::Parser;
 use oxc_semantic::{Scoping, SemanticBuilder, SymbolFlags};
-use oxc_span::{Atom, SPAN, SourceType};
+use oxc_span::{SPAN, SourceType};
+use oxc_str::Ident;
 use oxc_traverse::{Traverse, TraverseCtx, traverse_mut};
 
 pub struct LambdaTransform<'a> {
-  handler: Atom<'a>,
-  orig_handler: Atom<'a>,
-  wrapper: Atom<'a>,
+  handler: Ident<'a>,
+  orig_handler: Ident<'a>,
+  wrapper: Ident<'a>,
 }
 
 impl<'a> LambdaTransform<'a> {
   pub fn new(allocator: &'a Allocator, handler: String, wrapper: String) -> Self {
     Self {
-      handler: Atom::from_strs_array_in([&handler], allocator),
-      orig_handler: Atom::from_strs_array_in(["orig_", &handler], allocator),
-      wrapper: Atom::from_strs_array_in([&wrapper], allocator),
+      handler: Ident::from_strs_array_in([&handler], &allocator),
+      orig_handler: Ident::from_strs_array_in(["orig_", &handler], &allocator),
+      wrapper: Ident::from_strs_array_in([&wrapper], &allocator),
     }
   }
   pub fn transform(
@@ -87,9 +88,9 @@ impl<'a> LambdaTransform<'a> {
           if let Some(name) = specifier.exported.identifier_name()
             && name == self.handler
           {
-            self.handler = Atom::from_strs_array_in([&specifier.local.name()], ctx.ast.allocator);
+            self.handler = Ident::from_strs_array_in([&specifier.local.name()], &ctx.ast.allocator);
             self.orig_handler =
-              Atom::from_strs_array_in(["orig_", &self.handler], ctx.ast.allocator);
+              Ident::from_strs_array_in(["orig_", &self.handler], &ctx.ast.allocator);
             return;
           }
         }
@@ -108,15 +109,13 @@ impl<'a> LambdaTransform<'a> {
       SPAN,
       kind,
       binding.create_binding_pattern(ctx),
+      NONE,
       init.clone_in_with_semantic_ids(ctx.ast.allocator),
       false,
     );
-    VariableDeclaration {
-      span: SPAN,
-      kind,
-      declarations: ctx.ast.vec1(declarator),
-      declare: false,
-    }
+    ctx
+      .ast
+      .variable_declaration(SPAN, kind, ctx.ast.vec1(declarator), false)
   }
 
   fn wrap_expression(
@@ -160,8 +159,8 @@ impl<'a> LambdaTransform<'a> {
       match &declaration {
         Declaration::VariableDeclaration(var) => {
           for (index, decl) in var.declarations.iter().enumerate() {
-            match &decl.id.kind {
-              BindingPatternKind::BindingIdentifier(identifier) => {
+            match &decl.id {
+              BindingPattern::BindingIdentifier(identifier) => {
                 if identifier.name == self.handler {
                   let mut new_declarations = var
                     .declarations
@@ -182,32 +181,30 @@ impl<'a> LambdaTransform<'a> {
                       ctx
                         .generate_binding_in_current_scope(self.handler, SymbolFlags::empty())
                         .create_binding_pattern(ctx),
+                      NONE,
                       Some(expr),
                       false,
                     ),
                     ctx,
                   );
-                  new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
-                    ExportNamedDeclaration {
-                      span: SPAN,
-                      source: None,
-                      specifiers: ctx.ast.vec(),
-                      declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(
-                        VariableDeclaration {
-                          span: SPAN,
-                          kind: var.kind,
-                          declarations: new_declarations,
-                          declare: false,
-                        },
-                      ))),
-                      with_clause: None,
-                      export_kind: ImportOrExportKind::Value,
-                    },
-                  )));
+                  new_stmts.push(Statement::ExportNamedDeclaration(
+                    ctx.ast.alloc_export_named_declaration(
+                      SPAN,
+                      Some(Declaration::VariableDeclaration(
+                        ctx
+                          .ast
+                          .alloc_variable_declaration(SPAN, var.kind, new_declarations, false),
+                      )),
+                      ctx.ast.vec(),
+                      None,
+                      ImportOrExportKind::Value,
+                      NONE,
+                    ),
+                  ));
                   return true;
                 }
               }
-              BindingPatternKind::ObjectPattern(pattern) => {
+              BindingPattern::ObjectPattern(pattern) => {
                 for prop in &pattern.properties {
                   if let Some(name) = prop.key.name()
                     && name == self.handler
@@ -234,16 +231,16 @@ impl<'a> LambdaTransform<'a> {
           func.id = None;
           let init = self.wrap_expression(Expression::FunctionExpression(func), ctx);
           let var_decl = self.var_handler(&Some(init), ctx);
-          new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
-            ExportNamedDeclaration {
-              span: SPAN,
-              source: None,
-              specifiers: ctx.ast.vec(),
-              declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
-              with_clause: None,
-              export_kind: ImportOrExportKind::Value,
-            },
-          )));
+          new_stmts.push(Statement::ExportNamedDeclaration(
+            ctx.ast.alloc_export_named_declaration(
+              SPAN,
+              Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
+              ctx.ast.vec(),
+              None,
+              ImportOrExportKind::Value,
+              NONE,
+            ),
+          ));
           return true;
         }
         _ => (),
@@ -254,38 +251,40 @@ impl<'a> LambdaTransform<'a> {
           && name == self.handler
         {
           new_stmts.push(Statement::ImportDeclaration(
-            ctx.ast.alloc(ImportDeclaration {
-              span: SPAN,
-              source: export
+            ctx.ast.alloc_import_declaration(
+              SPAN,
+              Some(
+                ctx
+                  .ast
+                  .vec1(ctx.ast.import_declaration_specifier_import_specifier(
+                    SPAN,
+                    ModuleExportName::IdentifierName(ctx.ast.identifier_name(SPAN, self.handler)),
+                    ctx.ast.binding_identifier(SPAN, self.orig_handler),
+                    ImportOrExportKind::Value,
+                  )),
+              ),
+              export
                 .source
                 .clone_in_with_semantic_ids(ctx.ast.allocator)
                 .unwrap(),
-              specifiers: Some(ctx.ast.vec1(
-                ctx.ast.import_declaration_specifier_import_specifier(
-                  SPAN,
-                  ModuleExportName::IdentifierName(ctx.ast.identifier_name(SPAN, self.handler)),
-                  ctx.ast.binding_identifier(SPAN, self.orig_handler),
-                  ImportOrExportKind::Value,
-                ),
-              )),
-              with_clause: None,
-              phase: None,
-              import_kind: ImportOrExportKind::Value,
-            }),
+              None,
+              NONE,
+              ImportOrExportKind::Value,
+            ),
           ));
           let init =
             self.wrap_expression(ctx.ast.expression_identifier(SPAN, self.orig_handler), ctx);
           let var_decl = self.var_handler(&Some(init), ctx);
-          new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
-            ExportNamedDeclaration {
-              span: SPAN,
-              source: None,
-              specifiers: ctx.ast.vec(),
-              declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
-              with_clause: None,
-              export_kind: ImportOrExportKind::Value,
-            },
-          )));
+          new_stmts.push(Statement::ExportNamedDeclaration(
+            ctx.ast.alloc_export_named_declaration(
+              SPAN,
+              Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
+              ctx.ast.vec(),
+              None,
+              ImportOrExportKind::Value,
+              NONE,
+            ),
+          ));
           return true;
         }
       }

@@ -11,15 +11,16 @@ crate-type = ["cdylib"]
 [dependencies]
 napi = "3.2.4"
 napi-derive = "3.2.4"
-oxc = "0.82.2"
-oxc_allocator = "0.82.2"
-oxc_ast = "0.82.2"
-oxc_codegen = "0.82.2"
-oxc_parser = "0.82.2"
-oxc_semantic = "0.82.2"
-oxc_span = "0.82.2"
-oxc_transformer = "0.82.2"
-oxc_traverse = "0.82.2"
+oxc = "0.139.0"
+oxc_allocator = "0.139.0"
+oxc_ast = "0.139.0"
+oxc_codegen = "0.139.0"
+oxc_parser = "0.139.0"
+oxc_semantic = "0.139.0"
+oxc_span = "0.139.0"
+oxc_str = "0.139.0"
+oxc_transformer = "0.139.0"
+oxc_traverse = "0.139.0"
 
 [features]
 default = ["frida"]
