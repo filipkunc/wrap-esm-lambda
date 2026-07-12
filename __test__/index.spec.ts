@@ -1,6 +1,6 @@
 import test from 'ava'
 
-import { transformLambda, transformLambdaWithMap } from '../index'
+import { transformLambda, transformLambdaWithMap, transformLambdaWithMapObject } from '../index'
 
 // export variants: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/export
 
@@ -60,4 +60,20 @@ test('inline source map', (t) => {
   t.is(map.version, 3)
   t.deepEqual(map.sources, ['handler.mjs'])
   t.deepEqual(map.sourcesContent, [input])
+})
+
+test('source map object for chaining', (t) => {
+  // The object form returns the raw v3 map (no inline URL) so it can be composed
+  // with an upstream .ts -> .js map. See hooks/sourcemap-ts-demo for the chain.
+  const input = `export const handler = async (event) => {
+  throw new Error("boom");
+};
+`
+  const { code, map } = transformLambdaWithMapObject(input, 'handler', 'WrapAwsLambda', 'handler.js')
+  t.true(code.includes('WrapAwsLambda('))
+  t.false(code.includes('sourceMappingURL'))
+  t.truthy(map)
+  const parsed = JSON.parse(map!)
+  t.is(parsed.version, 3)
+  t.deepEqual(parsed.sources, ['handler.js'])
 })

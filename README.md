@@ -69,6 +69,45 @@ Error: boom for 42
     at handler-throws.mjs:11:9
 ```
 
+Emitting the map is cheap: on a small handler the transform goes from ~2.9 µs to
+~4.2 µs, so even with a map oxc is faster than acorn without one.
+
+#### Chaining back to TypeScript
+
+If the handler started as TypeScript, `tsc` already produced `handler.js` plus a
+`handler.js` -> `handler.ts` map. Our wrap adds a second step, so its map only
+reaches `handler.js`. To get an exception all the way back to the `.ts`, compose
+the two maps. oxc's map is `transformed -> handler.js`; chain it through the tsc
+map with [`@ampproject/remapping`](https://github.com/ampproject/remapping)
+(synchronous, so it works inside a `registerHooks` load hook).
+`transformLambdaWithMapObject` returns the raw map for this:
+
+```js
+import remapping from '@ampproject/remapping'
+import { transformLambdaWithMapObject } from 'wrap-esm-lambda'
+
+const { code, map } = transformLambdaWithMapObject(jsSource, 'handler', 'WrapAwsLambda', 'handler.js')
+const chained = remapping(map, (file) => (file.endsWith('handler.js') ? tscMap : null)).toString()
+// `chained` now maps transformed -> handler.ts; inline it as a data URL
+```
+
+Demo in [hooks/sourcemap-ts-demo](hooks/sourcemap-ts-demo) (`./run.sh` compiles
+the `.ts` first). The handler throws on line 15 of `handler.ts`; without chaining
+the stack stops at the generated `handler.js`, with chaining it reaches the `.ts`:
+
+```
+=== wrap with NON-chained map (transformed -> handler.js only) ===
+Error: boom for 42
+    at handler.js:4:11
+
+=== wrap with CHAINED map (transformed -> handler.js -> handler.ts) ===
+Error: boom for 42
+    at handler.ts:15:9
+```
+
+The compose costs ~22 µs on top of the transform (the map JSON round-trips through
+`remapping`), still well under a single Babel transform and paid once per module.
+
 ### WebAssembly
 
 1. Run `rustup target add wasm32-wasip1-threads` to install build target

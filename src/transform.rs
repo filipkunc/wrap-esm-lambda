@@ -293,17 +293,24 @@ impl<'a> LambdaTransform<'a> {
   }
 }
 
+/// A generated source map in both the forms callers need: `json` (a v3 map, for
+/// composing with an upstream `.ts` -> `.js` map on the JS side) and `data_url`
+/// (for embedding inline).
+pub struct MapOutput {
+  pub json: String,
+  pub data_url: String,
+}
+
 /// Parse `source_text`, wrap the handler, and generate code. When
 /// `source_map_path` is `Some`, oxc also emits a source map (relative to that
-/// path); the returned tuple is `(code, Some(inline_data_url))`. When `None`,
-/// no map is generated and the second element is `None` (the fast path used by
-/// callers that only need the transformed code).
+/// path). When `None`, no map is generated (the fast path used by callers that
+/// only need the transformed code).
 fn transform_and_generate(
   source_text: &str,
   handler: String,
   wrapper: String,
   source_map_path: Option<std::path::PathBuf>,
-) -> (String, Option<String>) {
+) -> (String, Option<MapOutput>) {
   let allocator = Allocator::default();
   let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
   let mut program = parsed.program;
@@ -318,8 +325,11 @@ fn transform_and_generate(
       ..CodegenOptions::default()
     })
     .build(&program);
-  let data_url = ret.map.map(|map| map.to_data_url());
-  (ret.code, data_url)
+  let map = ret.map.as_ref().map(|map| MapOutput {
+    json: map.to_json_string(),
+    data_url: map.to_data_url(),
+  });
+  (ret.code, map)
 }
 
 pub fn transform_lambda_source(source_text: String, handler: String, wrapper: String) -> String {
@@ -337,18 +347,37 @@ pub fn transform_lambda_source_with_map(
   wrapper: String,
   filename: String,
 ) -> String {
-  let (mut code, data_url) = transform_and_generate(
+  let (mut code, map) = transform_and_generate(
     &source_text,
     handler,
     wrapper,
     Some(std::path::PathBuf::from(filename)),
   );
-  if let Some(data_url) = data_url {
+  if let Some(map) = map {
     code.push_str("\n//# sourceMappingURL=");
-    code.push_str(&data_url);
+    code.push_str(&map.data_url);
     code.push('\n');
   }
   code
+}
+
+/// Like [`transform_lambda_source_with_map`], but returns the code and the raw
+/// v3 source map JSON separately (no inline URL appended). The JSON is what a
+/// caller composes with an upstream `.ts` -> `.js` map so the final map reaches
+/// the original TypeScript.
+pub fn transform_lambda_source_with_map_json(
+  source_text: String,
+  handler: String,
+  wrapper: String,
+  filename: String,
+) -> (String, Option<String>) {
+  let (code, map) = transform_and_generate(
+    &source_text,
+    handler,
+    wrapper,
+    Some(std::path::PathBuf::from(filename)),
+  );
+  (code, map.map(|map| map.json))
 }
 
 #[cfg(test)]

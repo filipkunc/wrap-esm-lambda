@@ -111,3 +111,4 @@ module.exports = __napiModule.exports
 module.exports.installHooks = __napiModule.exports.installHooks
 module.exports.transformLambda = __napiModule.exports.transformLambda
 module.exports.transformLambdaWithMap = __napiModule.exports.transformLambdaWithMap
+module.exports.transformLambdaWithMapObject = __napiModule.exports.transformLambdaWithMapObject
