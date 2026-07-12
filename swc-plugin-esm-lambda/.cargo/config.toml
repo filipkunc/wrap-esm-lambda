@@ -1,3 +1,8 @@
+# SWC host functions (__set_transform_result etc.) are wasm imports resolved at
+# runtime; newer rustc requires telling wasm-lld to allow them undefined at link time.
+[target.wasm32-wasip1]
+rustflags = ["-C", "link-arg=--allow-undefined"]
+
 # These command aliases are not final, may change
 [alias]
 # Alias to build actual plugin binary for the specified target.

@@ -1,15 +1,17 @@
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
 |:---|---:|---:|---:|---:|---:|
-| `node runtime.mjs` | 23.1 ± 0.8 | 21.6 | 25.1 | 1.00 | 43.76 |
-| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 179.3 ± 3.1 | 172.8 | 184.6 | 7.77 ± 0.31 | 77.57 |
-| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 34.4 ± 0.7 | 33.0 | 36.2 | 1.49 ± 0.06 | 56.70 |
-| `node --require ./oxc-frida.cjs runtime.mjs` | 26.8 ± 0.9 | 24.8 | 29.8 | 1.16 ± 0.06 | 49.39 |
-| `LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs` | 25.3 ± 0.9 | 23.6 | 28.9 | 1.10 ± 0.05 | 47.28 |
-| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 65.0 ± 1.9 | 62.7 | 71.1 | 2.82 ± 0.13 | 61.71 |
-| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 125.0 ± 4.4 | 118.4 | 132.8 | 5.42 ± 0.27 | 366.19 |
-| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 44.6 ± 1.3 | 43.0 | 49.5 | 1.93 ± 0.09 | 54.17 |
-| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 24.8 ± 1.0 | 22.9 | 28.7 | 1.08 ± 0.06 | 44.17 |
-| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 324.8 ± 5.3 | 317.1 | 335.4 | 14.08 ± 0.55 | 117.77 |
-| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 208.6 ± 6.1 | 203.0 | 224.2 | 9.04 ± 0.42 | 87.77 |
-| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 70.6 ± 1.5 | 68.6 | 73.9 | 3.06 ± 0.13 | 68.75 |
-| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 59.1 ± 1.4 | 56.5 | 62.5 | 2.56 ± 0.11 | 59.79 |
+| `node runtime.mjs` | 25.2 ± 1.4 | 22.7 | 29.9 | 1.00 | 48.65 |
+| `node --import ./sync-hooks-babel.mjs runtime.mjs` | 175.3 ± 3.2 | 170.4 | 181.5 | 6.95 ± 0.41 | 85.35 |
+| `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 27.8 ± 1.8 | 25.4 | 33.5 | 1.10 ± 0.09 | 50.45 |
+| `node --require ./oxc-frida.cjs runtime.mjs` | 27.7 ± 1.7 | 23.9 | 32.2 | 1.10 ± 0.09 | 49.36 |
+| `LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs` | 27.2 ± 2.0 | 23.9 | 34.8 | 1.08 ± 0.10 | 48.97 |
+| `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 74.7 ± 2.2 | 70.3 | 81.2 | 2.96 ± 0.19 | 63.06 |
+| `node --import ./sync-hooks-swc.mjs runtime.mjs` | 125.3 ± 3.1 | 120.6 | 134.3 | 4.97 ± 0.30 | 179.95 |
+| `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 46.9 ± 2.8 | 41.1 | 55.2 | 1.86 ± 0.15 | 52.30 |
+| `node --import ./sync-hooks-orchestrion.mjs runtime.mjs` | 57.4 ± 2.6 | 53.0 | 63.5 | 2.27 ± 0.16 | 54.03 |
+| `node --import ./sync-hooks-orchestrion-tracing.mjs runtime.mjs` | 63.1 ± 2.9 | 56.6 | 69.3 | 2.50 ± 0.18 | 55.55 |
+| `node --import ./sync-hooks-regex.mjs runtime.mjs` | 26.7 ± 1.6 | 24.1 | 31.9 | 1.06 ± 0.09 | 48.87 |
+| `node --import ./async-hooks-babel-one-file.mjs runtime.mjs` | 343.2 ± 6.5 | 327.8 | 350.3 | 13.61 ± 0.80 | 129.47 |
+| `node --import ./register-async-hooks-babel.mjs runtime.mjs` | 219.9 ± 4.1 | 210.3 | 226.5 | 8.72 ± 0.51 | 98.96 |
+| `node --import ./register-async-hooks-oxc.mjs runtime.mjs` | 69.5 ± 1.8 | 65.6 | 74.1 | 2.76 ± 0.17 | 65.09 |
+| `node --import ./register-async-hooks-regex.mjs runtime.mjs` | 67.4 ± 2.4 | 62.6 | 73.8 | 2.67 ± 0.18 | 64.19 |

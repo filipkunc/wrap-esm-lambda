@@ -227,24 +227,24 @@ impl<'a> LambdaTransform<'a> {
             }
           }
         }
-        Declaration::FunctionDeclaration(func) => {
-          if func.name().is_some_and(|x| x == self.handler) {
-            let mut func = func.clone_in_with_semantic_ids(ctx.ast.allocator);
-            func.id = None;
-            let init = self.wrap_expression(Expression::FunctionExpression(func), ctx);
-            let var_decl = self.var_handler(&Some(init), ctx);
-            new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
-              ExportNamedDeclaration {
-                span: SPAN,
-                source: None,
-                specifiers: ctx.ast.vec(),
-                declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
-                with_clause: None,
-                export_kind: ImportOrExportKind::Value,
-              },
-            )));
-            return true;
-          }
+        Declaration::FunctionDeclaration(func)
+          if func.name().is_some_and(|x| x == self.handler) =>
+        {
+          let mut func = func.clone_in_with_semantic_ids(ctx.ast.allocator);
+          func.id = None;
+          let init = self.wrap_expression(Expression::FunctionExpression(func), ctx);
+          let var_decl = self.var_handler(&Some(init), ctx);
+          new_stmts.push(Statement::ExportNamedDeclaration(ctx.ast.alloc(
+            ExportNamedDeclaration {
+              span: SPAN,
+              source: None,
+              specifiers: ctx.ast.vec(),
+              declaration: Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
+              with_clause: None,
+              export_kind: ImportOrExportKind::Value,
+            },
+          )));
+          return true;
         }
         _ => (),
       };

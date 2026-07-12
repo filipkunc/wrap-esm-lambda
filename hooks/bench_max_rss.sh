@@ -8,6 +8,8 @@ rm -rf .swc/
 /usr/bin/time -v -o time_sync_oxc_wasm.txt node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs
 /usr/bin/time -v -o time_sync_swc.txt node --import ./sync-hooks-swc.mjs runtime.mjs
 /usr/bin/time -v -o time_sync_acorn.txt node --import ./sync-hooks-acorn.mjs runtime.mjs
+/usr/bin/time -v -o time_sync_orchestrion.txt node --import ./sync-hooks-orchestrion.mjs runtime.mjs
+/usr/bin/time -v -o time_sync_orchestrion_tracing.txt node --import ./sync-hooks-orchestrion-tracing.mjs runtime.mjs
 /usr/bin/time -v -o time_sync_regex.txt node --import ./sync-hooks-regex.mjs runtime.mjs
 /usr/bin/time -v -o time_async_babel_one_file.txt node --import ./async-hooks-babel-one-file.mjs runtime.mjs
 /usr/bin/time -v -o time_async_babel.txt node --import ./register-async-hooks-babel.mjs runtime.mjs

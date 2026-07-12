@@ -1,38 +1,50 @@
 import { Bench } from 'tinybench'
 
-import { transformLambda as transformBabel } from './babel-transform.js';
-import { transformLambda as transformOxc } from '../index.js';
+import { transformLambda as transformBabel } from './babel-transform.js'
+import { transformLambda as transformOxc } from '../index.js'
 // @ts-expect-error next-line
-import { transformLambda as transformSwc } from '../hooks/swc-wrapper.cjs';
-import { transformLambda as transformAcorn } from './acorn-transform.js';
-import { transformLambda as transformRegex } from './regex-transform.js';
+import { transformLambda as transformSwc } from '../hooks/swc-wrapper.cjs'
+import { transformLambda as transformAcorn } from './acorn-transform.js'
+import { transformLambda as transformRegex } from './regex-transform.js'
+import {
+  transformLambdaTracing as transformOrchestrionTracing,
+  transformLambdaMinimal as transformOrchestrionMinimal,
+} from './orchestrion-transform.js'
 
-const b = new Bench();
+const b = new Bench()
 
 const testInput = `export const handler = async function(event) {
 	return "Hi from AWS Lambda";
-}`;
+}`
 
 b.add('Babel', () => {
-  transformBabel(testInput, 'handler', 'wrapper');
-});
+  transformBabel(testInput, 'handler', 'wrapper')
+})
 
 b.add('oxc.rs', () => {
-  transformOxc(testInput, 'handler', 'wrapper');
-});
+  transformOxc(testInput, 'handler', 'wrapper')
+})
 
 b.add('swc.rs', () => {
-  transformSwc(testInput, 'handler', 'wrapper');
-});
+  transformSwc(testInput, 'handler', 'wrapper')
+})
 
 b.add('acorn', () => {
-  transformAcorn(testInput, 'handler', 'wrapper');
-});
+  transformAcorn(testInput, 'handler', 'wrapper')
+})
 
 b.add('regex', () => {
-  transformRegex(testInput, 'handler', 'wrapper');
-});
+  transformRegex(testInput, 'handler', 'wrapper')
+})
 
-await b.run();
+b.add('orchestrion (minimal wrap)', () => {
+  transformOrchestrionMinimal(testInput)
+})
 
-console.table(b.table());
+b.add('orchestrion (tracing)', () => {
+  transformOrchestrionTracing(testInput)
+})
+
+await b.run()
+
+console.table(b.table())

@@ -8,37 +8,37 @@ The problem: How to transform AWS Lambda `handler` below?
 
 ```js
 // input.js
-export const handler = async(event) => {
-    return "Hi from AWS Lambda";
-};
+export const handler = async (event) => {
+  return 'Hi from AWS Lambda'
+}
 ```
 
 To the following, notice the `WrapAwsLambda` wrapper:
 
 ```js
 // transformed.js
-export const handler = WrapAwsLambda(async(event) => {
-    return "Hi from AWS Lambda";
-});
+export const handler = WrapAwsLambda(async (event) => {
+  return 'Hi from AWS Lambda'
+})
 ```
 
 Wrapping uses [async and sync loader hooks from Node.js](https://nodejs.org/api/module.html#customization-hooks).
 
 This library uses [napi.rs](https://napi.rs/) and [oxc.rs](https://oxc.rs/).
-For comparison the minimal wrapping code is re-implemented using [Babel](https://babeljs.io/), [Acorn](https://github.com/acornjs/acorn) and [swc.rs](https://swc.rs/).
+For comparison the minimal wrapping code is re-implemented using [Babel](https://babeljs.io/), [Acorn](https://github.com/acornjs/acorn), [swc.rs](https://swc.rs/) and [orchestrion-js](https://github.com/nodejs/orchestrion-js) (via a custom `addTransform` operator, plus its stock `diagnostics_channel` tracing transform for reference).
 
 ## Usage
 
-  1. Run `yarn install` to install dependencies.
-  2. Run `yarn build` to build.
-  3. Run `yarn test` to run Node binding tests with [`ava`](https://github.com/avajs/ava)
-  4. Run `cargo fmt` and `cargo clippy` before committing
-  5. Run `cargo test` to run Rust tests
+1. Run `yarn install` to install dependencies.
+2. Run `yarn build` to build.
+3. Run `yarn test` to run Node binding tests with [`ava`](https://github.com/avajs/ava)
+4. Run `cargo fmt` and `cargo clippy` before committing
+5. Run `cargo test` to run Rust tests
 
 ### WebAssembly
 
-  1. Run `rustup target add wasm32-wasip1-threads` to install build target
-  2. Run `yarn build --target wasm32-wasip1-threads` to create `.wasm` file
+1. Run `rustup target add wasm32-wasip1-threads` to install build target
+2. Run `yarn build --target wasm32-wasip1-threads` to create `.wasm` file
 
 ### CI
 
@@ -58,7 +58,7 @@ cd hooks && ./bench_hooks.sh
 
 Example output is in [hooks/benchTable.md](hooks/benchTable.md):
 
-![Benchmark Chart](hooks/benchChart.svg "Benchmark Chart")
+![Benchmark Chart](hooks/benchChart.svg 'Benchmark Chart')
 
 ### Frida hooking
 

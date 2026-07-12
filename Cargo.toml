@@ -21,13 +21,17 @@ oxc_span = "0.82.2"
 oxc_transformer = "0.82.2"
 oxc_traverse = "0.82.2"
 
+[features]
+default = ["frida"]
+frida = ["dep:ctor", "dep:frida", "dep:frida-gum", "dep:lazy_static", "dep:libc", "dep:libuv-sys2"]
+
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-ctor = "0.5.0"
-frida = { version = "0.17.0", features = [ "auto-download" ] }
-frida-gum = { version = "0.17.0", features = ["auto-download"] }
-lazy_static = "1.5.0"
-libc = "0.2.175"
-libuv-sys2 = "1.51.0"
+ctor = { version = "0.5.0", optional = true }
+frida = { version = "0.17.0", features = [ "auto-download" ], optional = true }
+frida-gum = { version = "0.17.0", features = ["auto-download"], optional = true }
+lazy_static = { version = "1.5.0", optional = true }
+libc = { version = "0.2.175", optional = true }
+libuv-sys2 = { version = "1.51.0", optional = true }
 
 [build-dependencies]
 napi-build = "2"
