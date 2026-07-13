@@ -5,11 +5,11 @@
 // The transform is the same native call the build-time shell runs, so the cold
 // start cost is microseconds per matched module.
 import { registerHooks } from 'node:module'
-import { createMatcher, transformMatched, inlineMap } from '../../core/src/index.mjs'
+import { createMatcher, transformMatched, inlineMap } from '@wrap-esm-lambda/core'
 
 /**
  * Build a `registerHooks`-compatible load hook from a config.
- * @param {import('../../core/src/index.mjs').InstrumentConfig} config
+ * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
  */
 export function createLoadHook(config) {
   const match = createMatcher(config)
@@ -31,7 +31,7 @@ export function createLoadHook(config) {
 
 /**
  * Register the load hook for a config.
- * @param {import('../../core/src/index.mjs').InstrumentConfig} config
+ * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
  */
 export function registerConfig(config) {
   registerHooks({ load: createLoadHook(config) })

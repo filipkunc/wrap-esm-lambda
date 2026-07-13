@@ -5,9 +5,9 @@
 // composes our returned map with the rest of the chain. Deployed output is
 // pre-instrumented: the runtime hook cost drops to zero.
 import { createUnplugin } from 'unplugin'
-import { createMatcher, transformMatched } from '../../core/src/index.mjs'
+import { createMatcher, transformMatched } from '@wrap-esm-lambda/core'
 
-/** @param {import('../../core/src/index.mjs').InstrumentConfig} config */
+/** @param {import('@wrap-esm-lambda/core').InstrumentConfig} config */
 export const unplugin = createUnplugin((config) => {
   const match = createMatcher(config)
   return {

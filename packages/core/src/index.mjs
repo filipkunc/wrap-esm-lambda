@@ -4,12 +4,9 @@
 // (@wrap-esm-lambda/unplugin, a bundler plugin). Both shells call
 // `transformMatched` below, so the wrapped code is byte-identical no matter
 // which mode produced it.
-//
-// NOTE: scaffold imports the napi core by relative path; switch to the bare
-// `wrap-esm-lambda` specifier once the repo is split into real workspaces.
 import { fileURLToPath } from 'node:url'
 import { basename } from 'node:path'
-import { transformLambdaWithMapObject } from '../../../index.js'
+import { transformLambdaWithMapObject } from 'wrap-esm-lambda'
 
 /**
  * Marker appended to every transformed module. Both shells skip sources that

@@ -11,7 +11,7 @@
     "src"
   ],
   "license": "MIT",
-  "peerDependencies": {
-    "@wrap-esm-lambda/core": "^0.1.0"
+  "dependencies": {
+    "@wrap-esm-lambda/core": "workspace:^"
   }
 }

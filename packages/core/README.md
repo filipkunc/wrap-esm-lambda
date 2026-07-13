@@ -12,6 +12,3 @@ whichever mode produced it:
 
 `transformMatched` also appends a sentinel comment and skips sources that
 already carry it, so enabling both modes at once never double-wraps.
-
-> Scaffold status: sources import the napi core by relative path; this becomes
-> a real `wrap-esm-lambda` dependency once the repo is split into workspaces.

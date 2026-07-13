@@ -138,11 +138,11 @@ Error: boom for 42
     at handler.ts:15:9
 ```
 
-### Hybrid instrumentation: runtime or build time (scaffold)
+### Hybrid instrumentation: runtime or build time
 
-The same native transform can run at two very different moments, and
-[packages/](packages) scaffolds both shells around one shared core so users
-pick per deployment — not per codebase:
+The same native transform can run at two very different moments, and the
+[packages/](packages) workspaces build both shells around one shared core so
+users pick per deployment — not per codebase:
 
 - [`@wrap-esm-lambda/core`](packages/core) — the shared piece: one declarative
   config (`defineConfig`), one matcher, one `transformMatched` call. Because

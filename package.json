@@ -17,6 +17,9 @@
     "index.d.ts",
     "index.js"
   ],
+  "workspaces": [
+    "packages/*"
+  ],
   "napi": {
     "binaryName": "wrap-esm-lambda",
     "targets": [
@@ -65,6 +68,9 @@
     "@types/babel__core": "^7.20.5",
     "@types/estraverse": "^5",
     "@types/node": "^24.2.0",
+    "@wrap-esm-lambda/core": "workspace:^",
+    "@wrap-esm-lambda/hooks": "workspace:^",
+    "@wrap-esm-lambda/unplugin": "workspace:^",
     "acorn": "^8.15.0",
     "astring": "^1.9.0",
     "ava": "^6.4.1",

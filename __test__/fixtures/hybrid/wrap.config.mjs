@@ -1,7 +1,7 @@
 // The single config both modes consume: the runtime hook via
 // WRAP_ESM_LAMBDA_CONFIG, the bundler plugin via a plain import.
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from '../../../packages/core/src/index.mjs'
+import { defineConfig } from '@wrap-esm-lambda/core'
 
 export default defineConfig({
   entries: [

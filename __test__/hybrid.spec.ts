@@ -13,18 +13,17 @@ import { build } from 'esbuild'
 
 const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/hybrid/${name}`, import.meta.url))
-const pkg = (name: string) => fileURLToPath(new URL(`../packages/${name}`, import.meta.url))
 
-// @ts-expect-error untyped .mjs scaffold module
-const core = await import(pathToFileURL(pkg('core/src/index.mjs')).href)
-// @ts-expect-error untyped .mjs scaffold module
-const { unplugin } = await import(pathToFileURL(pkg('unplugin/src/index.mjs')).href)
+// @ts-expect-error untyped workspace scaffold package
+const core = await import('@wrap-esm-lambda/core')
+// @ts-expect-error untyped workspace scaffold package
+const { unplugin } = await import('@wrap-esm-lambda/unplugin')
 const { default: config } = await import(pathToFileURL(fixture('wrap.config.mjs')).href)
 
 test('runtime mode: loader hook wraps the handler at load time', async (t) => {
   const { stdout } = await execFileAsync(
     process.execPath,
-    ['--import', pathToFileURL(pkg('hooks/src/register.mjs')).href, fixture('main.mjs')],
+    ['--import', '@wrap-esm-lambda/hooks/register', fixture('main.mjs')],
     { env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.mjs') } },
   )
   t.is(stdout.trim(), 'wrapped:hi:42')
@@ -90,11 +89,9 @@ test('double-wrap guard: instrumented sources are never wrapped again', async (t
       plugins: [unplugin.esbuild(config)],
       logLevel: 'silent',
     })
-    const { stdout } = await execFileAsync(
-      process.execPath,
-      ['--import', pathToFileURL(pkg('hooks/src/register.mjs')).href, outfile],
-      { env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.mjs') } },
-    )
+    const { stdout } = await execFileAsync(process.execPath, ['--import', '@wrap-esm-lambda/hooks/register', outfile], {
+      env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.mjs') },
+    })
     t.is(stdout.trim(), 'wrapped:hi:42', 'must stay single-wrapped')
   } finally {
     await rm(outDir, { recursive: true, force: true })

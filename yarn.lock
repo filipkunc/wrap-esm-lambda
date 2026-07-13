@@ -2012,6 +2012,31 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@wrap-esm-lambda/core@workspace:^, @wrap-esm-lambda/core@workspace:packages/core":
+  version: 0.0.0-use.local
+  resolution: "@wrap-esm-lambda/core@workspace:packages/core"
+  dependencies:
+    wrap-esm-lambda: "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"@wrap-esm-lambda/hooks@workspace:^, @wrap-esm-lambda/hooks@workspace:packages/hooks":
+  version: 0.0.0-use.local
+  resolution: "@wrap-esm-lambda/hooks@workspace:packages/hooks"
+  dependencies:
+    "@wrap-esm-lambda/core": "workspace:^"
+  languageName: unknown
+  linkType: soft
+
+"@wrap-esm-lambda/unplugin@workspace:^, @wrap-esm-lambda/unplugin@workspace:packages/unplugin":
+  version: 0.0.0-use.local
+  resolution: "@wrap-esm-lambda/unplugin@workspace:packages/unplugin"
+  dependencies:
+    "@wrap-esm-lambda/core": "workspace:^"
+    unplugin: "npm:^3.3.0"
+  languageName: unknown
+  linkType: soft
+
 "abbrev@npm:^3.0.0":
   version: 3.0.1
   resolution: "abbrev@npm:3.0.1"
@@ -4814,7 +4839,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"wrap-esm-lambda@workspace:.":
+"wrap-esm-lambda@workspace:., wrap-esm-lambda@workspace:^":
   version: 0.0.0-use.local
   resolution: "wrap-esm-lambda@workspace:."
   dependencies:
@@ -4833,6 +4858,9 @@ __metadata:
     "@types/babel__core": "npm:^7.20.5"
     "@types/estraverse": "npm:^5"
     "@types/node": "npm:^24.2.0"
+    "@wrap-esm-lambda/core": "workspace:^"
+    "@wrap-esm-lambda/hooks": "workspace:^"
+    "@wrap-esm-lambda/unplugin": "workspace:^"
     acorn: "npm:^8.15.0"
     astring: "npm:^1.9.0"
     ava: "npm:^6.4.1"
