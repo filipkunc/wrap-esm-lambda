@@ -138,6 +138,35 @@ Error: boom for 42
     at handler.ts:15:9
 ```
 
+### Hybrid instrumentation: runtime or build time (scaffold)
+
+The same native transform can run at two very different moments, and
+[packages/](packages) scaffolds both shells around one shared core so users
+pick per deployment — not per codebase:
+
+- [`@wrap-esm-lambda/core`](packages/core) — the shared piece: one declarative
+  config (`defineConfig`), one matcher, one `transformMatched` call. Because
+  both shells delegate to it, the instrumented output is byte-identical
+  whichever mode produced it.
+- [`@wrap-esm-lambda/hooks`](packages/hooks) — **runtime**: a synchronous
+  `registerHooks` load hook, activated with
+  `node --import @wrap-esm-lambda/hooks/register` and a config path in
+  `WRAP_ESM_LAMBDA_CONFIG`. Zero build changes; per the cold-start table the
+  native transform keeps the overhead in the ~2 ms range.
+- [`@wrap-esm-lambda/unplugin`](packages/unplugin) — **build time**: the same
+  transform behind [unplugin](https://unplugin.unjs.io/), giving
+  Vite/Rolldown, Rollup, esbuild, webpack and Rspack adapters from one file.
+  Modules are wrapped before bundling (path matching still works) and the
+  bundler composes the returned source map; the deployed artifact is
+  pre-instrumented, so cold start pays nothing.
+
+Every transformed module ends with a `/*! @wrap-esm-lambda instrumented */`
+legal comment (bundlers keep those), and both shells skip sources that carry
+it — enabling both modes at once never double-wraps.
+[`__test__/hybrid.spec.ts`](__test__/hybrid.spec.ts) runs one fixture through
+both modes end-to-end, checks the outputs match, and layers the runtime hook
+on a build-time instrumented bundle to prove the guard.
+
 ### WebAssembly
 
 1. Run `rustup target add wasm32-wasip1-threads` to install build target

@@ -1,0 +1,19 @@
+{
+  "name": "@wrap-esm-lambda/unplugin",
+  "version": "0.1.0",
+  "description": "Build-time instrumentation for wrap-esm-lambda: one unplugin, adapters for Vite/Rolldown, Rollup, esbuild, webpack and Rspack. The zero-runtime-cost half of the hybrid setup.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "unplugin": "^3.3.0"
+  },
+  "peerDependencies": {
+    "@wrap-esm-lambda/core": "^0.1.0"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@wrap-esm-lambda/hooks",
+  "version": "0.1.0",
+  "description": "Runtime instrumentation for wrap-esm-lambda: wraps matched modules at load time via module.registerHooks. The zero-build-changes half of the hybrid setup.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./register": "./src/register.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@wrap-esm-lambda/core": "^0.1.0"
+  }
+}

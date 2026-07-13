@@ -1,0 +1,16 @@
+{
+  "name": "@wrap-esm-lambda/core",
+  "version": "0.1.0",
+  "description": "Shared config, matcher and transform glue for wrap-esm-lambda's runtime (loader hook) and build-time (bundler plugin) instrumentation shells.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "wrap-esm-lambda": "^0.1.3"
+  }
+}
