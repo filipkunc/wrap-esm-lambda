@@ -58,5 +58,7 @@ const {
 export default __napiModule.exports
 export const installHooks = __napiModule.exports.installHooks
 export const transformLambda = __napiModule.exports.transformLambda
+export const transformLambdaWithChainedMap = __napiModule.exports.transformLambdaWithChainedMap
+export const transformLambdaWithChainedMapObject = __napiModule.exports.transformLambdaWithChainedMapObject
 export const transformLambdaWithMap = __napiModule.exports.transformLambdaWithMap
 export const transformLambdaWithMapObject = __napiModule.exports.transformLambdaWithMapObject

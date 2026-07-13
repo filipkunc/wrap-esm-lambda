@@ -1,6 +1,12 @@
 import test from 'ava'
+import ts from 'typescript'
 
-import { transformLambda, transformLambdaWithMap, transformLambdaWithMapObject } from '../index'
+import {
+  transformLambda,
+  transformLambdaWithMap,
+  transformLambdaWithMapObject,
+  transformLambdaWithChainedMap,
+} from '../index'
 
 // export variants: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/export
 
@@ -78,21 +84,36 @@ test('source map object for chaining', (t) => {
   t.deepEqual(parsed.sources, ['handler.js'])
 })
 
-test('native .ts source map, no tsc or chaining needed', (t) => {
-  // A .ts filename tells oxc to parse and strip the types itself, so the map
-  // already reaches the original .ts with no upstream map to compose.
-  const input = `export const handler = async (event: { id?: number }): Promise<string> => {
+test('chained source map composed in Rust', (t) => {
+  // The full tsc pipeline: transpile a .ts handler, then wrap the emitted .js
+  // while chaining the wrap map through tsc's map — in one call, with the
+  // compose done by oxc_sourcemap in Rust instead of @ampproject/remapping.
+  const tsSource = `export const handler = async (event: { id?: number }): Promise<string> => {
   throw new Error(\`boom \${event?.id}\`);
 };
 `
-  const output = transformLambdaWithMap(input, 'handler', 'WrapAwsLambda', 'handler.ts')
+  const tsOut = ts.transpileModule(tsSource, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      sourceMap: true,
+      inlineSources: true,
+    },
+    fileName: 'handler.ts',
+  })
+  const output = transformLambdaWithChainedMap(
+    tsOut.outputText,
+    'handler',
+    'WrapAwsLambda',
+    'handler.js',
+    tsOut.sourceMapText!,
+  )
   t.true(output.includes('WrapAwsLambda('))
-  t.false(output.includes(': {'), 'type annotations should be stripped')
 
   const match = output.match(/\/\/# sourceMappingURL=data:application\/json;charset=utf-8;base64,(.+)/)
   t.truthy(match)
   const map = JSON.parse(Buffer.from(match![1], 'base64').toString('utf8'))
   t.is(map.version, 3)
   t.deepEqual(map.sources, ['handler.ts'])
-  t.deepEqual(map.sourcesContent, [input])
+  t.deepEqual(map.sourcesContent, [tsSource])
 })

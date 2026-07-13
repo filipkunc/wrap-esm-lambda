@@ -4,6 +4,20 @@ export declare function installHooks(): void
 
 export declare function transformLambda(input: string, handler: string, wrapper: string): string
 
+/**
+ * Like `transformLambdaWithMap`, but chains the wrap map through
+ * `upstreamMap` (the `filename -> original` map, e.g. tsc's `handler.js ->
+ * handler.ts` map) inside Rust via `oxc_sourcemap`, so the inlined map
+ * already reaches the original source — no `@ampproject/remapping` needed.
+ */
+export declare function transformLambdaWithChainedMap(input: string, handler: string, wrapper: string, filename: string, upstreamMap: string): string
+
+/**
+ * Like `transformLambdaWithChainedMap`, but returns the code and the chained
+ * v3 map JSON separately (no inline URL appended).
+ */
+export declare function transformLambdaWithChainedMapObject(input: string, handler: string, wrapper: string, filename: string, upstreamMap: string): TransformResult
+
 export declare function transformLambdaWithMap(input: string, handler: string, wrapper: string, filename: string): string
 
 /**

@@ -11,7 +11,7 @@ import {
   transformLambdaMinimal as transformOrchestrionMinimal,
   transformLambdaMinimalCached as transformOrchestrionMinimalCached,
 } from './orchestrion-transform.js'
-import { transformOxcInlineMap, transformOxcChainedToTs, transformOxcNativeTs } from './oxc-sourcemap.js'
+import { transformOxcInlineMap, transformOxcChainedToTs, transformOxcChainedToTsRust } from './oxc-sourcemap.js'
 import { transformAcornInlineMap, transformAcornChainedToTs } from './acorn-sourcemap.js'
 
 const b = new Bench()
@@ -36,8 +36,8 @@ b.add('oxc.rs + map chained to .ts', () => {
   transformOxcChainedToTs()
 })
 
-b.add('oxc.rs + native .ts (no tsc)', () => {
-  transformOxcNativeTs()
+b.add('oxc.rs + map chained in Rust', () => {
+  transformOxcChainedToTsRust()
 })
 
 b.add('swc.rs', () => {

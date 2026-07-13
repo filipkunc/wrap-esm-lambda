@@ -13,7 +13,7 @@ import {
   transformLambdaMinimal as transformOrchestrionMinimal,
   transformLambdaMinimalCached as transformOrchestrionMinimalCached,
 } from './orchestrion-transform.js'
-import { transformOxcInlineMap, transformOxcChainedToTs, transformOxcNativeTs } from './oxc-sourcemap.js'
+import { transformOxcInlineMap, transformOxcChainedToTs, transformOxcChainedToTsRust } from './oxc-sourcemap.js'
 import { transformAcornInlineMap, transformAcornChainedToTs } from './acorn-sourcemap.js'
 
 const testInput = `export const handler = async function(event) {
@@ -41,7 +41,7 @@ const cases: { label: string; run: () => void }[] = [
   { label: 'oxc.rs (native)', run: () => transformOxc(testInput, 'handler', 'wrapper') },
   { label: 'oxc.rs + source map', run: () => transformOxcInlineMap(testInput) },
   { label: 'oxc.rs + map chained to .ts', run: () => transformOxcChainedToTs() },
-  { label: 'oxc.rs + native .ts (no tsc)', run: () => transformOxcNativeTs() },
+  { label: 'oxc.rs + map chained in Rust', run: () => transformOxcChainedToTsRust() },
   { label: 'acorn', run: () => transformAcorn(testInput, 'handler', 'wrapper') },
   { label: 'acorn + source map', run: () => transformAcornInlineMap(testInput, 'handler', 'wrapper', 'handler.mjs') },
   { label: 'acorn + map chained to .ts', run: () => transformAcornChainedToTs() },

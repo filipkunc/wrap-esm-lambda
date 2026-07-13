@@ -45,3 +45,44 @@ pub fn transform_lambda_with_map_object(
     transform::transform_lambda_source_with_map_json(input, handler, wrapper, filename);
   TransformResult { code, map }
 }
+
+/// Like `transformLambdaWithMap`, but chains the wrap map through
+/// `upstreamMap` (the `filename -> original` map, e.g. tsc's `handler.js ->
+/// handler.ts` map) inside Rust via `oxc_sourcemap`, so the inlined map
+/// already reaches the original source — no `@ampproject/remapping` needed.
+#[napi]
+pub fn transform_lambda_with_chained_map(
+  input: String,
+  handler: String,
+  wrapper: String,
+  filename: String,
+  upstream_map: String,
+) -> String {
+  transform::transform_lambda_source_with_chained_map(
+    input,
+    handler,
+    wrapper,
+    filename,
+    upstream_map,
+  )
+}
+
+/// Like `transformLambdaWithChainedMap`, but returns the code and the chained
+/// v3 map JSON separately (no inline URL appended).
+#[napi]
+pub fn transform_lambda_with_chained_map_object(
+  input: String,
+  handler: String,
+  wrapper: String,
+  filename: String,
+  upstream_map: String,
+) -> TransformResult {
+  let (code, map) = transform::transform_lambda_source_with_chained_map_json(
+    input,
+    handler,
+    wrapper,
+    filename,
+    upstream_map,
+  );
+  TransformResult { code, map }
+}

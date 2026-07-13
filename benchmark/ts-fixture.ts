@@ -23,8 +23,6 @@ const tsOut = ts.transpileModule(tsSource, {
   fileName: 'handler.ts',
 })
 
-/** The original TypeScript handler (input to the oxc-native .ts wrap step). */
-export { tsSource }
 /** The JS `tsc` emits for the handler above (input to the wrap step). */
 export const jsCode = tsOut.outputText
 /** tsc's `handler.js` -> `handler.ts` map. */

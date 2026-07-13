@@ -1,5 +1,5 @@
-import { transformLambdaWithMap, transformLambdaWithMapObject } from '../index.js'
-import { jsCode, tsSource, chainToTs } from './ts-fixture.js'
+import { transformLambdaWithMap, transformLambdaWithMapObject, transformLambdaWithChainedMapObject } from '../index.js'
+import { jsCode, tscMap, chainToTs } from './ts-fixture.js'
 
 // oxc emitting an inline source map for the wrapped handler.
 export function transformOxcInlineMap(code: string): string {
@@ -13,9 +13,10 @@ export function transformOxcChainedToTs(): string {
   return chainToTs(map)
 }
 
-// oxc parses the .ts source directly (no tsc, no remapping compose): a single
-// pass strips the types, wraps the handler, and emits a map that already
-// reaches handler.ts.
-export function transformOxcNativeTs(): string {
-  return transformLambdaWithMap(tsSource, 'handler', 'wrapper', 'handler.ts')
+// Same wrap and chain, but the compose runs in Rust via oxc_sourcemap instead
+// of @ampproject/remapping — the wrap map never round-trips through JSON, and
+// the only JS<->Rust traffic is the tsc map in and the chained map out.
+export function transformOxcChainedToTsRust(): string {
+  const { code, map } = transformLambdaWithChainedMapObject(jsCode, 'handler', 'wrapper', 'handler.js', tscMap)
+  return map ?? code
 }
