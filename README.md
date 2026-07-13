@@ -127,8 +127,8 @@ const source = transformLambdaWithChainedMap(jsSource, 'handler', 'WrapAwsLambda
 (`transformLambdaWithChainedMapObject` returns `{ code, map }` instead of
 inlining, mirroring `transformLambdaWithMapObject`.)
 
-This is ~2.7x faster end-to-end than composing with `remapping`: ~13 µs vs
-~35 µs for wrap + chain (the compose step drops from ~30 µs to ~8 µs). The
+This is ~2.5x faster end-to-end than composing with `remapping`: ~11 µs vs
+~27 µs for wrap + chain (the compose step drops from ~23 µs to ~7 µs). The
 result is byte-for-byte equivalent in effect — the demo's third variant
 (`sync-hooks-oxc-ts-rust.mjs`) resolves the same `handler.ts:15:9`:
 
@@ -168,14 +168,22 @@ Example output is in [hooks/benchTable.md](hooks/benchTable.md):
 
 The second is raw **transform latency**: how long a single wrap costs each
 library in-process, amortized over many calls (`yarn bench` for the table,
-`yarn bench:chart` for the chart). The axis is logarithmic because the fastest
-and slowest approaches are three orders of magnitude apart.
+`yarn bench:chart` for the charts). The fastest and slowest approaches are
+three orders of magnitude apart, so one linear axis squashes the fast group
+into slivers and a log axis understates the gaps that matter. Instead there
+are two linear charts with the exact value printed on each bar. The first
+zooms into the approaches under 100 µs, where all the interesting differences
+live:
 
 ```sh
 yarn bench:chart
 ```
 
-![Transform latency chart](hooks/transformChart.svg 'Transform latency chart')
+![Transform latency chart, fast approaches](hooks/transformChart.svg 'Transform latency, approaches under 100 µs')
+
+The second shows the whole field for scale:
+
+![Transform latency chart, all approaches](hooks/transformChartAll.svg 'Transform latency, all approaches')
 
 Notes on the transform-latency comparison:
 
@@ -192,13 +200,13 @@ Notes on the transform-latency comparison:
   and compose the wrap map with tsc's map via `@ampproject/remapping` so the
   result reaches the original `.ts` (see [Source maps](#source-maps)). The
   compose is the same parser-independent step for both, so the gap between them
-  (oxc ~35 µs vs acorn ~58 µs) is the parser/codegen difference, and oxc chained
+  (oxc ~27 µs vs acorn ~47 µs) is the parser/codegen difference, and oxc chained
   still lands near orchestrion's cached, no-map transform.
 - `oxc.rs + map chained in Rust` produces the same chained map but composes it
   with `oxc_sourcemap` inside the addon instead of `remapping` in JS (see
   [Composing the maps in Rust](#composing-the-maps-in-rust-instead-of-remapping)).
   Skipping the JS compose and the wrap map's JSON round-trip across napi brings
-  ~35 µs down to ~13 µs, faster than `acorn + source map` even though it also
+  ~27 µs down to ~11 µs, faster than `acorn + source map` even though it also
   chains to the `.ts`.
 - `orchestrion (cached selector)` memoizes orchestrion's per-call
   `esquery.parse`, which its shipped code recompiles on every `transform()`.
