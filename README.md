@@ -108,6 +108,37 @@ Error: boom for 42
 The compose costs ~22 µs on top of the transform (the map JSON round-trips through
 `remapping`), still well under a single Babel transform and paid once per module.
 
+#### Native `.ts` (skip `tsc` and the chain)
+
+oxc's parser understands TypeScript directly, so `tsc` isn't required at all: pass
+the original `.ts` source and a filename ending in `.ts`/`.mts`/`.cts`/`.tsx` to
+`transformLambdaWithMap` (or `transformLambdaWithMapObject`) and oxc strips the
+types itself before wrapping. The generated map already reaches `handler.ts`, so
+there is nothing to compose:
+
+```js
+import { transformLambdaWithMap } from 'wrap-esm-lambda'
+
+const source = transformLambdaWithMap(tsSource, 'handler', 'WrapAwsLambda', 'handler.ts')
+// `source` already has an inline map pointing back at handler.ts, no tsc, no remapping
+```
+
+The [hooks/sourcemap-ts-demo](hooks/sourcemap-ts-demo) `./run.sh` includes this as
+a third variant (`sync-hooks-oxc-ts-native.mjs`), loading `handler.ts` straight
+from disk with no `tsc` step:
+
+```
+=== wrap with NATIVE .ts map (oxc parses handler.ts directly, no tsc) ===
+Error: boom for 42
+    at handler.ts:15:9
+```
+
+This is also the faster option: skipping `tsc` and the `remapping` compose brings
+the wrap-with-map-to-`.ts` cost from ~32 µs (chained) down to ~11 µs, about 2.8x
+faster (see [Benchmarks](#benchmarks)). Use the chained path instead when you
+already run `tsc` for other reasons (type checking, project references) and don't
+want oxc's TypeScript support to be the source of truth for stripping types.
+
 ### WebAssembly
 
 1. Run `rustup target add wasm32-wasip1-threads` to install build target
@@ -162,8 +193,14 @@ Notes on the transform-latency comparison:
   and compose the wrap map with tsc's map via `@ampproject/remapping` so the
   result reaches the original `.ts` (see [Source maps](#source-maps)). The
   compose is the same parser-independent step for both, so the gap between them
-  (oxc ~28 µs vs acorn ~48 µs) is the parser/codegen difference, and oxc chained
+  (oxc ~34 µs vs acorn ~64 µs) is the parser/codegen difference, and oxc chained
   still lands near orchestrion's cached, no-map transform.
+- `oxc.rs + native .ts (no tsc)` skips `tsc` and the `remapping` compose
+  entirely: oxc parses the `.ts` and strips the types itself, emitting a map
+  that already reaches `handler.ts` (see
+  [Native .ts](#native-ts-skip-tsc-and-the-chain)). At ~12 µs it's roughly 3x
+  faster than the chained path, and only ~2x slower than `acorn` with no map at
+  all.
 - `orchestrion (cached selector)` memoizes orchestrion's per-call
   `esquery.parse`, which its shipped code recompiles on every `transform()`.
   That one change accounts for the ~10x gap to `orchestrion (minimal wrap)`.

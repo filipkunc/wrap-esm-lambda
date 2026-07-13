@@ -12,7 +12,9 @@ use oxc_parser::Parser;
 use oxc_semantic::{Scoping, SemanticBuilder, SymbolFlags};
 use oxc_span::{SPAN, SourceType};
 use oxc_str::Ident;
+use oxc_transformer::{TransformOptions, Transformer};
 use oxc_traverse::{Traverse, TraverseCtx, traverse_mut};
+use std::path::Path;
 
 pub struct LambdaTransform<'a> {
   handler: Ident<'a>,
@@ -301,10 +303,26 @@ pub struct MapOutput {
   pub data_url: String,
 }
 
+/// `.ts`/`.mts`/`.cts` (and `.tsx`) get oxc's own TypeScript source type, so a
+/// `.ts` handler can be parsed and stripped directly; anything else keeps the
+/// plain ESM source type used before TypeScript support existed.
+fn source_type_for_path(path: &Path) -> SourceType {
+  match path.extension().and_then(|ext| ext.to_str()) {
+    Some("ts" | "mts" | "cts") => SourceType::ts(),
+    Some("tsx") => SourceType::tsx(),
+    _ => SourceType::mjs(),
+  }
+}
+
 /// Parse `source_text`, wrap the handler, and generate code. When
 /// `source_map_path` is `Some`, oxc also emits a source map (relative to that
 /// path). When `None`, no map is generated (the fast path used by callers that
 /// only need the transformed code).
+///
+/// When the path's extension marks it as TypeScript, oxc strips the types
+/// itself before wrapping, so `.ts` handlers don't need a separate `tsc` pass:
+/// the generated map goes straight from the wrapped code back to the original
+/// `.ts`, with no upstream map to compose.
 fn transform_and_generate(
   source_text: &str,
   handler: String,
@@ -312,12 +330,20 @@ fn transform_and_generate(
   source_map_path: Option<std::path::PathBuf>,
 ) -> (String, Option<MapOutput>) {
   let allocator = Allocator::default();
-  let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
+  let default_path = std::path::PathBuf::from("input.mjs");
+  let path = source_map_path.as_ref().unwrap_or(&default_path);
+  let source_type = source_type_for_path(path);
+  let parsed = Parser::new(&allocator, source_text, source_type).parse();
   let mut program = parsed.program;
-  let scoping = SemanticBuilder::new()
+  let mut scoping = SemanticBuilder::new()
     .build(&program)
     .semantic
     .into_scoping();
+  if source_type.is_typescript() {
+    let transformed = Transformer::new(&allocator, path, &TransformOptions::default())
+      .build_with_scoping(scoping, &mut program);
+    scoping = transformed.scoping;
+  }
   LambdaTransform::new(&allocator, handler, wrapper).transform(&allocator, &mut program, scoping);
   let ret = Codegen::new()
     .with_options(CodegenOptions {
@@ -341,6 +367,10 @@ pub fn transform_lambda_source(source_text: String, handler: String, wrapper: St
 /// back to `filename`. The wrapped handler body keeps its original spans, so an
 /// exception thrown inside the handler resolves to the original source line
 /// under Node's `--enable-source-maps`.
+///
+/// If `filename` ends in `.ts`/`.mts`/`.cts`/`.tsx`, `source_text` is parsed
+/// and type-stripped by oxc directly (no `tsc` pass needed), so the map goes
+/// straight from the wrapped code back to that `.ts` source.
 pub fn transform_lambda_source_with_map(
   source_text: String,
   handler: String,
@@ -362,9 +392,15 @@ pub fn transform_lambda_source_with_map(
 }
 
 /// Like [`transform_lambda_source_with_map`], but returns the code and the raw
-/// v3 source map JSON separately (no inline URL appended). The JSON is what a
-/// caller composes with an upstream `.ts` -> `.js` map so the final map reaches
-/// the original TypeScript.
+/// v3 source map JSON separately (no inline URL appended).
+///
+/// For a `filename` that already ends in `.js`/`.mjs`/`.cjs` (e.g. `tsc`
+/// output), the JSON is `transformed -> filename`, which a caller composes
+/// with an upstream `.ts` -> `.js` map so the final map reaches the original
+/// TypeScript. For a `.ts`/`.mts`/`.cts`/`.tsx` `filename`, pass the original
+/// TypeScript `source_text` directly: oxc strips the types itself and the
+/// returned map already reaches that `.ts` source, so there is nothing left to
+/// compose.
 pub fn transform_lambda_source_with_map_json(
   source_text: String,
   handler: String,
@@ -397,6 +433,24 @@ mod tests {
     println!("{}", transformed);
     assert!(transformed.contains("WrapAwsLambda"));
     assert!(transformed.contains("//# sourceMappingURL=data:application/json"));
+  }
+
+  #[test]
+  fn test_source_map_from_ts() {
+    // No tsc involved: oxc parses and strips the .ts types itself, so the map
+    // (and its embedded sourcesContent) reaches handler.ts directly.
+    let source_text = "export const handler = async (event: { id?: number }): Promise<string> => {\n  throw new Error(`boom ${event?.id}`);\n};\n".to_string();
+    let (code, map) = transform_lambda_source_with_map_json(
+      source_text.clone(),
+      "handler".to_string(),
+      "WrapAwsLambda".to_string(),
+      "handler.ts".to_string(),
+    );
+    assert!(code.contains("WrapAwsLambda("));
+    assert!(!code.contains(": {"), "type annotations should be stripped");
+    let map = map.expect("map should be generated for a .ts filename");
+    assert!(map.contains("\"sources\":[\"handler.ts\"]"));
+    assert!(map.contains("\"sourcesContent\":[\"export const handler"));
   }
 
   #[test]
