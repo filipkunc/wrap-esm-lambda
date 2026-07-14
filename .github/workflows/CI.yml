@@ -179,7 +179,9 @@ jobs:
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
           options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
-          run: yarn test
+          # node:25+ images no longer bundle yarn (corepack removal), so run
+          # the repo's committed Yarn 4 release directly instead of `yarn`.
+          run: node .yarn/releases/yarn-4.9.2.cjs test
   test-wasi:
     name: Test WASI target
     needs:
