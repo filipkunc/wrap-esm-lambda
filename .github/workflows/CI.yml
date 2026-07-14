@@ -256,13 +256,17 @@ jobs:
           cd hooks && ./bench_hooks.sh && cd ..
           cat hooks/benchTable.md
       - name: Publish
+        # Release detection looks at the commit SUBJECT only (%s). Grepping the
+        # full body (%B) once matched an incidental line starting with a
+        # version-like string and triggered an unintended publish attempt.
         run: |
           npm config set provenance true
-          if git log -1 --pretty=%B | grep "^[0-9]\+\.[0-9]\+\.[0-9]\+$";
+          COMMIT_SUBJECT=$(git log -1 --pretty=%s)
+          if echo "$COMMIT_SUBJECT" | grep -q "^[0-9]\+\.[0-9]\+\.[0-9]\+$";
           then
             echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
             npm publish --access public
-          elif git log -1 --pretty=%B | grep "^[0-9]\+\.[0-9]\+\.[0-9]\+";
+          elif echo "$COMMIT_SUBJECT" | grep -q "^[0-9]\+\.[0-9]\+\.[0-9]\+";
           then
             echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
             npm publish --tag next --access public
