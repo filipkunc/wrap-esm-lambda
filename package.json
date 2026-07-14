@@ -74,7 +74,7 @@
     "ava": "^6.4.1",
     "chalk": "^5.4.1",
     "chartjs-node-canvas": "^5.0.0",
-    "emnapi": "^1.11.2",
+    "emnapi": "~1.4.5",
     "esbuild": "^0.28.1",
     "estraverse": "^5.3.0",
     "husky": "^9.1.7",

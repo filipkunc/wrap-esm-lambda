@@ -33,7 +33,7 @@ importers:
         version: 0.3.11
       '@napi-rs/cli':
         specifier: ^3.0.3
-        version: 3.0.4(@emnapi/runtime@1.4.5)(@types/node@24.2.0)(emnapi@1.11.2(node-addon-api@7.1.1))
+        version: 3.0.4(@emnapi/runtime@1.4.5)(@types/node@24.2.0)(emnapi@1.4.5(node-addon-api@7.1.1))
       '@napi-rs/wasm-runtime':
         specifier: ^1.0.1
         version: 1.0.1
@@ -86,8 +86,8 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(chart.js@4.5.0)
       emnapi:
-        specifier: ^1.11.2
-        version: 1.11.2(node-addon-api@7.1.1)
+        specifier: ~1.4.5
+        version: 1.4.5(node-addon-api@7.1.1)
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
@@ -1739,9 +1739,9 @@ packages:
       { integrity: sha512-KxdRyyFcS85pH3dnU8Y5yFUm2YJdaHwcBZWrfG8o89ZY9a13/f9itbN+YG3ELbBo9Pg5zvIozstmuV8bX13q6g== }
     engines: { node: '>=14.16' }
 
-  emnapi@1.11.2:
+  emnapi@1.4.5:
     resolution:
-      { integrity: sha512-iMt/XQc69fFn2EvcU6tm14HmXKwyy0lnABugsQlqp6xFuZIUuO+ONVSg2mz+MTVF8WbC+bic65AvRXdoldALKg== }
+      { integrity: sha512-qYEfWKYngSahxc6Y+zajiiwzhhn5TkRci3BLQFKHVqT3vxj061IWCgaESZ9921OsbPiyetX43kckXw80dj9d6g== }
     peerDependencies:
       node-addon-api: '>= 6.1.0'
     peerDependenciesMeta:
@@ -3171,7 +3171,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@napi-rs/cli@3.0.4(@emnapi/runtime@1.4.5)(@types/node@24.2.0)(emnapi@1.11.2(node-addon-api@7.1.1))':
+  '@napi-rs/cli@3.0.4(@emnapi/runtime@1.4.5)(@types/node@24.2.0)(emnapi@1.4.5(node-addon-api@7.1.1))':
     dependencies:
       '@inquirer/prompts': 7.8.0(@types/node@24.2.0)
       '@napi-rs/cross-toolchain': 1.0.0
@@ -3187,7 +3187,7 @@ snapshots:
       typanion: 3.14.0
     optionalDependencies:
       '@emnapi/runtime': 1.4.5
-      emnapi: 1.11.2(node-addon-api@7.1.1)
+      emnapi: 1.4.5(node-addon-api@7.1.1)
     transitivePeerDependencies:
       - '@napi-rs/cross-toolchain-arm64-target-aarch64'
       - '@napi-rs/cross-toolchain-arm64-target-armv7'
@@ -3961,7 +3961,7 @@ snapshots:
 
   emittery@1.2.0: {}
 
-  emnapi@1.11.2(node-addon-api@7.1.1):
+  emnapi@1.4.5(node-addon-api@7.1.1):
     optionalDependencies:
       node-addon-api: 7.1.1
 
