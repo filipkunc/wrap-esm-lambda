@@ -29,9 +29,9 @@ For comparison the minimal wrapping code is re-implemented using [Babel](https:/
 
 ## Usage
 
-1. Run `yarn install` to install dependencies.
-2. Run `yarn build` to build.
-3. Run `yarn test` to run Node binding tests with [`ava`](https://github.com/avajs/ava)
+1. Run `pnpm install` to install dependencies.
+2. Run `pnpm build` to build.
+3. Run `pnpm test` to run Node binding tests with [`ava`](https://github.com/avajs/ava)
 4. Run `cargo fmt` and `cargo clippy` before committing
 5. Run `cargo test` to run Rust tests
 
@@ -170,7 +170,7 @@ on a build-time instrumented bundle to prove the guard.
 ### WebAssembly
 
 1. Run `rustup target add wasm32-wasip1-threads` to install build target
-2. Run `yarn build --target wasm32-wasip1-threads` to create `.wasm` file
+2. Run `pnpm build --target wasm32-wasip1-threads` to create `.wasm` file
 
 ### CI
 
@@ -196,8 +196,8 @@ Example output is in [hooks/benchTable.md](hooks/benchTable.md):
 ![Cold start benchmark chart](hooks/benchChart.svg 'Cold start benchmark chart')
 
 The second is raw **transform latency**: how long a single wrap costs each
-library in-process, amortized over many calls (`yarn bench` for the table,
-`yarn bench:chart` for the charts). The fastest and slowest approaches are
+library in-process, amortized over many calls (`pnpm bench` for the table,
+`pnpm bench:chart` for the charts). The fastest and slowest approaches are
 three orders of magnitude apart, so one linear axis squashes the fast group
 into slivers and a log axis understates the gaps that matter. Instead there
 are two linear charts with the exact value printed on each bar. The first
@@ -205,7 +205,7 @@ zooms into the approaches under 100 µs, where all the interesting differences
 live:
 
 ```sh
-yarn bench:chart
+pnpm bench:chart
 ```
 
 ![Transform latency chart, fast approaches](hooks/transformChart.svg 'Transform latency, approaches under 100 µs')

@@ -1,5 +1,5 @@
 # Compile all .ts files in benchmark folder
-yarn run compile:bench
+pnpm run compile:bench
 
 # Build swc wasm plugin
 cd ../swc-plugin-esm-lambda

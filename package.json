@@ -17,9 +17,6 @@
     "index.d.ts",
     "index.js"
   ],
-  "workspaces": [
-    "packages/*"
-  ],
   "napi": {
     "binaryName": "wrap-esm-lambda",
     "targets": [
@@ -67,6 +64,7 @@
     "@tybys/wasm-util": "^0.10.0",
     "@types/babel__core": "^7.20.5",
     "@types/estraverse": "^5",
+    "@types/estree": "^1.0.9",
     "@types/node": "^24.2.0",
     "@wrap-esm-lambda/core": "workspace:^",
     "@wrap-esm-lambda/hooks": "workspace:^",
@@ -121,7 +119,7 @@
     "singleQuote": true,
     "arrowParens": "always"
   },
-  "packageManager": "yarn@4.9.2",
+  "packageManager": "pnpm@11.13.0",
   "dependencies": {
     "chart.js": "^4.5.0"
   }

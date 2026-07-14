@@ -28,19 +28,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: yarn
+          cache: pnpm
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: Oxlint
-        run: yarn lint
+        run: pnpm lint
       - name: Cargo fmt
         run: cargo fmt -- --check
       - name: Clippy
@@ -54,22 +56,24 @@ jobs:
         settings:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            build: yarn build --target x86_64-unknown-linux-gnu --use-napi-cross
+            build: pnpm build --target x86_64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            build: yarn build --target aarch64-unknown-linux-gnu --use-napi-cross
+            build: pnpm build --target aarch64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
             target: wasm32-wasip1-threads
-            build: yarn build --target wasm32-wasip1-threads
+            build: pnpm build --target wasm32-wasip1-threads
     name: stable - ${{ matrix.settings.target }} - node@22
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: yarn
+          cache: pnpm
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -102,7 +106,7 @@ jobs:
         if: ${{ matrix.settings.setup }}
         shell: bash
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: Build
         run: ${{ matrix.settings.build }}
         shell: bash
@@ -130,11 +134,13 @@ jobs:
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          cache: yarn
+          cache: pnpm
       - name: Output docker params
         id: docker
         run: |
@@ -154,11 +160,10 @@ jobs:
               console.log('IMAGE=node:${{ matrix.node }}-slim')
             }
           " >> $GITHUB_OUTPUT
+      # For a cross-arch test matrix (aarch64/armv7), set supportedArchitectures
+      # in pnpm-workspace.yaml so platform-specific optional deps get fetched.
       - name: Install dependencies
-        run: |
-          yarn config set --json supportedArchitectures.cpu '["current", "arm64", "x64", "arm"]'
-          yarn config set --json supportedArchitectures.libc '["current", "musl", "gnu"]'
-          yarn install
+        run: pnpm install
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -179,9 +184,9 @@ jobs:
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
           options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
-          # node:25+ images no longer bundle yarn (corepack removal), so run
-          # the repo's committed Yarn 4 release directly instead of `yarn`.
-          run: node .yarn/releases/yarn-4.9.2.cjs test
+          # node:25+ images bundle no package manager (yarn/corepack removed),
+          # so run the ava bin shim directly — it only needs node on PATH.
+          run: ./node_modules/.bin/ava
   test-wasi:
     name: Test WASI target
     needs:
@@ -189,15 +194,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: yarn
+          cache: pnpm
+      # The wasi runtime (@napi-rs/wasm-runtime) is a regular devDependency,
+      # so a plain install suffices — no per-arch config needed.
       - name: Install dependencies
-        run: |
-          yarn config set supportedArchitectures.cpu "wasm32"
-          yarn install
+        run: pnpm install
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -207,7 +214,7 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Test bindings
-        run: yarn test
+        run: pnpm test
         env:
           NAPI_RS_FORCE_WASI: 1
   publish:
@@ -222,21 +229,23 @@ jobs:
       - test-wasi
     steps:
       - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
       - name: Setup node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: yarn
+          cache: pnpm
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: create npm dirs
-        run: yarn napi create-npm-dirs
+        run: pnpm exec napi create-npm-dirs
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
       - name: Move artifacts
-        run: yarn artifacts
+        run: pnpm run artifacts
       - name: List packages
         run: ls -R ./npm
         shell: bash
