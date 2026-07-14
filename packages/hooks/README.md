@@ -27,3 +27,7 @@ export default defineConfig({
 
 Sources already instrumented at build time (sentinel present) are passed
 through untouched, so layering this on an instrumented bundle is safe.
+
+Requires Node.js >= 22.15 — synchronous `module.registerHooks` does not exist
+on earlier versions. On older runtimes use the build-time shell
+([`@wrap-esm-lambda/unplugin`](../unplugin)), which has no runtime floor.

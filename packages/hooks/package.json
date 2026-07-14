@@ -11,6 +11,9 @@
     "src"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">=22.15.0"
+  },
   "dependencies": {
     "@wrap-esm-lambda/core": "workspace:^"
   }
