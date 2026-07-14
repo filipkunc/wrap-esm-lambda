@@ -4,6 +4,8 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+packageExtensionsChecksum: sha256-CLhVnJ9VAsNyhYkH4VNkQwrvI/R0wguRlJ7c2P+4rBg=
+
 importers:
   .:
     dependencies:
@@ -31,7 +33,7 @@ importers:
         version: 0.3.11
       '@napi-rs/cli':
         specifier: ^3.0.3
-        version: 3.0.4(@emnapi/runtime@1.4.5)(@types/node@24.2.0)
+        version: 3.0.4(@emnapi/runtime@1.4.5)(@types/node@24.2.0)(emnapi@1.11.2(node-addon-api@7.1.1))
       '@napi-rs/wasm-runtime':
         specifier: ^1.0.1
         version: 1.0.1
@@ -83,6 +85,9 @@ importers:
       chartjs-node-canvas:
         specifier: ^5.0.0
         version: 5.0.0(chart.js@4.5.0)
+      emnapi:
+        specifier: ^1.11.2
+        version: 1.11.2(node-addon-api@7.1.1)
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
@@ -1734,6 +1739,15 @@ packages:
       { integrity: sha512-KxdRyyFcS85pH3dnU8Y5yFUm2YJdaHwcBZWrfG8o89ZY9a13/f9itbN+YG3ELbBo9Pg5zvIozstmuV8bX13q6g== }
     engines: { node: '>=14.16' }
 
+  emnapi@1.11.2:
+    resolution:
+      { integrity: sha512-iMt/XQc69fFn2EvcU6tm14HmXKwyy0lnABugsQlqp6xFuZIUuO+ONVSg2mz+MTVF8WbC+bic65AvRXdoldALKg== }
+    peerDependencies:
+      node-addon-api: '>= 6.1.0'
+    peerDependenciesMeta:
+      node-addon-api:
+        optional: true
+
   emoji-regex@10.4.0:
     resolution:
       { integrity: sha512-EC+0oUMY1Rqm4O6LLrgjtYDvcVYTy7chDnM4Q7030tP4Kwj3u/pR6gP9ygnp2CJMK5Gq+9Q2oqmrFJAz01DXjw== }
@@ -3157,7 +3171,7 @@ snapshots:
       - encoding
       - supports-color
 
-  '@napi-rs/cli@3.0.4(@emnapi/runtime@1.4.5)(@types/node@24.2.0)':
+  '@napi-rs/cli@3.0.4(@emnapi/runtime@1.4.5)(@types/node@24.2.0)(emnapi@1.11.2(node-addon-api@7.1.1))':
     dependencies:
       '@inquirer/prompts': 7.8.0(@types/node@24.2.0)
       '@napi-rs/cross-toolchain': 1.0.0
@@ -3173,6 +3187,7 @@ snapshots:
       typanion: 3.14.0
     optionalDependencies:
       '@emnapi/runtime': 1.4.5
+      emnapi: 1.11.2(node-addon-api@7.1.1)
     transitivePeerDependencies:
       - '@napi-rs/cross-toolchain-arm64-target-aarch64'
       - '@napi-rs/cross-toolchain-arm64-target-armv7'
@@ -3945,6 +3960,10 @@ snapshots:
   electron-to-chromium@1.5.192: {}
 
   emittery@1.2.0: {}
+
+  emnapi@1.11.2(node-addon-api@7.1.1):
+    optionalDependencies:
+      node-addon-api: 7.1.1
 
   emoji-regex@10.4.0: {}
 

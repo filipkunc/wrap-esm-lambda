@@ -7,3 +7,11 @@ allowBuilds:
   '@swc/core': true
   canvas: true
   esbuild: true
+
+# @napi-rs/cli's setWasiEnv does require.resolve('emnapi') from its own
+# location without declaring the dependency — yarn's hoisting satisfied that
+# by accident, pnpm's isolation correctly doesn't. Patch it in.
+packageExtensions:
+  '@napi-rs/cli':
+    dependencies:
+      emnapi: '*'
