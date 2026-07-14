@@ -174,7 +174,7 @@ on a build-time instrumented bundle to prove the guard.
 
 ### CI
 
-CI tests against [`node@20`, `@node22`] x [`Linux`] matrix.
+CI tests against [`node@22`, `node@24`, `node@26`] x [`Linux`] matrix.
 
 ### Benchmarks
 
