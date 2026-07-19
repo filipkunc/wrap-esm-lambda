@@ -11,4 +11,4 @@ if (!configPath) {
 }
 
 const { default: config } = await import(pathToFileURL(configPath).href)
-registerConfig(config)
+await registerConfig(config)

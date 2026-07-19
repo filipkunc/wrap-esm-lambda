@@ -394,6 +394,7 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.installHooks = nativeBinding.installHooks
+module.exports.transformExportsTap = nativeBinding.transformExportsTap
 module.exports.transformLambda = nativeBinding.transformLambda
 module.exports.transformLambdaWithChainedMap = nativeBinding.transformLambdaWithChainedMap
 module.exports.transformLambdaWithChainedMapObject = nativeBinding.transformLambdaWithChainedMapObject

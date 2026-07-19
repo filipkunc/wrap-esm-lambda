@@ -487,6 +487,208 @@ pub fn transform_lambda_source_with_chained_map_json(
   (code, map.map(|map| map.json))
 }
 
+/// An exported binding usable by the exports tap: its exported name, the local
+/// identifier behind it, and whether the local binding can be reassigned
+/// (`let`/`var`/function/class declarations can, `const` cannot).
+struct TapBinding {
+  exported: String,
+  local: String,
+  reassignable: bool,
+}
+
+/// Minimal JS string literal escaping for generated specifiers.
+fn quote_js_string(value: &str) -> String {
+  let mut out = String::with_capacity(value.len() + 2);
+  out.push('"');
+  for ch in value.chars() {
+    match ch {
+      '"' => out.push_str("\\\""),
+      '\\' => out.push_str("\\\\"),
+      '\n' => out.push_str("\\n"),
+      '\r' => out.push_str("\\r"),
+      _ => out.push(ch),
+    }
+  }
+  out.push('"');
+  out
+}
+
+/// Collect the statically-analyzable exported bindings of an ESM module:
+/// `export const/let/var/function/class ...` and local `export { a as b }`
+/// lists. Re-exports (`export ... from`) have no local binding and are not
+/// tappable. `export { a as b }` specifiers are treated as reassignable — if
+/// the local turns out to be a `const`, the setter throws at runtime, which is
+/// still a loud failure.
+fn collect_esm_exports(program: &Program) -> Vec<TapBinding> {
+  let mut out = Vec::new();
+  for stmt in &program.body {
+    let Statement::ExportNamedDeclaration(export) = stmt else {
+      continue;
+    };
+    if let Some(declaration) = &export.declaration {
+      match declaration {
+        Declaration::VariableDeclaration(var) => {
+          let reassignable = var.kind != VariableDeclarationKind::Const;
+          for decl in &var.declarations {
+            if let BindingPattern::BindingIdentifier(ident) = &decl.id {
+              out.push(TapBinding {
+                exported: ident.name.to_string(),
+                local: ident.name.to_string(),
+                reassignable,
+              });
+            }
+          }
+        }
+        Declaration::FunctionDeclaration(func) => {
+          if let Some(name) = func.name() {
+            out.push(TapBinding {
+              exported: name.to_string(),
+              local: name.to_string(),
+              reassignable: true,
+            });
+          }
+        }
+        Declaration::ClassDeclaration(class) => {
+          if let Some(ident) = &class.id {
+            out.push(TapBinding {
+              exported: ident.name.to_string(),
+              local: ident.name.to_string(),
+              reassignable: true,
+            });
+          }
+        }
+        _ => {}
+      }
+    } else if export.source.is_none() {
+      for specifier in &export.specifiers {
+        if let Some(exported) = specifier.exported.identifier_name() {
+          out.push(TapBinding {
+            exported: exported.to_string(),
+            local: specifier.local.name().to_string(),
+            reassignable: true,
+          });
+        }
+      }
+    }
+  }
+  out
+}
+
+/// Append the get/set accessor properties for the tapped bindings. `local` is
+/// how the module reaches the value (a local identifier for ESM, a
+/// `module.exports.X` path for CJS); a missing setter makes assignment throw
+/// loudly in strict mode.
+fn push_accessors(out: &mut String, bindings: &[(String, String, bool)]) {
+  for (exported, local, reassignable) in bindings {
+    out.push_str("\n  get ");
+    out.push_str(exported);
+    out.push_str("() { return ");
+    out.push_str(local);
+    out.push_str("; },");
+    if *reassignable {
+      out.push_str("\n  set ");
+      out.push_str(exported);
+      out.push_str("(v) { ");
+      out.push_str(local);
+      out.push_str(" = v; },");
+    }
+  }
+}
+
+/// The generic "exports tap": append a call to a user-provided patch function,
+/// handing it the module's own live bindings as get/set accessors. Appending
+/// (never restructuring) keeps every original line — and therefore any
+/// existing source map — intact, and because the call runs at the end of the
+/// module's own evaluation the patch sees fully-initialized definitions before
+/// any importer does.
+///
+/// ESM (`cjs = false`): requested names are validated against the module's
+/// statically visible exports (a missing export is a hard error — the
+/// version-drift alarm) and accessors close over the local bindings, so
+/// `bindings.X = wrapped` rebinds the live export where the binding kind
+/// allows it.
+///
+/// CJS (`cjs = true`): bundled CJS keeps internals out of top-level scope, so
+/// accessors go through `module.exports` instead — which also works with the
+/// getter-only exports esbuild-bundled packages define. No static validation
+/// is possible there; a missing property surfaces as `undefined` in the patch.
+///
+/// Delivery of the patch function differs per mode:
+/// - `registry = false` (build time): a static import of `patch_from` is
+///   appended (aliased by `alias_index` so several patches can share a
+///   module); the bundler resolves and bundles the user's patch code.
+/// - `registry = true` (runtime): no import at all — the emission looks the
+///   patch up in `globalThis[Symbol.for("wrap-esm-lambda.patches")]` under
+///   the key `"<patch_from>#<patch_name>"`, which the runtime shell populates
+///   before any module loads. This keeps hook-overridden CJS sources free of
+///   injected `require` calls, which Node's CJS-over-ESM translator cannot
+///   serve.
+pub fn transform_exports_tap_source(
+  source_text: &str,
+  bindings: Vec<String>,
+  patch_name: &str,
+  patch_from: &str,
+  cjs: bool,
+  registry: bool,
+  alias_index: u32,
+) -> Result<String, String> {
+  let accessors: Vec<(String, String, bool)> = if cjs {
+    bindings
+      .iter()
+      .map(|name| (name.clone(), format!("module.exports.{}", name), true))
+      .collect()
+  } else {
+    let allocator = Allocator::default();
+    let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
+    let exports = collect_esm_exports(&parsed.program);
+    let mut resolved = Vec::with_capacity(bindings.len());
+    for name in &bindings {
+      let Some(binding) = exports.iter().find(|b| &b.exported == name) else {
+        return Err(format!(
+          "export '{}' not found in module (available: {})",
+          name,
+          exports
+            .iter()
+            .map(|b| b.exported.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+        ));
+      };
+      resolved.push((
+        binding.exported.clone(),
+        binding.local.clone(),
+        binding.reassignable,
+      ));
+    }
+    resolved
+  };
+
+  let mut out = String::with_capacity(source_text.len() + 256);
+  out.push_str(source_text);
+  if registry {
+    let key = format!("{}#{}", patch_from, patch_name);
+    out.push_str("\n;(() => {\nconst __wel_registry = globalThis[Symbol.for(\"wrap-esm-lambda.patches\")];\nconst __wel_patch = __wel_registry && __wel_registry[");
+    out.push_str(&quote_js_string(&key));
+    out.push_str("];\nif (__wel_patch) __wel_patch({");
+    push_accessors(&mut out, &accessors);
+    out.push_str("\n});\n})();\n");
+  } else {
+    let alias = format!("__wel_patch_{}", alias_index);
+    out.push_str("\nimport { ");
+    out.push_str(patch_name);
+    out.push_str(" as ");
+    out.push_str(&alias);
+    out.push_str(" } from ");
+    out.push_str(&quote_js_string(patch_from));
+    out.push_str(";\n");
+    out.push_str(&alias);
+    out.push_str("({");
+    push_accessors(&mut out, &accessors);
+    out.push_str("\n});\n");
+  }
+  Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -524,6 +726,94 @@ mod tests {
     assert!(map.contains("\"sources\":[\"handler.ts\"]"));
     // The upstream map embeds `original` as sourcesContent; chaining carries it over.
     assert!(map.contains("\"sourcesContent\""));
+  }
+
+  #[test]
+  fn test_exports_tap_esm_import_delivery() {
+    let source = "export class Client {\n\tsend(command) {\n\t\treturn command;\n\t}\n}\nexport const VERSION = \"1.0.0\";\n";
+    let out = transform_exports_tap_source(
+      source,
+      vec!["Client".to_string(), "VERSION".to_string()],
+      "patchSmithy",
+      "./patches/smithy.ts",
+      false,
+      false,
+      0,
+    )
+    .unwrap();
+    println!("{}", out);
+    assert!(out.starts_with(source), "original source must be untouched");
+    assert!(out.contains("import { patchSmithy as __wel_patch_0 } from \"./patches/smithy.ts\";"));
+    assert!(out.contains("get Client() { return Client; }"));
+    assert!(out.contains("set Client(v) { Client = v; }"));
+    assert!(out.contains("get VERSION() { return VERSION; }"));
+    // const exports get no setter
+    assert!(!out.contains("set VERSION"));
+  }
+
+  #[test]
+  fn test_exports_tap_esm_registry_delivery() {
+    let source = "export class Client {}\n";
+    let out = transform_exports_tap_source(
+      source,
+      vec!["Client".to_string()],
+      "patchSmithy",
+      "/abs/patches/smithy.ts",
+      false,
+      true,
+      0,
+    )
+    .unwrap();
+    println!("{}", out);
+    assert!(out.starts_with(source));
+    assert!(
+      !out.contains("import {"),
+      "registry delivery injects no import"
+    );
+    assert!(out.contains("globalThis[Symbol.for(\"wrap-esm-lambda.patches\")]"));
+    assert!(out.contains("[\"/abs/patches/smithy.ts#patchSmithy\"]"));
+    assert!(out.contains("get Client() { return Client; }"));
+  }
+
+  #[test]
+  fn test_exports_tap_esm_missing_export_is_loud() {
+    let source = "export class Client {}\n";
+    let err = transform_exports_tap_source(
+      source,
+      vec!["Klient".to_string()],
+      "patch",
+      "./p.ts",
+      false,
+      false,
+      0,
+    )
+    .unwrap_err();
+    assert!(err.contains("export 'Klient' not found"));
+    assert!(err.contains("Client"));
+  }
+
+  #[test]
+  fn test_exports_tap_cjs_registry_delivery() {
+    let source = "class Client {}\nmodule.exports.Client = Client;\n";
+    let out = transform_exports_tap_source(
+      source,
+      vec!["Client".to_string()],
+      "patchSmithy",
+      "/abs/patches/smithy.ts",
+      true,
+      true,
+      0,
+    )
+    .unwrap();
+    println!("{}", out);
+    assert!(out.starts_with(source));
+    assert!(
+      !out.contains("require("),
+      "registry delivery injects no require — hook-overridden CJS cannot serve one"
+    );
+    assert!(out.contains("[\"/abs/patches/smithy.ts#patchSmithy\"]"));
+    assert!(out.contains("get Client() { return module.exports.Client; }"));
+    assert!(out.contains("set Client(v) { module.exports.Client = v; }"));
   }
 
   #[test]

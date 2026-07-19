@@ -162,10 +162,67 @@ users pick per deployment — not per codebase:
 
 Every transformed module ends with a `/*! @wrap-esm-lambda instrumented */`
 legal comment (bundlers keep those), and both shells skip sources that carry
-it — enabling both modes at once never double-wraps.
+it — enabling both modes at once never double-wraps. (Detection keys on the
+comment's inner text: esbuild's legal-comment hoisting rewrites the
+delimiters, which would silently defeat a full-comment match.)
 [`__test__/hybrid.spec.ts`](__test__/hybrid.spec.ts) runs one fixture through
 both modes end-to-end, checks the outputs match, and layers the runtime hook
 on a build-time instrumented bundle to prove the guard.
+
+#### Declarative patches: the exports tap
+
+The second entry kind generalizes this into `Module._load`-monkey-patching
+ergonomics, delivered by source transform instead of loader interception. A
+patch entry names a package (with a semver range and the files inside it), the
+exports to hand over, and a plain TypeScript function the user writes:
+
+```ts
+// wrap.config.ts
+export default definePatches([
+  {
+    module: {
+      name: '@smithy/core',
+      versionRange: '>=3 <5',
+      files: ['dist-es/submodules/client/smithy-client/client.js', 'dist-cjs/submodules/client/index.js'],
+    },
+    patch: { name: 'patchSmithyClient', from: '/abs/path/patches/aws.ts' },
+    bindings: ['Client'],
+  },
+])
+
+// patches/aws.ts — ordinary imperative code against live objects
+export function patchSmithyClient({ Client }) {
+  const orig = Client.prototype.send
+  Client.prototype.send = async function (command, ...rest) {
+    // spans, diagnostics_channel.publish, whatever — then:
+    return orig.call(this, command, ...rest)
+  }
+}
+```
+
+The oxc side is one generic transform: validate the requested exports (a
+missing export is a hard error — the version-drift alarm), then _append_ a
+call handing the patch function the module's live bindings as get/set
+accessors — so the patch can mutate prototypes or even rebind a
+`function`/`class`/`let` export, with the same reach `Module._load` patching
+ever had, in ESM and CJS alike. Appending keeps every original line (and any
+source map) intact, and the call runs at the end of the module's own
+evaluation: after its definitions exist, before any importer sees them.
+
+Patch delivery differs per mode: at build time a static import is appended
+and the bundler bundles the patch code; at runtime no import is injected at
+all — the register entry preloads patch functions into a
+`Symbol.for('wrap-esm-lambda.patches')` global registry the tap reads,
+because hook-overridden CJS sources cannot serve an injected `require`.
+
+[`__test__/aws.spec.ts`](__test__/aws.spec.ts) proves it against the real
+AWS SDK: every `@aws-sdk/client-*` operation funnels through `Client#send`
+in `@smithy/core`'s client submodule, so the single entry above intercepts
+`S3Client`'s `PutObjectCommand` — through the runtime hook on the SDK's
+bundled `dist-cjs` and through esbuild on its `dist-es`, same patch code.
+[`__test__/patch.spec.ts`](__test__/patch.spec.ts) covers the mechanics on a
+fixture package (emission shapes, loud failures, version-range gating, CJS
+getter-only exports, the double-patch guard).
 
 ### WebAssembly
 

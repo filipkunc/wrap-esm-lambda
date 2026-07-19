@@ -1,38 +1,67 @@
-// Runtime shell of the hybrid setup: wraps matched modules as they load, via
-// Node's synchronous `module.registerHooks`. Zero build-pipeline changes —
-// activate with `node --import @wrap-esm-lambda/hooks/register app.mjs` (config
-// path in WRAP_ESM_LAMBDA_CONFIG) or call `registerConfig(config)` yourself.
-// The transform is the same native call the build-time shell runs, so the cold
-// start cost is microseconds per matched module.
+// Runtime shell of the hybrid setup: instruments matched modules as they
+// load, via Node's synchronous `module.registerHooks` — which covers both
+// import and require, so patch entries reach CJS (e.g. AWS SDK dist-cjs) and
+// ESM alike. Activate with `node --import @wrap-esm-lambda/hooks/register`
+// (config path in WRAP_ESM_LAMBDA_CONFIG) or call `registerConfig(config)`.
+// The transforms are the same native calls the build-time shell runs, so the
+// cold start cost is microseconds per matched module.
 import { registerHooks } from 'node:module'
-import { createMatcher, transformMatched, inlineMap } from '@wrap-esm-lambda/core'
+import { pathToFileURL } from 'node:url'
+import { isAbsolute } from 'node:path'
+import { matchEntries, applyMatched, inlineMap, PATCH_REGISTRY, patchKey } from '@wrap-esm-lambda/core'
 
 /**
- * Build a `registerHooks`-compatible load hook from a config.
+ * Build a `registerHooks`-compatible load hook from a config. Patch taps are
+ * emitted in registry delivery: they carry no injected import, and expect
+ * `preloadPatches` to have populated the global registry first.
  * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
  */
 export function createLoadHook(config) {
-  const match = createMatcher(config)
   return function load(url, context, nextLoad) {
     const result = nextLoad(url, context)
-    const entry = match(url)
-    if (!entry) {
+    const entries = matchEntries(config, url)
+    if (entries.length === 0) {
       return result
     }
-    const transformed = transformMatched(result.source.toString(), entry, url)
-    if (!transformed) {
+    const applied = applyMatched(result.source.toString(), entries, url, {
+      format: result.format,
+      delivery: 'registry',
+    })
+    if (!applied) {
       // already instrumented (e.g. at build time) — never double-wrap
       return result
     }
-    const source = transformed.map ? inlineMap(transformed.code, transformed.map) : transformed.code
-    return { format: 'module', shortCircuit: true, source }
+    const source = applied.map ? inlineMap(applied.code, applied.map) : applied.code
+    return { format: result.format ?? 'module', shortCircuit: true, source }
   }
 }
 
 /**
- * Register the load hook for a config.
+ * Import every patch module of the config and store its patch functions in
+ * the global registry the emitted taps read from. Runs before the hook is
+ * registered, in ordinary top-level ESM context — so TypeScript patch files
+ * work wherever Node's type stripping does.
  * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
  */
-export function registerConfig(config) {
+export async function preloadPatches(config) {
+  const registry = (globalThis[PATCH_REGISTRY] ??= Object.create(null))
+  for (const entry of config.entries) {
+    if (!entry.patch) continue
+    const spec = isAbsolute(entry.patch.from) ? pathToFileURL(entry.patch.from).href : entry.patch.from
+    const mod = await import(spec)
+    const fn = mod[entry.patch.name]
+    if (typeof fn !== 'function') {
+      throw new TypeError(`patch '${entry.patch.name}' is not exported by ${entry.patch.from}`)
+    }
+    registry[patchKey(entry)] = fn
+  }
+}
+
+/**
+ * Preload the config's patch functions, then register the load hook.
+ * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
+ */
+export async function registerConfig(config) {
+  await preloadPatches(config)
   registerHooks({ load: createLoadHook(config) })
 }

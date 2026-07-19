@@ -67,6 +67,37 @@ pub fn transform_lambda_with_chained_map(
   )
 }
 
+/// The generic "exports tap" behind declarative patches: appends a call to a
+/// user-provided patch function inside the module, handing it the module's own
+/// live bindings as get/set accessors. `cjs` switches the emission to go
+/// through `module.exports` (for bundled CommonJS). `registry` picks patch
+/// delivery: false appends a static import of `patchFrom` (build time, aliased
+/// by `aliasIndex`); true looks the patch up in the
+/// `Symbol.for("wrap-esm-lambda.patches")` global registry the runtime shell
+/// preloads (no injected import/require at all). Throws when a requested
+/// export does not exist in an ESM module.
+#[napi]
+pub fn transform_exports_tap(
+  input: String,
+  bindings: Vec<String>,
+  patch_name: String,
+  patch_from: String,
+  cjs: bool,
+  registry: bool,
+  alias_index: u32,
+) -> napi::Result<String> {
+  transform::transform_exports_tap_source(
+    &input,
+    bindings,
+    &patch_name,
+    &patch_from,
+    cjs,
+    registry,
+    alias_index,
+  )
+  .map_err(napi::Error::from_reason)
+}
+
 /// Like `transformLambdaWithChainedMap`, but returns the code and the chained
 /// v3 map JSON separately (no inline URL appended).
 #[napi]
