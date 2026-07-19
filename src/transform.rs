@@ -595,27 +595,34 @@ fn push_accessors(out: &mut String, bindings: &[(String, String, bool)]) {
   }
 }
 
-/// The generic "exports tap": append a call to a user-provided patch function,
-/// handing it the module's own live bindings as get/set accessors. Appending
-/// (never restructuring) keeps every original line — and therefore any
-/// existing source map — intact, and because the call runs at the end of the
-/// module's own evaluation the patch sees fully-initialized definitions before
-/// any importer does.
+/// The generic "exports tap": produce the statements a caller appends after a
+/// module's source, calling a user-provided patch function with the module's
+/// live bindings as get/set accessors. Only the *snippet* is returned — the
+/// caller concatenates it in JS. Round-tripping the full module source across
+/// the napi boundary just to append a few hundred bytes costs two O(n)
+/// UTF-16<->UTF-8 conversions and dominated the measured latency (a 42 KB CJS
+/// file: ~39 µs round-tripped vs ~0.7 µs snippet-only).
 ///
-/// ESM (`cjs = false`): requested names are validated against the module's
-/// statically visible exports (a missing export is a hard error — the
-/// version-drift alarm) and accessors close over the local bindings, so
-/// `bindings.X = wrapped` rebinds the live export where the binding kind
-/// allows it.
+/// Appending (never restructuring) keeps every original line — and therefore
+/// any existing source map — intact, and because the call runs at the end of
+/// the module's own evaluation the patch sees fully-initialized definitions
+/// before any importer does.
+///
+/// ESM (`cjs = false`): `source_text` is parsed and the requested names are
+/// validated against the module's statically visible exports (a missing
+/// export is a hard error — the version-drift alarm); accessors close over
+/// the local bindings, so `bindings.X = wrapped` rebinds the live export
+/// where the binding kind allows it.
 ///
 /// CJS (`cjs = true`): bundled CJS keeps internals out of top-level scope, so
 /// accessors go through `module.exports` instead — which also works with the
 /// getter-only exports esbuild-bundled packages define. No static validation
-/// is possible there; a missing property surfaces as `undefined` in the patch.
+/// is possible there, so `source_text` is ignored entirely — pass an empty
+/// string and skip the input conversion too.
 ///
 /// Delivery of the patch function differs per mode:
 /// - `registry = false` (build time): a static import of `patch_from` is
-///   appended (aliased by `alias_index` so several patches can share a
+///   emitted (aliased by `alias_index` so several patches can share a
 ///   module); the bundler resolves and bundles the user's patch code.
 /// - `registry = true` (runtime): no import at all — the emission looks the
 ///   patch up in `globalThis[Symbol.for("wrap-esm-lambda.patches")]` under
@@ -623,7 +630,7 @@ fn push_accessors(out: &mut String, bindings: &[(String, String, bool)]) {
 ///   before any module loads. This keeps hook-overridden CJS sources free of
 ///   injected `require` calls, which Node's CJS-over-ESM translator cannot
 ///   serve.
-pub fn transform_exports_tap_source(
+pub fn exports_tap_snippet(
   source_text: &str,
   bindings: Vec<String>,
   patch_name: &str,
@@ -663,8 +670,7 @@ pub fn transform_exports_tap_source(
     resolved
   };
 
-  let mut out = String::with_capacity(source_text.len() + 256);
-  out.push_str(source_text);
+  let mut out = String::with_capacity(512);
   if registry {
     let key = format!("{}#{}", patch_from, patch_name);
     out.push_str("\n;(() => {\nconst __wel_registry = globalThis[Symbol.for(\"wrap-esm-lambda.patches\")];\nconst __wel_patch = __wel_registry && __wel_registry[");
@@ -731,7 +737,7 @@ mod tests {
   #[test]
   fn test_exports_tap_esm_import_delivery() {
     let source = "export class Client {\n\tsend(command) {\n\t\treturn command;\n\t}\n}\nexport const VERSION = \"1.0.0\";\n";
-    let out = transform_exports_tap_source(
+    let out = exports_tap_snippet(
       source,
       vec!["Client".to_string(), "VERSION".to_string()],
       "patchSmithy",
@@ -742,7 +748,10 @@ mod tests {
     )
     .unwrap();
     println!("{}", out);
-    assert!(out.starts_with(source), "original source must be untouched");
+    assert!(
+      !out.contains("export class"),
+      "snippet must not contain the source"
+    );
     assert!(out.contains("import { patchSmithy as __wel_patch_0 } from \"./patches/smithy.ts\";"));
     assert!(out.contains("get Client() { return Client; }"));
     assert!(out.contains("set Client(v) { Client = v; }"));
@@ -754,7 +763,7 @@ mod tests {
   #[test]
   fn test_exports_tap_esm_registry_delivery() {
     let source = "export class Client {}\n";
-    let out = transform_exports_tap_source(
+    let out = exports_tap_snippet(
       source,
       vec!["Client".to_string()],
       "patchSmithy",
@@ -765,7 +774,7 @@ mod tests {
     )
     .unwrap();
     println!("{}", out);
-    assert!(out.starts_with(source));
+    assert!(out.starts_with("\n"), "snippet is append-ready");
     assert!(
       !out.contains("import {"),
       "registry delivery injects no import"
@@ -778,7 +787,7 @@ mod tests {
   #[test]
   fn test_exports_tap_esm_missing_export_is_loud() {
     let source = "export class Client {}\n";
-    let err = transform_exports_tap_source(
+    let err = exports_tap_snippet(
       source,
       vec!["Klient".to_string()],
       "patch",
@@ -795,7 +804,7 @@ mod tests {
   #[test]
   fn test_exports_tap_cjs_registry_delivery() {
     let source = "class Client {}\nmodule.exports.Client = Client;\n";
-    let out = transform_exports_tap_source(
+    let out = exports_tap_snippet(
       source,
       vec!["Client".to_string()],
       "patchSmithy",
@@ -806,7 +815,7 @@ mod tests {
     )
     .unwrap();
     println!("{}", out);
-    assert!(out.starts_with(source));
+    assert!(out.starts_with("\n"), "snippet is append-ready");
     assert!(
       !out.contains("require("),
       "registry delivery injects no require — hook-overridden CJS cannot serve one"

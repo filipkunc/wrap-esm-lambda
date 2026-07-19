@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
-import { transformExportsTap } from '../index.js'
+import { exportsTapSnippet } from '../index.js'
 // @ts-expect-error untyped internal module
 import { lexEsm } from 'import-in-the-middle/lib/get-esm-exports.mjs'
 
@@ -65,11 +65,11 @@ function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): number {
 const cases: { label: string; run: () => void }[] = [
   {
     label: 'oxc exports tap (dist-es client.js, parse + validate)',
-    run: () => transformExportsTap(esmSource, ['Client'], 'patch', '/p.ts', false, true, 0),
+    run: () => exportsTapSnippet(esmSource, ['Client'], 'patch', '/p.ts', false, true, 0),
   },
   {
-    label: 'oxc exports tap (dist-cjs index.js, append only)',
-    run: () => transformExportsTap(cjsSource, ['Client'], 'patch', '/p.ts', true, true, 0),
+    label: 'oxc exports tap (cjs snippet, no source across napi)',
+    run: () => exportsTapSnippet('', ['Client'], 'patch', '/p.ts', true, true, 0),
   },
   {
     // iitm's per-module analysis step (es-module-lexer): the fair mechanism

@@ -53,8 +53,8 @@ const {
   },
 })
 export default __napiModule.exports
+export const exportsTapSnippet = __napiModule.exports.exportsTapSnippet
 export const installHooks = __napiModule.exports.installHooks
-export const transformExportsTap = __napiModule.exports.transformExportsTap
 export const transformLambda = __napiModule.exports.transformLambda
 export const transformLambdaWithChainedMap = __napiModule.exports.transformLambdaWithChainedMap
 export const transformLambdaWithChainedMapObject = __napiModule.exports.transformLambdaWithChainedMapObject

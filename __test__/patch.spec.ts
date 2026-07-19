@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
-import { transformExportsTap } from '../index'
+import { exportsTapSnippet } from '../index'
 
 // Declarative patches end-to-end: one TypeScript config entry naming a
 // package, a version range and the exports to hand over, plus a plain
@@ -26,10 +26,10 @@ const { default: config } = await import(pathToFileURL(fixture('wrap.config.ts')
 
 const hookEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.ts') }
 
-test('esm tap emission (import delivery): appended accessors, original source untouched', (t) => {
+test('esm tap emission (import delivery): snippet only, source never round-trips', (t) => {
   const source = 'export class Client {}\nexport const VERSION = "1.0.0";\n'
-  const out = transformExportsTap(source, ['Client', 'VERSION'], 'patchIt', '/abs/patch.ts', false, false, 0)
-  t.true(out.startsWith(source))
+  const out = exportsTapSnippet(source, ['Client', 'VERSION'], 'patchIt', '/abs/patch.ts', false, false, 0)
+  t.false(out.includes('export class'), 'only the appended snippet is returned')
   t.true(out.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'))
   t.true(out.includes('get Client() { return Client; }'))
   t.true(out.includes('set Client(v) { Client = v; }'))
@@ -38,9 +38,9 @@ test('esm tap emission (import delivery): appended accessors, original source un
 })
 
 test('cjs tap emission (registry delivery): module.exports accessors, no injected require', (t) => {
-  const source = 'class Client {}\nmodule.exports.Client = Client;\n'
-  const out = transformExportsTap(source, ['Client'], 'patchIt', '/abs/patch.ts', true, true, 0)
-  t.true(out.startsWith(source))
+  // CJS needs no static validation, so not even the source crosses napi
+  const out = exportsTapSnippet('', ['Client'], 'patchIt', '/abs/patch.ts', true, true, 0)
+  t.true(out.startsWith('\n'), 'append-ready snippet')
   t.false(out.includes('require('), 'hook-overridden CJS cannot serve an injected require')
   t.true(out.includes('Symbol.for("wrap-esm-lambda.patches")'))
   t.true(out.includes('["/abs/patch.ts#patchIt"]'))
@@ -48,7 +48,7 @@ test('cjs tap emission (registry delivery): module.exports accessors, no injecte
 })
 
 test('requesting a missing export fails loudly at transform time', (t) => {
-  const err = t.throws(() => transformExportsTap('export class Client {}\n', ['Klient'], 'p', '/p.ts', false, false, 0))
+  const err = t.throws(() => exportsTapSnippet('export class Client {}\n', ['Klient'], 'p', '/p.ts', false, false, 0))
   t.regex(err!.message, /export 'Klient' not found/)
   t.regex(err!.message, /Client/, 'error lists what is available')
 })

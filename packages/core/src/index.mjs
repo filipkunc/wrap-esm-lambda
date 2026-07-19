@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { basename, dirname, join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import semver from 'semver'
-import { transformLambdaWithMapObject, transformExportsTap } from 'wrap-esm-lambda'
+import { transformLambdaWithMapObject, exportsTapSnippet } from 'wrap-esm-lambda'
 
 /**
  * Marker appended to every transformed module. Both shells skip sources that
@@ -225,12 +225,16 @@ export function applyMatched(source, entries, idOrUrl, options = {}) {
   let aliasIndex = 0
   for (const entry of ordered) {
     if (entry.patch) {
-      code = transformExportsTap(
-        code,
+      // Only the snippet crosses the napi boundary; for CJS not even the
+      // source does (no static validation there) — round-tripping the module
+      // text cost two O(n) string conversions for a few appended bytes.
+      const cjs = kind === 'cjs'
+      code += exportsTapSnippet(
+        cjs ? '' : code,
         entry.bindings,
         entry.patch.name,
         entry.patch.from,
-        kind === 'cjs',
+        cjs,
         registry,
         aliasIndex,
       )

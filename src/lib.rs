@@ -67,17 +67,20 @@ pub fn transform_lambda_with_chained_map(
   )
 }
 
-/// The generic "exports tap" behind declarative patches: appends a call to a
-/// user-provided patch function inside the module, handing it the module's own
-/// live bindings as get/set accessors. `cjs` switches the emission to go
-/// through `module.exports` (for bundled CommonJS). `registry` picks patch
-/// delivery: false appends a static import of `patchFrom` (build time, aliased
-/// by `aliasIndex`); true looks the patch up in the
+/// The generic "exports tap" behind declarative patches: returns the snippet
+/// the caller appends after the module source, calling a user-provided patch
+/// function with the module's live bindings as get/set accessors. Only the
+/// snippet crosses the napi boundary — round-tripping the whole source cost
+/// two O(n) string conversions and dominated the latency. `input` is parsed
+/// for export validation in ESM mode; in CJS mode (`cjs = true`) it is
+/// ignored — pass an empty string. `registry` picks patch delivery: false
+/// emits a static import of `patchFrom` (build time, aliased by
+/// `aliasIndex`); true looks the patch up in the
 /// `Symbol.for("wrap-esm-lambda.patches")` global registry the runtime shell
 /// preloads (no injected import/require at all). Throws when a requested
 /// export does not exist in an ESM module.
 #[napi]
-pub fn transform_exports_tap(
+pub fn exports_tap_snippet(
   input: String,
   bindings: Vec<String>,
   patch_name: String,
@@ -86,7 +89,7 @@ pub fn transform_exports_tap(
   registry: bool,
   alias_index: u32,
 ) -> napi::Result<String> {
-  transform::transform_exports_tap_source(
+  transform::exports_tap_snippet(
     &input,
     bindings,
     &patch_name,

@@ -238,12 +238,21 @@ untouchable — while the exports tap hands the class to user code that can
 wrap, short-circuit, or rebind. `pnpm bench:patch` measures the transform on
 that real file:
 
-| transform (same `@smithy/core` client file)       |  latency |
-| ------------------------------------------------- | -------: |
-| oxc exports tap (`dist-es`, parse + validate)     |   ~10 µs |
-| oxc exports tap (`dist-cjs` 42 KB, append only)   |   ~17 µs |
-| orchestrion `Client#send` query (stock)           | ~1150 µs |
-| orchestrion `Client#send` query (cached selector) |  ~800 µs |
+| transform (same `@smithy/core` client file)         |  latency |
+| --------------------------------------------------- | -------: |
+| oxc exports tap (`dist-es`, parse + validate)       |   ~10 µs |
+| oxc exports tap (CJS snippet, nothing crosses napi) |  ~0.7 µs |
+| orchestrion `Client#send` query (stock)             | ~1150 µs |
+| orchestrion `Client#send` query (cached selector)   |  ~800 µs |
+
+A profiling pass changed the tap's napi contract: originally the whole module
+source round-tripped across the boundary just to append a few hundred bytes,
+and the two O(n) UTF-16<->UTF-8 conversions dominated (the 42 KB CJS file
+measured ~39 µs round-tripped vs ~0.7 µs snippet-only). Rust now returns just
+the snippet and JS concatenates; the CJS path sends no source at all. What
+remains of the ESM cost (~1 µs napi floor + ~9 µs) is the full-AST oxc parse
+itself — the price of validation `lexEsm` doesn't attempt (const-ness, local
+binding resolution, loud missing-export errors).
 
 The ~100x gap is architectural, not incidental: the tap's oxc parse only
 validates exports and appends, while orchestrion parses, queries and
@@ -272,7 +281,7 @@ iitm 3.x, which needs Node >= 22.22.3 / 24.11.1 / 26):
 | build time (bundled output) | n/a                | patched     |
 
 Per-module analysis credit where due: iitm's `lexEsm` scan
-(es-module-lexer) is _faster_ than our oxc parse — ~5 µs vs ~11 µs on the
+(es-module-lexer) is _faster_ than our oxc parse — ~5 µs vs ~10 µs on the
 same `@smithy/core` file — its per-module costs live elsewhere (facade
 generation plus evaluating an extra module per interception). The cold-start
 section of `pnpm bench:patch` measures whole processes on the fixture app
