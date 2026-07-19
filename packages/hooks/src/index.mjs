@@ -32,7 +32,16 @@ export function createLoadHook(config) {
       return result
     }
     const source = applied.map ? inlineMap(applied.code, applied.map) : applied.code
-    return { format: result.format ?? 'module', shortCircuit: true, source }
+    // Pass nextLoad's format through untouched. Inventing one when it is
+    // undefined (e.g. a require()d .js file in a package without "type" on
+    // newer Node) would mislabel CommonJS as ESM and crash its require calls;
+    // with no format Node detects it from the returned source, and every line
+    // the tap appends is format-neutral.
+    const out = { shortCircuit: true, source }
+    if (result.format != null) {
+      out.format = result.format
+    }
+    return out
   }
 }
 
