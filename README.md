@@ -224,6 +224,36 @@ bundled `dist-cjs` and through esbuild on its `dist-es`, same patch code.
 fixture package (emission shapes, loud failures, version-range gating, CJS
 getter-only exports, the double-patch guard).
 
+#### Compared to orchestrion-js
+
+Both tools express the same intent declaratively — a module matcher with a
+semver range plus a description of what to instrument — but differ in what
+the transform does and where user code runs.
+[`__test__/orchestrion-compare.spec.ts`](__test__/orchestrion-compare.spec.ts)
+runs orchestrion's `{ className: 'Client', methodName: 'send' }` function
+query over the identical `@smithy/core` file and demonstrates the capability
+split: orchestrion rewrites the method body into `tracingChannel` publishes —
+subscribers _observe_ start/end/asyncEnd events but the return value is
+untouchable — while the exports tap hands the class to user code that can
+wrap, short-circuit, or rebind. `pnpm bench:patch` measures the transform on
+that real file:
+
+| transform (same `@smithy/core` client file)       |  latency |
+| ------------------------------------------------- | -------: |
+| oxc exports tap (`dist-es`, parse + validate)     |   ~10 µs |
+| oxc exports tap (`dist-cjs` 42 KB, append only)   |   ~17 µs |
+| orchestrion `Client#send` query (stock)           | ~1150 µs |
+| orchestrion `Client#send` query (cached selector) |  ~800 µs |
+
+The ~100x gap is architectural, not incidental: the tap's oxc parse only
+validates exports and appends, while orchestrion parses, queries and
+regenerates the method body through its wasm/esquery pipeline — and unlike
+the handler benchmark, memoizing `esquery.parse` no longer rescues it,
+because the body rewrite itself dominates. The flip side is honest:
+orchestrion's body injection can instrument _non-exported_ functions and
+call-site interiors, which the exports tap by design cannot reach — its
+reach is exactly what `Module._load` monkey-patching ever had.
+
 ### WebAssembly
 
 1. Run `rustup target add wasm32-wasip1-threads` to install build target

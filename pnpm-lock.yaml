@@ -43,6 +43,9 @@ importers:
       '@oxc-node/core':
         specifier: ^0.0.30
         version: 0.0.30
+      '@smithy/core':
+        specifier: ^3.29.5
+        version: 3.29.5
       '@swc/core':
         specifier: ^1.13.3
         version: 1.13.3
