@@ -81,6 +81,7 @@
     "esbuild": "^0.28.1",
     "estraverse": "^5.3.0",
     "husky": "^9.1.7",
+    "import-in-the-middle": "^3.3.1",
     "lint-staged": "^16.1.2",
     "node-estree": "^4.0.0",
     "npm-run-all2": "^8.0.4",

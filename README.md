@@ -254,6 +254,48 @@ orchestrion's body injection can instrument _non-exported_ functions and
 call-site interiors, which the exports tap by design cannot reach — its
 reach is exactly what `Module._load` monkey-patching ever had.
 
+#### Compared to import-in-the-middle
+
+[import-in-the-middle](https://github.com/nodejs/import-in-the-middle) is the
+third mechanism class — a loader proxy (the one OTel and dd-trace use for ESM
+today): it wraps each matched module in a generated facade whose exports are
+settable, and user callbacks patch the namespace at load time.
+[`__test__/iitm-compare.spec.ts`](__test__/iitm-compare.spec.ts) pins down
+the reach difference on the fixture package, in both iitm modes (classic
+off-thread `module.register` and the synchronous `registerHooks` mode of
+iitm 3.x, which needs Node >= 22.22.3 / 24.11.1 / 26):
+
+| path into the module        | iitm (either mode) | exports tap |
+| --------------------------- | ------------------ | ----------- |
+| ESM `import`                | intercepted        | patched     |
+| pure `require()` chain      | **never seen**     | patched     |
+| build time (bundled output) | n/a                | patched     |
+
+Per-module analysis credit where due: iitm's `lexEsm` scan
+(es-module-lexer) is _faster_ than our oxc parse — ~5 µs vs ~11 µs on the
+same `@smithy/core` file — its per-module costs live elsewhere (facade
+generation plus evaluating an extra module per interception). The cold-start
+section of `pnpm bench:patch` measures whole processes on the fixture app
+(median of 9, Node 24):
+
+| setup                                   | cold start |    overhead |
+| --------------------------------------- | ---------: | ----------: |
+| baseline (no instrumentation)           |     ~34 ms |           — |
+| exports tap, runtime hook (.mjs config) |     ~62 ms |      +28 ms |
+| iitm sync (`registerHooks`)             |     ~55 ms |      +21 ms |
+| exports tap, runtime hook (.ts config)  |    ~105 ms | +43 ms more |
+| iitm off-thread (`module.register`)     |     ~96 ms |      +62 ms |
+
+Mechanism to mechanism the tap and sync-mode iitm are peers (most of our
++7 ms delta is loading `semver` — trimmable), and both are ~3x cheaper than
+the off-thread loader that ships as the OTel default. The `.ts` config row
+is a convenience tax, not mechanism: Node's type-stripping toolchain
+(amaro/SWC-wasm) costs ~40+ ms to initialize in the child — use a `.mjs`
+config where cold start matters. What iitm cannot offer at any price: the
+require() chain (the path the real AWS SDK takes under plain `node`) and a
+build-time story — while its namespace-level patching does work without any
+native addon, which remains its deployment advantage.
+
 ### WebAssembly
 
 1. Run `rustup target add wasm32-wasip1-threads` to install build target
