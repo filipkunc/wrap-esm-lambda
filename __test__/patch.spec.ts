@@ -143,3 +143,73 @@ test('double-patch guard: runtime hook passes through a patched bundle', async (
     await rm(outDir, { recursive: true, force: true })
   }
 })
+
+test('patch dependencies: relative TS helper + bare npm specifier, runtime mode', async (t) => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
+    { env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.deps.ts') } },
+  )
+  t.is(stdout.trim(), 'deps:sent:hello!', 'the patch module graph resolves at preload')
+})
+
+test('patch dependencies: the same graph bundles in build mode', async (t) => {
+  const { default: depsConfig } = await import(pathToFileURL(fixture('wrap.config.deps.ts')).href)
+  const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-deps-'))
+  try {
+    const outfile = join(outDir, 'bundle.mjs')
+    await build({
+      entryPoints: [fixture('app.mjs')],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      mainFields: ['module', 'main'],
+      outfile,
+      plugins: [unplugin.esbuild(depsConfig)],
+      logLevel: 'silent',
+    })
+    const bundled = await readFile(outfile, 'utf8')
+    t.true(bundled.includes('exclaim'), 'the relative TS helper is bundled')
+
+    const { stdout } = await execFileAsync(process.execPath, [outfile])
+    t.is(stdout.trim(), 'deps:sent:hello!', 'chalk and the helper ride along in the artifact')
+  } finally {
+    await rm(outDir, { recursive: true, force: true })
+  }
+})
+
+test('DOCUMENTED FOOTGUN: a patch importing its own target diverges between modes', async (t) => {
+  // Runtime: preloading the patch pulls the target into the module cache
+  // BEFORE hooks install — the app gets the cached, unpatched module and the
+  // patch silently does nothing.
+  const env = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.imports-target.ts') }
+  const runtime = await execFileAsync(
+    process.execPath,
+    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
+    { env },
+  )
+  t.is(runtime.stdout.trim(), 'sent:hello', 'runtime mode: silently UNPATCHED')
+
+  // Build: the same patch works — the bundler resolves the cycle through
+  // hoisted imports instead of a preload cache. This mode divergence is why
+  // the patch author contract forbids importing the instrumented graph.
+  const { default: footgunConfig } = await import(pathToFileURL(fixture('wrap.config.imports-target.ts')).href)
+  const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-footgun-'))
+  try {
+    const outfile = join(outDir, 'bundle.mjs')
+    await build({
+      entryPoints: [fixture('app.mjs')],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      mainFields: ['module', 'main'],
+      outfile,
+      plugins: [unplugin.esbuild(footgunConfig)],
+      logLevel: 'silent',
+    })
+    const built = await execFileAsync(process.execPath, [outfile])
+    t.is(built.stdout.trim(), 'never:sent:hello', 'build mode: patched — the modes DISAGREE')
+  } finally {
+    await rm(outDir, { recursive: true, force: true })
+  }
+})

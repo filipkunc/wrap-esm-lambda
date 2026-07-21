@@ -224,6 +224,13 @@ bundled `dist-cjs` and through esbuild on its `dist-es`, same patch code.
 fixture package (emission shapes, loud failures, version-range gating, CJS
 getter-only exports, the double-patch guard).
 
+The patch module itself is ordinary user code and may carry its own
+dependency graph — relative TypeScript helpers and bare npm specifiers work
+identically in both modes, with one documented exception (importing the
+instrumented package at the patch's top level). The full rules live in the
+[patch author contract](packages/core/README.md#patch-author-contract),
+each backed by a test in `patch.spec.ts`.
+
 #### Compared to orchestrion-js
 
 Both tools express the same intent declaratively — a module matcher with a

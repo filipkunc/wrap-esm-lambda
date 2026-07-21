@@ -89,6 +89,31 @@ subtlest constraints:
   currently resolves from the hooks package at preload, which is fragile
   under pnpm's strict layout.
 
+### Dependencies
+
+A patch module may carry a full dependency graph of its own — this is tested,
+not assumed (`__test__/patch.spec.ts`, the `patch dependencies` pair):
+
+- **Relative imports** (including TypeScript files, stripped by Node) and
+  **bare npm specifiers** both work, resolving from the patch file's own
+  location. Runtime mode loads the graph once at preload; build mode lets the
+  bundler pull it into the artifact. Same output either way.
+- **One hard rule: never import the instrumented package's graph at the patch
+  module's top level.** This is the one dependency shape where the two modes
+  _disagree_, pinned by the `DOCUMENTED FOOTGUN` test:
+  - Runtime: preloading the patch pulls the target into the module cache
+    _before_ hooks install, so the app receives the cached, unpatched module —
+    the patch **silently does nothing**.
+  - Build: the bundler resolves the cycle through hoisted imports and the
+    patch **works** — so the bug only surfaces in whichever mode you test
+    second.
+- Escape hatches when the patch genuinely needs the target's API (an
+  `instanceof` check, a middleware class): load it lazily _inside_ the patch
+  function body (`createRequire(import.meta.url)` or a dynamic `import()` of
+  something outside the instrumented files), or avoid the import entirely by
+  duck-typing (`command.constructor.name`) — the bindings object already hands
+  you the live classes.
+
 ### Failure modes
 
 - Runtime: the emitted tap is guarded — if the registry entry is missing
