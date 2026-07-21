@@ -280,12 +280,19 @@ iitm 3.x, which needs Node >= 22.22.3 / 24.11.1 / 26):
 | pure `require()` chain      | **never seen**     | patched     |
 | build time (bundled output) | n/a                | patched     |
 
-Per-module analysis credit where due: iitm's `lexEsm` scan
-(es-module-lexer) is _faster_ than our oxc parse — ~5 µs vs ~10 µs on the
-same `@smithy/core` file — its per-module costs live elsewhere (facade
-generation plus evaluating an extra module per interception). The cold-start
-section of `pnpm bench:patch` measures whole processes on the fixture app
-(median of 9, Node 24):
+One number in the transform table needs its scope read carefully: iitm's
+`lexEsm` (~5 µs) is only its _scan step_ — export names out of es-module-lexer,
+nothing else — while the tap's ~10 µs is the _complete_ per-module operation:
+full-AST parse, binding validation with local-name and const-ness resolution,
+and the emitted accessors. iitm's remaining per-module work (facade source
+generation, evaluating an extra module per interception, Hook callback
+dispatch) happens inside Node's loader and resists isolated measurement — a
+hand-rolled top-level scanner could match the lexer's scan speed natively,
+but was rejected as the wrong trade: several hundred lines of
+regex-heuristic lexing to shave microseconds off a once-per-matched-file
+cost. The honest like-for-like comparison is whole processes — the
+cold-start section of `pnpm bench:patch` on the fixture app (median of 9,
+Node 24):
 
 | setup                                   | cold start |    overhead |
 | --------------------------------------- | ---------: | ----------: |

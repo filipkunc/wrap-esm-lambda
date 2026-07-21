@@ -64,7 +64,7 @@ function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): number {
 
 const cases: { label: string; run: () => void }[] = [
   {
-    label: 'oxc exports tap (dist-es client.js, parse + validate)',
+    label: 'oxc exports tap complete (dist-es, parse + validate)',
     run: () => exportsTapSnippet(esmSource, ['Client'], 'patch', '/p.ts', false, true, 0),
   },
   {
@@ -75,7 +75,7 @@ const cases: { label: string; run: () => void }[] = [
     // iitm's per-module analysis step (es-module-lexer): the fair mechanism
     // comparison for our parse+validate. Its full per-module cost additionally
     // includes generating and evaluating a facade module per interception.
-    label: 'iitm lexEsm export scan (es-module-lexer)',
+    label: 'iitm lexEsm scan step only (es-module-lexer)',
     run: () => lexEsm(esmSource),
   },
   {
