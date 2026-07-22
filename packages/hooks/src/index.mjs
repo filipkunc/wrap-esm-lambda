@@ -23,7 +23,12 @@ export function createLoadHook(config) {
     if (entries.length === 0) {
       return result
     }
-    const applied = applyMatched(result.source.toString(), entries, url, {
+    // `nextLoad` delivers the source as a UTF-8 Buffer; hand it over as-is.
+    // For patch-only matches the source never leaves UTF-8 (zero-copy across
+    // napi, one Buffer.concat) and `applied.code` comes back as a Buffer,
+    // which a load hook may return directly — decoding to a string here cost
+    // two O(n) encoding conversions per matched module for nothing.
+    const applied = applyMatched(result.source, entries, url, {
       format: result.format,
       delivery: 'registry',
     })

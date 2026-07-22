@@ -388,8 +388,8 @@ fn transform_and_generate(
   (ret.code, map)
 }
 
-pub fn transform_lambda_source(source_text: String, handler: String, wrapper: String) -> String {
-  transform_and_generate(&source_text, handler, wrapper, None, None).0
+pub fn transform_lambda_source(source_text: &str, handler: String, wrapper: String) -> String {
+  transform_and_generate(source_text, handler, wrapper, None, None).0
 }
 
 /// Same as [`transform_lambda_source`], but appends an inline
@@ -852,7 +852,7 @@ mod tests {
     let handler = "handler".to_string();
     let wrapper = "wrapper".to_string();
 
-    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    let transformed = transform_lambda_source(&source_text, handler, wrapper);
     println!("{}", transformed);
     assert!(transformed.contains("wrapper"));
     assert!(transformed == expected_text);
@@ -870,7 +870,7 @@ mod tests {
     let handler = "handler".to_string();
     let wrapper = "wrapper".to_string();
 
-    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    let transformed = transform_lambda_source(&source_text, handler, wrapper);
     println!("{}", transformed);
     assert!(transformed.contains("wrapper"));
     assert!(transformed == expected_text);
@@ -887,7 +887,7 @@ mod tests {
     let handler = "y".to_string();
     let wrapper = "wrapper".to_string();
 
-    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    let transformed = transform_lambda_source(&source_text, handler, wrapper);
     println!("{}", transformed);
     assert!(transformed.contains("const y = wrapper(async (event) => \"Hi from AWS Lambda\");"));
     assert!(transformed.contains("export { x, y };"));
@@ -904,7 +904,7 @@ mod tests {
     let handler = "z".to_string();
     let wrapper = "wrapper".to_string();
 
-    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    let transformed = transform_lambda_source(&source_text, handler, wrapper);
     println!("{}", transformed);
     assert!(transformed.contains("const y = wrapper(async (event) => \"Hi from AWS Lambda\");"));
     assert!(transformed.contains("export { x, y as z };"));
@@ -932,7 +932,7 @@ export const { abc: handler } = (p => { return { ...p, abc: wrapper(p.abc) }; })
     let handler = "handler".to_string();
     let wrapper = "wrapper".to_string();
 
-    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    let transformed = transform_lambda_source(&source_text, handler, wrapper);
     println!("{}", transformed);
     assert!(transformed.contains("wrapper"));
   }
@@ -943,7 +943,7 @@ export const { abc: handler } = (p => { return { ...p, abc: wrapper(p.abc) }; })
     let handler = "handler".to_string();
     let wrapper = "wrapper".to_string();
 
-    let transformed = transform_lambda_source(source_text, handler, wrapper);
+    let transformed = transform_lambda_source(&source_text, handler, wrapper);
     println!("{}", transformed);
     assert!(transformed.contains("import { handler as orig_handler } from \"other.js\""));
     assert!(transformed.contains("export const handler = wrapper(orig_handler);"));

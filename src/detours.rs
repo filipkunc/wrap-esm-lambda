@@ -57,7 +57,7 @@ unsafe extern "C" fn open_detour(name: *const c_char, flags: c_int) -> c_int {
 
     let content = read_to_string(path);
     STATE.lock().unwrap().transformed = transform::transform_lambda_source(
-      content.unwrap(),
+      &content.unwrap(),
       "handler".to_string(),
       "WrapAwsLambda".to_string(),
     );

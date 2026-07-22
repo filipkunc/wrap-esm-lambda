@@ -261,6 +261,23 @@ remains of the ESM cost (~1 µs napi floor + ~9 µs) is the full-AST oxc parse
 itself — the price of validation `lexEsm` doesn't attempt (const-ness, local
 binding resolution, loud missing-export errors).
 
+A second pass removed the string conversions that were left, exploiting that
+`registerHooks`' `nextLoad` hands the hook the module source as UTF-8 bytes
+and accepts bytes back. `exportsTapSnippetFromBuffer` (and
+`transformLambdaFromBuffer` for the wrap) take that Buffer as-is: it crosses
+napi zero-copy and oxc parses the UTF-8 in place, so the hook no longer pays
+`source.toString()` nor the UTF-16 -> UTF-8 conversion of a napi string
+argument — the patch-only runtime path now never materializes a UTF-16 copy
+of a matched module (`applyMatched` accepts the Buffer and returns one, via
+a single `Buffer.concat`). Two boundary lessons from measuring it: returning
+the few-hundred-byte _snippet_ as a napi external Buffer costs a fixed ~3 µs
+(more than the conversion it avoids — snippets stay strings), and the win on
+the source side is proportional to module size: the complete hook operation
+is a wash on the 1.8 KB `dist-es` file and a few percent ahead on a
+42 KB module even before counting the string path's deferred rope flatten
+and the retired UTF-16 allocation (`pnpm bench:patch` measures both paths,
+small and large).
+
 The ~100x gap is architectural, not incidental: the tap's oxc parse only
 validates exports and appends, while orchestrion parses, queries and
 regenerates the method body through its wasm/esquery pipeline — and unlike

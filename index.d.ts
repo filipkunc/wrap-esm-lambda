@@ -24,9 +24,43 @@ export declare function exportsTapSnippet(
   aliasIndex: number,
 ): string
 
+/**
+ * Buffer-input variant of `exportsTapSnippet`, for the runtime hook path
+ * where `registerHooks`' `nextLoad` already provides the source as UTF-8
+ * bytes: the Buffer crosses napi zero-copy, so validating a module's exports
+ * no longer converts the whole source UTF-16 -> UTF-8 (that conversion is
+ * exactly proportional to module size — the one cost of the string variant
+ * left after the snippet-only contract). The snippet itself stays a string:
+ * it is a few hundred bytes, and a napi string is cheaper to create than an
+ * external buffer. In CJS mode `input` is ignored — pass an empty buffer.
+ * Throws if `input` is not valid UTF-8.
+ */
+export declare function exportsTapSnippetFromBuffer(
+  input: Buffer,
+  bindings: Array<string>,
+  patchName: string,
+  patchFrom: string,
+  cjs: boolean,
+  registry: boolean,
+  aliasIndex: number,
+): string
+
 export declare function installHooks(): void
 
 export declare function transformLambda(input: string, handler: string, wrapper: string): string
+
+/**
+ * Buffer-input variant of `transformLambda` for `registerHooks` load hooks:
+ * `nextLoad` already delivers the module source as UTF-8 bytes, so a Buffer
+ * argument crosses napi zero-copy and oxc parses the UTF-8 directly —
+ * skipping both the `source.toString()` decode the hook would need and the
+ * O(n) UTF-16 -> UTF-8 conversion of a napi string argument. The output
+ * stays a string on purpose: Node compiles from a UTF-16 string either way,
+ * so returning one costs the same single conversion while an external
+ * napi buffer would add a fixed ~3 µs of creation overhead and leave the
+ * decode to Node. Throws if `input` is not valid UTF-8.
+ */
+export declare function transformLambdaFromBuffer(input: Buffer, handler: string, wrapper: string): string
 
 /**
  * Like `transformLambdaWithMap`, but chains the wrap map through

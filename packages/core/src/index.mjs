@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { basename, dirname, join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import semver from 'semver'
-import { transformLambdaWithMapObject, exportsTapSnippet } from 'wrap-esm-lambda'
+import { transformLambdaWithMapObject, exportsTapSnippet, exportsTapSnippetFromBuffer } from 'wrap-esm-lambda'
 
 /**
  * Marker appended to every transformed module. Both shells skip sources that
@@ -206,19 +206,42 @@ export function patchKey(entry) {
  *   any module loads. Hook-overridden CJS sources cannot serve an injected
  *   require, so this is the only delivery that works universally at runtime.
  *
- * @param {string} source
+ * A `Buffer` (or any TypedArray/ArrayBuffer, e.g. straight from a
+ * `registerHooks` load hook's `nextLoad`) is also accepted as `source`. When
+ * every matching entry is a patch entry the source then never leaves UTF-8 —
+ * it crosses napi zero-copy for validation and one `Buffer.concat` appends
+ * the snippets — and `code` in the result is a `Buffer` a load hook can
+ * return as-is. Decoding the source to a JS string (and sending it back
+ * across napi as UTF-16) would cost O(n) per module for a few appended
+ * bytes. Wrap entries regenerate the whole module, so a buffer source falls
+ * back to one decode and the string path.
+ *
+ * @param {string | Buffer | ArrayBuffer | NodeJS.TypedArray} source
  * @param {InstrumentEntry[]} entries
  * @param {string} idOrUrl
  * @param {{ format?: string, delivery?: 'import' | 'registry' }} [options]
- * @returns {{ code: string, map: string | null } | null} null when nothing
- *   applies or the source is already instrumented
+ * @returns {{ code: string | Buffer, map: string | null } | null} null when
+ *   nothing applies or the source is already instrumented
  */
 export function applyMatched(source, entries, idOrUrl, options = {}) {
+  if (typeof source !== 'string' && !Buffer.isBuffer(source)) {
+    // zero-copy views, not copies: Buffer.from(ArrayBuffer) aliases the memory
+    source = ArrayBuffer.isView(source)
+      ? Buffer.from(source.buffer, source.byteOffset, source.byteLength)
+      : Buffer.from(source)
+  }
+  // works on both: Buffer#includes(string) is a UTF-8 byte search
   if (entries.length === 0 || source.includes(SENTINEL_TEXT)) {
     return null
   }
   const kind = moduleKindFor(idOrUrl, options.format)
   const registry = options.delivery === 'registry'
+  if (Buffer.isBuffer(source)) {
+    if (entries.every((entry) => entry.patch)) {
+      return applyPatchesToBuffer(source, entries, kind, registry)
+    }
+    source = source.toString('utf8')
+  }
   const ordered = [...entries].sort((a, b) => (a.patch ? 1 : 0) - (b.patch ? 1 : 0))
   let code = source
   let map = null
@@ -251,6 +274,38 @@ export function applyMatched(source, entries, idOrUrl, options = {}) {
   }
   code += `\n${SENTINEL}\n`
   return { code, map }
+}
+
+/**
+ * Patch-only fast path of {@link applyMatched}: the module source never
+ * leaves UTF-8. Each entry validates against the original source (taps only
+ * append — they never add or remove exports, so validating against the
+ * evolving text like the string path does would resolve identically), and a
+ * single `Buffer.concat` performs every append at once. The snippets
+ * themselves travel as strings: a few hundred bytes each, they cost far less
+ * to convert than the module source whose conversions this path exists to
+ * avoid.
+ */
+function applyPatchesToBuffer(source, entries, kind, registry) {
+  const cjs = kind === 'cjs'
+  let appended = ''
+  let aliasIndex = 0
+  for (const entry of entries) {
+    appended += cjs
+      ? // CJS taps need no static validation — no source crosses napi at all
+        exportsTapSnippet('', entry.bindings, entry.patch.name, entry.patch.from, true, registry, aliasIndex)
+      : exportsTapSnippetFromBuffer(
+          source,
+          entry.bindings,
+          entry.patch.name,
+          entry.patch.from,
+          false,
+          registry,
+          aliasIndex,
+        )
+    aliasIndex += 1
+  }
+  return { code: Buffer.concat([source, Buffer.from(`${appended}\n${SENTINEL}\n`)]), map: null }
 }
 
 /** Inline a v3 map JSON as a trailing `//# sourceMappingURL=` data URL. */

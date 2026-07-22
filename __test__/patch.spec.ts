@@ -1,13 +1,14 @@
 import test from 'ava'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { readFileSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
-import { exportsTapSnippet } from '../index'
+import { exportsTapSnippet, exportsTapSnippetFromBuffer } from '../index'
 
 // Declarative patches end-to-end: one TypeScript config entry naming a
 // package, a version range and the exports to hand over, plus a plain
@@ -45,6 +46,38 @@ test('cjs tap emission (registry delivery): module.exports accessors, no injecte
   t.true(out.includes('Symbol.for("wrap-esm-lambda.patches")'))
   t.true(out.includes('["/abs/patch.ts#patchIt"]'))
   t.true(out.includes('get Client() { return module.exports.Client; }'))
+})
+
+test('buffer-input tap emission: identical to the string variant', (t) => {
+  // The runtime-hook shape: source stays the UTF-8 Buffer nextLoad provided
+  const source = 'export class Client {}\nexport const VERSION = "1.0.0";\n'
+  const esm = exportsTapSnippetFromBuffer(Buffer.from(source), ['Client'], 'patchIt', '/abs/patch.ts', false, true, 0)
+  t.deepEqual(esm, exportsTapSnippet(source, ['Client'], 'patchIt', '/abs/patch.ts', false, true, 0))
+
+  const err = t.throws(() =>
+    exportsTapSnippetFromBuffer(Buffer.from([0xff, 0xfe]), ['Client'], 'patchIt', '/abs/patch.ts', false, true, 0),
+  )
+  t.regex(err!.message, /not valid UTF-8/)
+})
+
+test('applyMatched buffer fast path: Buffer in, Buffer out, same bytes as the string path', (t) => {
+  const clientPath = fixture('node_modules/@fake/smithy-client/dist-es/client.js')
+  const entries = core.matchEntries(config, clientPath)
+  t.is(entries.length, 1)
+  const source = readFileSync(clientPath)
+
+  const viaBuffer = core.applyMatched(source, entries, clientPath, { format: 'module', delivery: 'registry' })
+  t.true(Buffer.isBuffer(viaBuffer.code), 'patch-only match stays in UTF-8 bytes')
+  t.is(viaBuffer.map, null)
+
+  const viaString = core.applyMatched(source.toString('utf8'), entries, clientPath, {
+    format: 'module',
+    delivery: 'registry',
+  })
+  t.deepEqual(viaBuffer.code.toString('utf8'), viaString.code, 'both paths emit identical modules')
+
+  // the sentinel guard must work on bytes too
+  t.is(core.applyMatched(viaBuffer.code, entries, clientPath, { format: 'module', delivery: 'registry' }), null)
 })
 
 test('requesting a missing export fails loudly at transform time', (t) => {

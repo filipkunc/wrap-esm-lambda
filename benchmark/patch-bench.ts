@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
-import { exportsTapSnippet } from '../index.js'
+import { exportsTapSnippet, exportsTapSnippetFromBuffer } from '../index.js'
 // @ts-expect-error untyped internal module
 import { lexEsm } from 'import-in-the-middle/lib/get-esm-exports.mjs'
 
@@ -27,6 +27,13 @@ const cjsPath = require
   .replace(/package\.json$/, 'dist-cjs/submodules/client/index.js')
 const esmSource = readFileSync(esmPath, 'utf8')
 const cjsSource = readFileSync(cjsPath, 'utf8')
+// what a registerHooks load hook actually holds: the raw UTF-8 bytes
+const esmBuffer = readFileSync(esmPath)
+// the buffer argument's saving is proportional to module size and its fixed
+// cost is not, so also measure a dist-cjs-sized module: the same ESM file
+// padded with a comment block to the 42 KB of the real CJS bundle
+const esmBigSource = esmSource + `\n/* ${'x'.repeat(cjsSource.length - esmSource.length - 8)} */\n`
+const esmBigBuffer = Buffer.from(esmBigSource)
 
 const orchestrionConfig = {
   channelName: 'smithy-send',
@@ -70,6 +77,47 @@ const cases: { label: string; run: () => void }[] = [
   {
     label: 'oxc exports tap (cjs snippet, no source across napi)',
     run: () => exportsTapSnippet('', ['Client'], 'patch', '/p.ts', true, true, 0),
+  },
+  {
+    // same parse+validate, but the source crosses napi as a zero-copy Buffer
+    // instead of a UTF-16 string paying an O(n) conversion
+    label: 'oxc exports tap complete (dist-es, buffer in)',
+    run: () => exportsTapSnippetFromBuffer(esmBuffer, ['Client'], 'patch', '/p.ts', false, true, 0),
+  },
+  {
+    // the whole per-module hook operation on string plumbing: decode the
+    // Buffer nextLoad provides, send the string across napi, append in JS
+    label: 'hook op, strings (toString + tap + append)',
+    run: () => {
+      const source = esmBuffer.toString('utf8')
+      void (source + exportsTapSnippet(source, ['Client'], 'patch', '/p.ts', false, true, 0))
+    },
+  },
+  {
+    // the same operation with the source never leaving UTF-8
+    label: 'hook op, buffer (tap + Buffer.concat)',
+    run: () => {
+      void Buffer.concat([
+        esmBuffer,
+        Buffer.from(exportsTapSnippetFromBuffer(esmBuffer, ['Client'], 'patch', '/p.ts', false, true, 0)),
+      ])
+    },
+  },
+  {
+    label: 'hook op, strings (dist-cjs-sized module)',
+    run: () => {
+      const source = esmBigBuffer.toString('utf8')
+      void (source + exportsTapSnippet(source, ['Client'], 'patch', '/p.ts', false, true, 0))
+    },
+  },
+  {
+    label: 'hook op, buffer (dist-cjs-sized module)',
+    run: () => {
+      void Buffer.concat([
+        esmBigBuffer,
+        Buffer.from(exportsTapSnippetFromBuffer(esmBigBuffer, ['Client'], 'patch', '/p.ts', false, true, 0)),
+      ])
+    },
   },
   {
     // iitm's per-module analysis step (es-module-lexer): the fair mechanism

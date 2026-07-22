@@ -3,6 +3,7 @@ import ts from 'typescript'
 
 import {
   transformLambda,
+  transformLambdaFromBuffer,
   transformLambdaWithMap,
   transformLambdaWithMapObject,
   transformLambdaWithChainedMap,
@@ -20,6 +21,21 @@ test('variable export', (t) => {
 `
   const output = transformLambda(input, 'handler', 'WrapAwsLambda')
   t.deepEqual(output, expected)
+})
+
+test('buffer-input variant: identical to the string transform, UTF-8 in', (t) => {
+  // What a registerHooks load hook holds: the UTF-8 bytes from nextLoad. The
+  // non-ASCII payload proves the bytes cross napi as UTF-8, not re-encoded.
+  const input = `export const handler = async (event) => {
+	return "Ahoj světe 👋";
+}`
+  const output = transformLambdaFromBuffer(Buffer.from(input), 'handler', 'WrapAwsLambda')
+  t.deepEqual(output, transformLambda(input, 'handler', 'WrapAwsLambda'))
+})
+
+test('buffer-input variant: invalid UTF-8 fails loudly', (t) => {
+  const err = t.throws(() => transformLambdaFromBuffer(Buffer.from([0xff, 0xfe, 0x00]), 'handler', 'WrapAwsLambda'))
+  t.regex(err!.message, /not valid UTF-8/)
 })
 
 test('function export', (t) => {
