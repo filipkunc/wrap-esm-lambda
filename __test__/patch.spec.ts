@@ -102,6 +102,44 @@ test('package matcher: name, version range and files gate the entry', (t) => {
   t.is(core.matchEntries(wrongVersion, clientPath).length, 0, 'version range excludes 4.2.0')
 })
 
+test('builtin patch: node:os patched at preload, seen by named import, default import and require', async (t) => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-builtin.mjs')],
+    { env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.builtin.mjs') } },
+  )
+  t.is(stdout.trim(), 'builtin:patched-all')
+})
+
+test('builtin patch: versionRange gates on the running Node', async (t) => {
+  // Same entry but a range excluding the current Node: preload must skip the
+  // patch (matcher semantics), leaving the builtin untouched.
+  const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
+  const gated = {
+    entries: [{ ...builtinConfig.entries[0], module: { ...builtinConfig.entries[0].module, versionRange: '<20' } }],
+  }
+  t.is(core.builtinPatchEntries(gated).length, 0)
+  t.is(core.builtinPatchEntries(builtinConfig).length, 1)
+})
+
+test('builtin patch: a missing binding fails loudly at preload', async (t) => {
+  const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
+  const hooks = await import('@wrap-esm-lambda/hooks')
+  const broken = {
+    entries: [{ ...builtinConfig.entries[0], bindings: ['definitelyNotAnOsExport'] }],
+  }
+  await hooks.preloadPatches(broken)
+  const err = t.throws(() => hooks.applyBuiltinPatches(broken))
+  t.regex(err!.message, /'definitelyNotAnOsExport' not found in node:os/)
+  t.regex(err!.message, /hostname/, 'error lists what is available')
+})
+
+test('builtin patch: never matches file paths, so the build-time shell cannot silently claim it', async (t) => {
+  const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
+  t.is(core.matchEntries(builtinConfig, fixture('node_modules/@fake/smithy-client/dist-es/client.js')).length, 0)
+  t.is(core.matchEntries(builtinConfig, '/anywhere/node_modules/os/index.js').length, 0)
+})
+
 test('runtime mode: ESM import gets patched via dist-es', async (t) => {
   const { stdout } = await execFileAsync(
     process.execPath,

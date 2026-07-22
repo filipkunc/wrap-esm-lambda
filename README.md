@@ -231,6 +231,45 @@ instrumented package at the patch's top level). The full rules live in the
 [patch author contract](packages/core/README.md#patch-author-contract),
 each backed by a test in `patch.spec.ts`.
 
+#### Built-ins: `node:http` and friends
+
+Source transforms cannot reach built-ins — `node:http` has no source for a
+load hook or bundler to rewrite — and the classic answer was `Module._load`
+interception. The matrix measures what that dependence is actually worth:
+`require('node:http')` through `Module._load` survived every rung including
+the broken window, but `import 'node:http'` has **never** flowed through
+`Module._load` on any version — the patch point was never sufficient for ESM
+consumers by design. So a builtin strategy needs neither loader hooks nor
+the patch point: a declarative config knows its targets up front, and the
+runtime shell patches them **eagerly at preload**, mutating the builtin's
+exports object before any user code loads:
+
+```ts
+export default definePatches([
+  {
+    module: { name: 'node:os', versionRange: '>=22' }, // range gates on process.versions.node
+    patch: { name: 'patchOs', from: '/abs/patches/os.mjs' },
+    bindings: ['hostname'],
+  },
+])
+```
+
+The patch function gets the same get/set accessor object as the exports tap,
+backed by the builtin's live exports. Because the ESM facade of a core
+module is created at its first import — which preload precedes — `require()`,
+ESM default import and ESM named import all observe the patch: the matrix's
+`builtin-eager-patch` column is PATCHED_ALL on every rung, broken window
+included. A missing binding fails loudly at preload (the version-drift
+alarm), and builtin entries are runtime-only: they never match a file path,
+so the build-time shell cannot silently claim them — bundle-time
+instrumentation of core modules is impossible in principle.
+
+(For observe-only needs on core modules, Node's own
+[`diagnostics_channel`](https://nodejs.org/api/diagnostics_channel.html)
+tracing channels for http and friends are the sanctioned alternative — no
+patching at all; the eager patch is for when you need to wrap or rebind,
+the same reach split as the orchestrion comparison below.)
+
 #### Compared to orchestrion-js
 
 Both tools express the same intent declaratively — a module matcher with a

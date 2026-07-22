@@ -15,6 +15,7 @@
 import { fileURLToPath } from 'node:url'
 import { basename, dirname, join } from 'node:path'
 import { readFileSync } from 'node:fs'
+import { isBuiltin } from 'node:module'
 import semver from 'semver'
 import { transformLambdaWithMapObject, exportsTapSnippet, exportsTapSnippetFromBuffer } from 'wrap-esm-lambda'
 
@@ -43,10 +44,14 @@ export const SENTINEL = `/*! ${SENTINEL_TEXT} */`
  * @property {WrapperSpec} wrapper
  *
  * @typedef {Object} ModuleMatch
- * @property {string} name - package name, from the nearest package.json
- * @property {string} [versionRange] - semver range the package version must satisfy
+ * @property {string} name - package name, from the nearest package.json — or a
+ *   Node builtin (`node:http`, `os`): builtin entries are patched eagerly at
+ *   preload by the runtime shell (no source to transform; build-time shells
+ *   cannot reach them)
+ * @property {string} [versionRange] - semver range the package version must
+ *   satisfy; for a builtin entry, checked against `process.versions.node`
  * @property {string[]} [files] - path suffixes within the package (e.g. 'dist-es/client.js');
- *   omit to match every file of the package
+ *   omit to match every file of the package; rejected for builtin entries
  *
  * @typedef {Object} PatchSpec
  * @property {string} name - exported patch function in `from`
@@ -122,6 +127,10 @@ function entryMatches(entry, path) {
     return typeof entry.match === 'string' ? path.endsWith(entry.match) : entry.match.test(path)
   }
   if (entry.module !== undefined) {
+    // Built-in targets (node:http, ...) have no source for a load hook or
+    // bundler to transform — they never match a file. The runtime shell
+    // patches them eagerly at preload instead (see builtinPatchEntries).
+    if (isBuiltin(entry.module.name)) return false
     const pkg = nearestPackage(path)
     if (!pkg || pkg.name !== entry.module.name) return false
     if (entry.module.versionRange && !semver.satisfies(pkg.version, entry.module.versionRange)) return false
@@ -182,6 +191,33 @@ export function transformMatched(source, entry, idOrUrl) {
   }
   finalCode += `\n${SENTINEL}\n`
   return { code: finalCode, map: map ?? null }
+}
+
+/**
+ * The patch entries of a config that target Node built-ins (`node:http`,
+ * `os`, ...), version-gated against the running Node. Built-ins have no
+ * module source, so neither shell can reach them by transform — but a
+ * declarative config knows its targets up front, so the runtime shell
+ * patches the builtin's exports object eagerly at preload, before any user
+ * code loads. Every consumer shape then observes the patch — `require()`,
+ * ESM default import and ESM named import alike, because the ESM facade for
+ * a core module is created at its first import, which preload precedes.
+ * (`Module._load` interception — the classic route to built-ins — only ever
+ * covered `require()`: `import` of a builtin has never flowed through it,
+ * see hooks/interplay-matrix.) `versionRange` on a builtin entry gates on
+ * `process.versions.node`; `files` is meaningless there and rejected loudly.
+ *
+ * @param {InstrumentConfig} config
+ * @returns {PatchEntry[]}
+ */
+export function builtinPatchEntries(config) {
+  return config.entries.filter((entry) => {
+    if (!entry.patch || !entry.module || !isBuiltin(entry.module.name)) return false
+    if (entry.module.files) {
+      throw new TypeError(`builtin patch entry '${entry.module.name}' cannot have 'files' — built-ins are one module`)
+    }
+    return !entry.module.versionRange || semver.satisfies(process.versions.node, entry.module.versionRange)
+  })
 }
 
 /** Global registry the runtime shell preloads patch functions into. */

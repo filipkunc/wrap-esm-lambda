@@ -5,10 +5,17 @@
 // (config path in WRAP_ESM_LAMBDA_CONFIG) or call `registerConfig(config)`.
 // The transforms are the same native calls the build-time shell runs, so the
 // cold start cost is microseconds per matched module.
-import { registerHooks } from 'node:module'
+import { createRequire, registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { isAbsolute } from 'node:path'
-import { matchEntries, applyMatched, inlineMap, PATCH_REGISTRY, patchKey } from '@wrap-esm-lambda/core'
+import {
+  matchEntries,
+  applyMatched,
+  inlineMap,
+  builtinPatchEntries,
+  PATCH_REGISTRY,
+  patchKey,
+} from '@wrap-esm-lambda/core'
 
 /**
  * Build a `registerHooks`-compatible load hook from a config. Patch taps are
@@ -71,11 +78,52 @@ export async function preloadPatches(config) {
   }
 }
 
+const requireBuiltin = createRequire(import.meta.url)
+
 /**
- * Preload the config's patch functions, then register the load hook.
+ * Eagerly patch the config's builtin targets (`node:http`, `os`, ...): no
+ * source exists to transform, so the patch function runs right now, at
+ * preload, against the builtin's live exports object — before any user code
+ * (or the load hook itself) exists. `require()`, ESM default import and ESM
+ * named import all observe it, because the ESM facade for a core module is
+ * created at first import, which this precedes. This never touches
+ * `Module._load`, so it works identically on the pre-fix Node minors where
+ * sync hooks and the patch point miscomposed (see hooks/interplay-matrix —
+ * `builtin-eager-patch` is PATCHED_ALL on every rung).
+ *
+ * Mirrors the tap's validation contract: a requested binding missing from
+ * the builtin is a hard error — the version-drift alarm.
+ * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
+ */
+export function applyBuiltinPatches(config) {
+  const registry = globalThis[PATCH_REGISTRY] ?? Object.create(null)
+  for (const entry of builtinPatchEntries(config)) {
+    const target = requireBuiltin(entry.module.name)
+    const accessors = {}
+    for (const name of entry.bindings) {
+      if (!(name in target)) {
+        const available = Object.keys(target).slice(0, 20).join(', ')
+        throw new TypeError(`binding '${name}' not found in ${entry.module.name} (available: ${available}, ...)`)
+      }
+      Object.defineProperty(accessors, name, {
+        enumerable: true,
+        get: () => target[name],
+        set: (value) => {
+          target[name] = value
+        },
+      })
+    }
+    registry[patchKey(entry)](accessors)
+  }
+}
+
+/**
+ * Preload the config's patch functions, apply builtin patches eagerly, then
+ * register the load hook for everything with a source to transform.
  * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
  */
 export async function registerConfig(config) {
   await preloadPatches(config)
+  applyBuiltinPatches(config)
   registerHooks({ load: createLoadHook(config) })
 }
