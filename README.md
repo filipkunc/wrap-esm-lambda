@@ -453,6 +453,18 @@ when patching Node's module loading kept breaking under Node's own refactors:
   v22.22.3 / v24.11.1 / v25.1.0 — the same fix train behind iitm's sync-mode
   version floor noted above) and
   [nodejs/node#60380](https://github.com/nodejs/node/pull/60380).
+  [hooks/interplay-matrix](hooks/interplay-matrix) reproduces this phase
+  empirically (`node hooks/interplay-matrix/run.mjs`): across a ladder of
+  official Node 22/24/26 builds, the `Module._load` blinding for `import`-ed
+  CJS flips off at exactly 22.22.3/24.11.1, the hook-fed synthetic `require`
+  still lacks `require.extensions`/`require.cache` on all of 22.x, and this
+  library's source-transform tap passes on every rung — including the broken
+  window. That last row is the operative point for AWS Lambda, whose managed
+  runtimes trail nodejs.org minors on AWS's own cadence and so can sit below
+  the fix (check `process.version` in a live function): on such a runtime,
+  `Module._load`-based instrumentation silently loses `import`-ed CJS the
+  moment sync hooks register, while the tap's behavior is identical on both
+  sides of the fix.
 
 That instability is exactly what
 [nodejs/node#52219](https://github.com/nodejs/node/issues/52219) set out to
