@@ -48,7 +48,7 @@ scenario plus this repo's real runtime hook, and writes [matrix.md](matrix.md):
 
 - **The re-invented require.** `import-cjs-synthetic-require` `import`s a CJS
   module whose source a hook overrode, and checks the `require` it received:
-  BARE_REQUIRE means _neither_ `require.extensions` nor `require.cache`
+  `BARE_REQUIRE` means neither `require.extensions` nor `require.cache`
   existed ([nodejs/node#59666](https://github.com/nodejs/node/issues/59666)'s
   "re-invented require", the class behind
   [nodejs/node#62786](https://github.com/nodejs/node/issues/62786)). Fixed in
@@ -68,6 +68,19 @@ scenario plus this repo's real runtime hook, and writes [matrix.md](matrix.md):
   because the tap instruments module _source_ and never depended on
   `Module._load` staying patchable. (One napi build serves the whole ladder —
   node-api ABI stability.)
+
+- **The serverless delivery shape holds too.** On managed runtimes the node
+  CLI is not yours: AWS Lambda injects flags through the `NODE_OPTIONS` env
+  var and the process main is its CJS runtime interface client; Azure
+  Functions's node worker is likewise a CJS bundle (flags via the
+  `languageWorkers__node__arguments` app setting), and both load the user's
+  handler late — dynamic `import()` for ESM, `require()` for CJS. The
+  `tap-node-options-esm` column registers the hook purely via `NODE_OPTIONS`,
+  and `tap-bootstrap-esm`/`tap-bootstrap-cjs` add
+  [`fixtures/bootstrap-sim.cjs`](fixtures/bootstrap-sim.cjs) as the CJS main
+  that loads the handler afterwards. OK on every rung — hook registration
+  survives env-var delivery and platform-style late loading on both sides of
+  the fix train.
 
 ## Why this matters for AWS Lambda
 

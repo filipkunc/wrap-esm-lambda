@@ -49,15 +49,42 @@ const scenarios = readdirSync(scenarioDir)
 // so one build serves every Node in the ladder.
 const tapFixture = (name) => join(repoRoot, '__test__', 'fixtures', 'patch', name)
 const tapEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: tapFixture('wrap.config.mjs') }
+// The serverless delivery shape: on managed runtimes the CLI is not ours to
+// change — AWS Lambda injects flags via the NODE_OPTIONS env var, Azure
+// Functions via languageWorkers__node__arguments — and the process' main is
+// the platform's CJS bootstrap (Lambda RIC / Azure node worker), which loads
+// the user handler afterwards.
+const nodeOptionsEnv = { ...tapEnv, NODE_OPTIONS: '--import @wrap-esm-lambda/hooks/register' }
+const bootstrap = join(here, 'fixtures', 'bootstrap-sim.cjs')
 const E2E = [
   {
     name: 'wrap-esm-lambda-tap-esm',
     args: ['--import', '@wrap-esm-lambda/hooks/register', tapFixture('app.mjs')],
+    env: tapEnv,
     expect: 'patched:sent:hello',
   },
   {
     name: 'wrap-esm-lambda-tap-cjs',
     args: ['--import', '@wrap-esm-lambda/hooks/register', tapFixture('app.cjs')],
+    env: tapEnv,
+    expect: 'patched:sent:hello',
+  },
+  {
+    name: 'tap-node-options-esm',
+    args: [tapFixture('app.mjs')],
+    env: nodeOptionsEnv,
+    expect: 'patched:sent:hello',
+  },
+  {
+    name: 'tap-bootstrap-esm',
+    args: [bootstrap, tapFixture('app.mjs')],
+    env: nodeOptionsEnv,
+    expect: 'patched:sent:hello',
+  },
+  {
+    name: 'tap-bootstrap-cjs',
+    args: [bootstrap, tapFixture('app.cjs')],
+    env: nodeOptionsEnv,
     expect: 'patched:sent:hello',
   },
 ]
@@ -101,8 +128,8 @@ for (const version of versions) {
   for (const scenario of scenarios) {
     row[scenario.replace('.mjs', '')] = runCell(nodeBin, [join(scenarioDir, scenario)])
   }
-  for (const { name, args, expect } of E2E) {
-    row[name] = runCell(nodeBin, args, { cwd: repoRoot, env: tapEnv, expect })
+  for (const { name, args, env, expect } of E2E) {
+    row[name] = runCell(nodeBin, args, { cwd: repoRoot, env, expect })
   }
   console.error(`${version}: done`)
   table.push(row)
