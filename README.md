@@ -436,7 +436,23 @@ when patching Node's module loading kept breaking under Node's own refactors:
 - as recently as v24.15.0,
   [nodejs/node#62786](https://github.com/nodejs/node/issues/62786) broke
   `require.extensions`-reading tools (pirates, ts-node, Next's require hook)
-  for CJS served through the ESM loader.
+  for CJS served through the ESM loader;
+- even `registerHooks` itself and `Module._load` went through a broken-interplay
+  phase across Node 22.16–22.18 and the 23.x/24.x lines: registering sync hooks
+  rerouted CJS off `Module._load` entirely (blinding `Module._load` patchers —
+  demonstrated by [dygabo/load_module_test](https://github.com/dygabo/load_module_test)),
+  plain hooks died with `ERR_INVALID_RETURN_PROPERTY_VALUE`
+  ([nodejs/node#59384](https://github.com/nodejs/node/issues/59384)), combining
+  `register()` with `registerHooks()` fed CJS a null source
+  ([nodejs/node#57327](https://github.com/nodejs/node/issues/57327)), and the
+  umbrella issue
+  [nodejs/node#59666](https://github.com/nodejs/node/issues/59666) catalogued
+  double-invoked sync hooks and a re-invented `require` missing
+  `require.cache`. The cluster was fixed by
+  [nodejs/node#59929](https://github.com/nodejs/node/pull/59929) (shipped in
+  v22.22.3 / v24.11.1 / v25.1.0 — the same fix train behind iitm's sync-mode
+  version floor noted above) and
+  [nodejs/node#60380](https://github.com/nodejs/node/pull/60380).
 
 That instability is exactly what
 [nodejs/node#52219](https://github.com/nodejs/node/issues/52219) set out to
