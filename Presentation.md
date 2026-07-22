@@ -225,24 +225,17 @@ exports.transformLambda = function (sourceCode, handler, wrapper) {
 
 ---
 
-# LD_PRELOAD - `open()` detour
+# LD_PRELOAD detours (retired)
 
-Detour of [`open()`](https://man7.org/linux/man-pages/man2/openat.2.html) from `libc` allows us to redirect to temporary file or intercept the file descriptor and provide [`read()`](https://man7.org/linux/man-pages/man2/read.2.html) and [`uv_fs_fstat()`](https://docs.libuv.org/en/v1.x/fs.html#c.uv_fs_fstat) detours for reading and file size.
+An earlier variant hooked `libc` `open()`/`read()` and `uv_fs_fstat()` with
+[Frida](https://frida.re/) detours (`LD_PRELOAD`-injected), rewriting the
+handler below the module system — insurance for the years when Node's own
+loader refactors kept breaking `Module._load`-level patching.
 
-This can be achieved using [Frida](https://frida.re/) and the [Rust bindings example](https://github.com/frida/frida-rust/blob/main/examples/gum/hook_open/src/lib.rs).
-
-The resulting library is preloaded before starting the Node process.
-
-```sh
-LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs
-```
-
-This is a little bit faster (1-2 ms) than using `require` + calling exported function:
-
-```js
-const { installHooks } = require("../wrap-esm-lambda.linux-x64-gnu.node");
-installHooks(); //< detours for `open()`, `read()` and `uv_fs_fstat()`
-```
+Synchronous `module.registerHooks()` now covers `require()` and `import`
+in-thread as a supported API, so the detours were removed — see the README's
+"Frida hooking (removed)" section for the issue trail. (Its measured cold
+start, kept for scale: ~25.8 ms vs ~24.3 ms for the regex hook.)
 
 ---
 
@@ -253,7 +246,6 @@ Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/b
 | Hook | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
 |:---|---:|---:|---:|---:|---:|
 | regex | 24.3 ± 0.9 | 22.8 | 28.6 | 1.03 ± 0.06 | 44.24 |
-| LD_PRELOAD | 25.8 ± 0.7 | 24.4 | 28.2 | 1.10 ± 0.06 | 49.26 |
 | oxc | 35.6 ± 1.0 | 33.9 | 38.4 | 1.51 ± 0.09 | 54.92 |
 | acorn | 45.0 ± 1.4 | 43.2 | 50.5 | 1.91 ± 0.11 | 56.30 |
 | swc plugin | 127.4 ± 4.3 | 120.8 | 135.1 | 5.42 ± 0.33 | 371.61 |

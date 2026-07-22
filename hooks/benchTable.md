@@ -3,8 +3,6 @@
 | `node runtime.mjs` | 24.8 ± 1.6 | 22.2 | 31.7 | 1.00 | 48.68 |
 | `node --import ./sync-hooks-babel.mjs runtime.mjs` | 170.8 ± 1.3 | 167.9 | 172.5 | 6.90 ± 0.44 | 86.60 |
 | `node --import ./sync-hooks-oxc.mjs runtime.mjs` | 26.7 ± 1.1 | 24.5 | 30.4 | 1.08 ± 0.08 | 50.77 |
-| `node --require ./oxc-frida.cjs runtime.mjs` | 26.8 ± 1.1 | 24.7 | 31.2 | 1.08 ± 0.08 | 51.52 |
-| `LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs` | 26.5 ± 1.3 | 24.3 | 30.5 | 1.07 ± 0.09 | 51.56 |
 | `node --import ./sync-hooks-oxc-wasm.mjs runtime.mjs` | 67.2 ± 2.1 | 63.8 | 71.6 | 2.71 ± 0.19 | 63.26 |
 | `node --import ./sync-hooks-swc.mjs runtime.mjs` | 115.6 ± 2.1 | 113.0 | 120.9 | 4.67 ± 0.31 | 178.72 |
 | `node --import ./sync-hooks-acorn.mjs runtime.mjs` | 42.6 ± 2.2 | 39.0 | 48.0 | 1.72 ± 0.14 | 52.48 |

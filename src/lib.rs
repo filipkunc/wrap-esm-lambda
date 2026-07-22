@@ -1,13 +1,7 @@
 #![deny(clippy::all)]
 
-#[cfg_attr(all(target_arch = "x86_64", feature = "frida"), path = "detours.rs")]
-#[cfg_attr(
-  not(all(target_arch = "x86_64", feature = "frida")),
-  path = "no-detours.rs"
-)]
-mod detours;
+mod transform;
 
-use detours::transform;
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
 

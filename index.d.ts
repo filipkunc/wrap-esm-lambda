@@ -14,15 +14,7 @@
  * preloads (no injected import/require at all). Throws when a requested
  * export does not exist in an ESM module.
  */
-export declare function exportsTapSnippet(
-  input: string,
-  bindings: Array<string>,
-  patchName: string,
-  patchFrom: string,
-  cjs: boolean,
-  registry: boolean,
-  aliasIndex: number,
-): string
+export declare function exportsTapSnippet(input: string, bindings: Array<string>, patchName: string, patchFrom: string, cjs: boolean, registry: boolean, aliasIndex: number): string
 
 /**
  * Buffer-input variant of `exportsTapSnippet`, for the runtime hook path
@@ -35,17 +27,7 @@ export declare function exportsTapSnippet(
  * external buffer. In CJS mode `input` is ignored — pass an empty buffer.
  * Throws if `input` is not valid UTF-8.
  */
-export declare function exportsTapSnippetFromBuffer(
-  input: Buffer,
-  bindings: Array<string>,
-  patchName: string,
-  patchFrom: string,
-  cjs: boolean,
-  registry: boolean,
-  aliasIndex: number,
-): string
-
-export declare function installHooks(): void
+export declare function exportsTapSnippetFromBuffer(input: Buffer, bindings: Array<string>, patchName: string, patchFrom: string, cjs: boolean, registry: boolean, aliasIndex: number): string
 
 export declare function transformLambda(input: string, handler: string, wrapper: string): string
 
@@ -68,44 +50,22 @@ export declare function transformLambdaFromBuffer(input: Buffer, handler: string
  * handler.ts` map) inside Rust via `oxc_sourcemap`, so the inlined map
  * already reaches the original source — no `@ampproject/remapping` needed.
  */
-export declare function transformLambdaWithChainedMap(
-  input: string,
-  handler: string,
-  wrapper: string,
-  filename: string,
-  upstreamMap: string,
-): string
+export declare function transformLambdaWithChainedMap(input: string, handler: string, wrapper: string, filename: string, upstreamMap: string): string
 
 /**
  * Like `transformLambdaWithChainedMap`, but returns the code and the chained
  * v3 map JSON separately (no inline URL appended).
  */
-export declare function transformLambdaWithChainedMapObject(
-  input: string,
-  handler: string,
-  wrapper: string,
-  filename: string,
-  upstreamMap: string,
-): TransformResult
+export declare function transformLambdaWithChainedMapObject(input: string, handler: string, wrapper: string, filename: string, upstreamMap: string): TransformResult
 
-export declare function transformLambdaWithMap(
-  input: string,
-  handler: string,
-  wrapper: string,
-  filename: string,
-): string
+export declare function transformLambdaWithMap(input: string, handler: string, wrapper: string, filename: string): string
 
 /**
  * Returns the transformed code and the raw v3 source map JSON separately, so a
  * caller can compose the map with an upstream `.ts` -> `.js` map (e.g. from
  * `tsc`) before attaching it.
  */
-export declare function transformLambdaWithMapObject(
-  input: string,
-  handler: string,
-  wrapper: string,
-  filename: string,
-): TransformResult
+export declare function transformLambdaWithMapObject(input: string, handler: string, wrapper: string, filename: string): TransformResult
 
 export interface TransformResult {
   code: string

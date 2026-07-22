@@ -18,16 +18,10 @@ for (let i = 0; i < benchTableLines.length; ++i) {
   }
   benchTableLines[i] = entries.join(',');
   if (i > 0 && benchTableLines[i].length > 0) {
-    if (entries[0].startsWith("LD_PRELOAD")) {
-      commands.push("LD_PRELOAD oxc-frida");
-    } else {
-      commands.push(entries[0].replace("runtime.mjs", "")
-      .replace("node --import", "")
-      .replace("node --require", "require")
-      .replace("./", "")
-      .replace(".mjs", "")
-      .replace(".cjs", ""));
-    }
+    commands.push(entries[0].replace("runtime.mjs", "")
+    .replace("node --import", "")
+    .replace("./", "")
+    .replace(".mjs", ""));
     times.push(+(entries[1].split('±')[0]));
     memory.push(+entries[entries.length - 1]);
   }

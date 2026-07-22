@@ -415,7 +415,36 @@ Notes on the transform-latency comparison:
 - `swc.rs (wasm)` reflects the cost of calling the swc plugin across the wasm
   boundary, not swc's native transform speed.
 
-### Frida hooking
+### Frida hooking (removed)
 
-The https://frida.re/ is used for hooking into `open`, `read` and `uv_fs_stat` against Node v22.18.0.  
-Problematic function is `uv_fs_fstat` which does not have stable definition of `libuv_sys2::uv_fs_t` struct!
+Earlier versions carried a [Frida](https://frida.re/)-based fallback: `libc`
+`open`/`read` and `uv_fs_fstat` detours (installed via `LD_PRELOAD` or an
+`installHooks()` export) that rewrote `handler.mjs` at file-read time,
+underneath the module system entirely. It existed as insurance for an era
+when patching Node's module loading kept breaking under Node's own refactors:
+
+- [nodejs/node#21573](https://github.com/nodejs/node/pull/21573) switched the
+  CJS loader from `Module.wrap` to `vm.compileFunction`, silently bypassing
+  tools that patched the wrapper (the nyc/istanbul-style breakage, still
+  echoing years later in
+  [nodejs/node#49653](https://github.com/nodejs/node/issues/49653));
+- the Node 20.6 loader restructure
+  ([nodejs/node#47999](https://github.com/nodejs/node/pull/47999)) moved
+  `import`-ed CJS off the monkey-patchable `Module._load` path and shipped
+  regressions like
+  [nodejs/node#49497](https://github.com/nodejs/node/issues/49497);
+- as recently as v24.15.0,
+  [nodejs/node#62786](https://github.com/nodejs/node/issues/62786) broke
+  `require.extensions`-reading tools (pirates, ts-node, Next's require hook)
+  for CJS served through the ESM loader.
+
+That instability is exactly what
+[nodejs/node#52219](https://github.com/nodejs/node/issues/52219) set out to
+end, and its outcome — synchronous `module.registerHooks()`
+([tracking issue nodejs/node#56241](https://github.com/nodejs/node/issues/56241)) —
+is a supported API that sees both `require()` and `import` in-thread. This
+library's runtime shell is built on it, so the fs-level detours no longer buy
+any coverage the hooks lack, while costing native-only builds, `unsafe`
+transmutes, and a fragile `uv_fs_fstat` signature (`libuv_sys2::uv_fs_t` has
+no stable layout). The approach was removed; it survives in git history for
+the archaeology.

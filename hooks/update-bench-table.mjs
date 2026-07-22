@@ -9,12 +9,7 @@ if (!benchTableLines[0].includes("Max RSS [MB]")) {
     const content = fs.readFileSync(file, "utf-8");
     const command = content.match(/Command being timed: "(.+)"/)[1];
     const maxRss = content.match(/Maximum resident set size \(kbytes\): ([0-9]+)/)[1];
-    let index;
-    if (command.includes("LD_PRELOAD")) {
-      index = benchTableLines.findIndex(x => x.includes("LD_PRELOAD"));
-    } else {
-      index = benchTableLines.findIndex(x => x.includes(command));
-    }
+    const index = benchTableLines.findIndex(x => x.includes(command));
     benchTableLines[index] += ` ${(maxRss / 1024).toFixed(2)} |`;
   }
   fs.writeFileSync("benchTable.md", benchTableLines.join("\n"), "utf-8");

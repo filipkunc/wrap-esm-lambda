@@ -17,7 +17,7 @@ Disclaimer:
 ## TL;DR
 
 - Goal: wrap exported ESM `handler` functions with `WrapAwsLambda` automatically.
-- Method: transform module source at import time (loader hooks or `LD_PRELOAD` detour).
+- Method: transform module source at import time via Node loader hooks.
 
 ---
 
@@ -173,61 +173,18 @@ Use unit tests (like the `test_var_transform` above) to validate transform input
 ---
 
 
-## Frida detour — `open_detour` snippet
+## Frida detours (retired)
 
-Intercept `open()` calls and transform `handler.mjs` content before Node reads it.
+An earlier variant intercepted `libc` `open()`/`read()` and `uv_fs_fstat()`
+with [frida-gum](https://github.com/frida/frida-rust) detours (injected via
+`LD_PRELOAD`), transforming `handler.mjs` at file-read time — below the
+module system, immune to Node's loader refactors that repeatedly broke
+`Module._load`-level patching.
 
-```rust
-unsafe extern "C" fn open_detour(name: *const c_char, flags: c_int) -> c_int {
-  let path = unsafe { std::ffi::CStr::from_ptr(name) }.to_str().unwrap();
-  if path.ends_with("handler.mjs") {
-    // call original open to get fd
-    let fd = unsafe { ORIGINAL_OPEN.lock().unwrap().get().as_ref().unwrap().unwrap()(name, flags) };
-    // read file, transform, and stash transformed contents for later reads
-    let content = read_to_string(path).unwrap();
-    STATE.lock().unwrap().transformed = transform::transform_lambda_source(
-      content, "handler".to_string(), "WrapAwsLambda".to_string(),
-    );
-    STATE.lock().unwrap().handler_fd = fd;
-    return fd;
-  }
-  // fallback to original
-  unsafe { ORIGINAL_OPEN.lock().unwrap().get().as_ref().unwrap().unwrap()(name, flags) }
-}
-```
-
----
-
-## Frida detour installation
-
-Minimal example (based on `detours.rs`):
-
-```rust
-static CELL: OnceLock<Gum> = OnceLock::new();
-let gum = CELL.get_or_init(Gum::obtain);
-let mut interceptor = Interceptor::obtain(gum);
-unsafe {
-  *ORIGINAL_OPEN.lock().unwrap().get_mut() = Some(std::mem::transmute(
-    interceptor.replace(
-      Module::load(gum, "libc.so.6").find_export_by_name("open").unwrap(),
-      NativePointer(open_detour as *mut c_void),
-      NativePointer(std::ptr::null_mut()),
-    ).unwrap().0
-  ));
-}
-```
-
----
-
-## Frida — `LD_PRELOAD` usage
-
-Use `LD_PRELOAD` to load the native detours library before Node starts:
-
-```bash
-LD_PRELOAD=../wrap-esm-lambda.linux-x64-gnu.node node runtime.mjs
-```
-
-This injects the native library that installs the Frida hooks (`open`, `read`, etc.) so `handler.mjs` can be transformed at file-open time.
+With synchronous `module.registerHooks()` shipping as a supported API that
+covers `require()` and `import` alike, the detours stopped paying for their
+`unsafe` transmutes and unstable `uv_fs_t` layout and were removed — the
+README's "Frida hooking (removed)" section keeps the issue trail.
 
 ---
 
@@ -238,7 +195,6 @@ Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/b
 | Hook | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
 |:---|---:|---:|---:|---:|---:|
 | regex | 24.3 ± 0.9 | 22.8 | 28.6 | 1.03 ± 0.06 | 44.24 |
-| LD_PRELOAD | 25.8 ± 0.7 | 24.4 | 28.2 | 1.10 ± 0.06 | 49.26 |
 | oxc | 35.6 ± 1.0 | 33.9 | 38.4 | 1.51 ± 0.09 | 54.92 |
 | acorn | 45.0 ± 1.4 | 43.2 | 50.5 | 1.91 ± 0.11 | 56.30 |
 | swc plugin | 127.4 ± 4.3 | 120.8 | 135.1 | 5.42 ± 0.33 | 371.61 |
@@ -256,5 +212,3 @@ Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/b
   - oxc: https://oxc.rs/
   - napi.rs: https://napi.rs/
   - oxc playground: https://playground.oxc.rs/
-  - Frida: https://frida.re/
-  - frida-rust (Rust bindings): https://github.com/frida/frida-rust
