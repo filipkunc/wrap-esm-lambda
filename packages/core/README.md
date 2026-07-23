@@ -13,6 +13,17 @@ whichever mode produced it:
 `applyMatched` also appends a sentinel comment and skips sources that already
 carry it, so enabling both modes at once never double-wraps.
 
+The source layout mirrors the pipeline a patch travels — every symbol is
+re-exported from [`src/index.mjs`](src/index.mjs):
+
+| module                                 | responsibility                                                                            |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`src/config.mjs`](src/config.mjs)     | the entry shapes users write (`defineConfig` / `definePatches`, typedefs)                 |
+| [`src/match.mjs`](src/match.mjs)       | which entries apply to which module: package identity, semver range, files, builtin split |
+| [`src/format.mjs`](src/format.mjs)     | the CJS-or-ESM decision, reproducing Node's own format rules                              |
+| [`src/apply.mjs`](src/apply.mjs)       | entries -> instrumented source via the native oxc addon, plus the double-wrap sentinel    |
+| [`src/registry.mjs`](src/registry.mjs) | the runtime patch-function registry contract shared with the Rust emission                |
+
 ## Patch author contract
 
 A patch entry hands your function the matched module's exports. This is the

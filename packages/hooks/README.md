@@ -3,7 +3,8 @@
 The runtime half of the hybrid setup: wraps matched modules **at load time**
 with Node's synchronous `module.registerHooks`, using the same native oxc
 transform as the build-time plugin. No build pipeline changes; the cold start
-cost is microseconds per matched module (see the repo's cold-start table).
+cost is microseconds per matched module (see the repo's
+[cold-start benchmarks](../../docs/benchmarks.md)).
 
 ```sh
 WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs \
