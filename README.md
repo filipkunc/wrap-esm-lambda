@@ -84,20 +84,31 @@ pnpm --filter example-express-route start
 
 ## How it works
 
-The transform is deliberately boring: validate that the requested `bindings`
-exist in the matched module (a missing export is a hard error — the
-version-drift alarm), then **append** a snippet to the module source that
-calls your patch function with get/set accessors over the module's live
-bindings. Appending keeps every original line — and any source map — intact,
-and the call runs at the end of the module's own evaluation: after its
-definitions exist, before any importer sees them.
+The matched module is parsed once (oxc, full AST) and every requested
+binding is validated against its statically visible exports — a missing
+export is a hard error, the version-drift alarm. Then the tap is **tiered**:
+
+- **Fast path** — when every requested binding is already a reassignable
+  local (function/class/`let`/`var` declarations, list exports of mutable
+  locals: the common case for classes like smithy's `Client`), the tap only
+  **appends** a snippet calling your patch function with get/set accessors
+  over the live bindings. The source is untouched, existing source maps stay
+  valid, and on the runtime path the bytes never leave UTF-8.
+- **Rewrite path** — shapes that cannot be rebound as written are
+  **restructured** through one AST rewrite + codegen (with a source map):
+  `export const` is demoted to `let`, an anonymous `export default` is named
+  into a local, re-exports and import-backed list exports are split into an
+  import plus a rebindable local. Only modules that need it pay for it.
+
+Either way the patch call runs at the end of the module's own evaluation:
+after its definitions exist, before any importer sees them.
 
 - `bindings.X` reads the live value; mutating it
   (`X.prototype.send = ...`) works everywhere.
 - `bindings.X = wrapped` **rebinds** the export — an ESM live binding
   reassignment or a `module.exports.X` write. The reserved
   `'module.exports'` binding rebinds a CJS module whose export _is_ the API
-  (fastify's factory).
+  (fastify's factory); `'default'` taps a default export.
 - ESM and CJS get mode-specific snippets; the CJS-or-ESM decision reproduces
   Node's own format rules, so a pure-CJS express or the two trees of a dual
   package like hono each parse correctly.
@@ -136,12 +147,12 @@ every Node 22/24/26 rung, including the minors where sync hooks and
 
 ## The packages
 
-| package                                          | role                                                                                                                                              |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@wrap-esm-lambda/core`](packages/core)         | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)          |
-| [`@wrap-esm-lambda/hooks`](packages/hooks)       | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                                  |
-| [`@wrap-esm-lambda/unplugin`](packages/unplugin) | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack                     |
-| [`wrap-esm-lambda`](index.d.ts) (repo root)      | the native oxc addon both shells call: `exportsTapSnippet*` (the tap) and `transformLambda*` (the handler wrap), with zero-copy `Buffer` variants |
+| package                                          | role                                                                                                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`@wrap-esm-lambda/core`](packages/core)         | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)   |
+| [`@wrap-esm-lambda/hooks`](packages/hooks)       | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                           |
+| [`@wrap-esm-lambda/unplugin`](packages/unplugin) | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack              |
+| [`wrap-esm-lambda`](index.d.ts) (repo root)      | the native oxc addon both shells call: `exportsTap*` (the tap) and `transformLambda*` (the handler wrap), with zero-copy `Buffer` variants |
 
 The `core` source mirrors the pipeline a patch travels:
 [`config.mjs`](packages/core/src/config.mjs) (the entry shapes) ->
@@ -209,6 +220,7 @@ The test suite doubles as a recipe book — each spec runs the real package:
 | **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
 | **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively          | [`http-route.spec.ts`](__test__/http-route.spec.ts) |
 | **builtins** (`node:os`)           | eager preload patching observed by require, default import and named import                                                                                      | [`patch.spec.ts`](__test__/patch.spec.ts)           |
+| **rewrite shapes**                 | `export const` (the Lambda handler shape), anonymous `export default` and re-export barrels — all rebound via the rewrite path, runtime and build mode alike     | [`tap-shapes.spec.ts`](__test__/tap-shapes.spec.ts) |
 | **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                          | [`hybrid.spec.ts`](__test__/hybrid.spec.ts)         |
 | **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                   | [`patch.spec.ts`](__test__/patch.spec.ts)           |
 
@@ -290,9 +302,13 @@ The headline numbers (details and methodology in
 [docs/benchmarks.md](docs/benchmarks.md) and
 [docs/comparisons.md](docs/comparisons.md)):
 
-- The exports tap costs **~10 µs** per matched ESM module (full-AST parse +
-  binding validation) and **~0.7 µs** for a CJS tap — orchestrion's
-  body-rewriting transform on the same file costs ~800–1150 µs.
+- The exports tap costs **~14 µs** per matched ESM module (full-AST parse +
+  binding validation, all patch entries in one call) and **~2.4 µs** for a
+  CJS tap — orchestrion's body-rewriting transform on the same file costs
+  ~950–1200 µs. Shapes that
+  force the tap's rewrite path (`export const`, anonymous defaults,
+  re-exports) additionally pay one oxc codegen — the same machinery as the
+  wrap transform, still microseconds.
 - Runtime-hook cold start overhead on a real fixture app is **~28 ms**, on
   par with import-in-the-middle's sync mode and ~3x cheaper than the
   off-thread loader OTel ships by default. Use a `.mjs` config (not `.ts`)

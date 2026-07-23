@@ -6,7 +6,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as dc from 'node:diagnostics_channel'
 
-import { exportsTapSnippet } from '../index'
+import { exportsTap } from '../index'
 
 // Same target, both tools: orchestrion-js's declarative function query and
 // our exports tap, run over the identical @smithy/core client file the AWS
@@ -83,7 +83,8 @@ test('behavior: orchestrion observes events; the exports tap wraps the method', 
     t.true(events.includes('start'), `send() published events (saw: ${events.join(',') || 'none'})`)
 
     // --- exports tap: registry delivery, wrap and rewrite the result ---
-    const tapped = source + exportsTapSnippet(source, ['Client'], 'patchIt', '/test/patch.ts', false, true, 0)
+    const tapEntries = [{ bindings: ['Client'], patchName: 'patchIt', patchFrom: '/test/patch.ts', aliasIndex: 0 }]
+    const tapped = source + exportsTap(source, tapEntries, false, true).snippets
     const registry = ((globalThis as Record<symbol, unknown>)[Symbol.for('wrap-esm-lambda.patches')] ??=
       Object.create(null)) as Record<string, unknown>
     registry['/test/patch.ts#patchIt'] = (bindings: {

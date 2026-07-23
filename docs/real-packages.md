@@ -43,9 +43,15 @@ the real packages, one per shape:
   is transformed in its own mode — the hook resolves the kind per tree via
   the nameless `{"type":"commonjs"}` package.json hono drops in `dist/cjs`.
   Two lessons generalize:
-  - _Target the defining module, not the barrel._ `dist/index.js` only
-    re-exports `Hono`; re-exports have no local binding to tap, so the ESM
-    entry points at `dist/hono.js` where the class is declared.
+  - _Prefer the defining module over the barrel._ `dist/index.js` only
+    re-exports `Hono`, and a re-export has no local binding — tapping it
+    makes the transform restructure the barrel (splitting the specifier
+    into an import plus a rebindable local, with the snapshot semantics
+    documented in the
+    [patch author contract](../packages/core/README.md#patch-author-contract)).
+    Pointing the entry at `dist/hono.js`, where the class is declared,
+    keeps the tap on its append-only fast path and patches the class for
+    every import route — including consumers that bypass the barrel.
   - _Mutation works everywhere; rebinding meets bundler reality._ Wrapping
     `Hono.prototype.route` (a get-only mutation) lands on both builds. But
     hono's `request`/`fetch` are class _fields_ — per-instance, invisible to

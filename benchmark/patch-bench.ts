@@ -4,7 +4,9 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
-import { exportsTapSnippet, exportsTapSnippetFromBuffer } from '../index.js'
+import { exportsTap, exportsTapFromBuffer } from '../index.js'
+
+const TAP = [{ bindings: ['Client'], patchName: 'patch', patchFrom: '/p.ts', aliasIndex: 0 }]
 // @ts-expect-error untyped internal module
 import { lexEsm } from 'import-in-the-middle/lib/get-esm-exports.mjs'
 
@@ -72,17 +74,17 @@ function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): number {
 const cases: { label: string; run: () => void }[] = [
   {
     label: 'oxc exports tap complete (dist-es, parse + validate)',
-    run: () => exportsTapSnippet(esmSource, ['Client'], 'patch', '/p.ts', false, true, 0),
+    run: () => exportsTap(esmSource, TAP, false, true),
   },
   {
     label: 'oxc exports tap (cjs snippet, no source across napi)',
-    run: () => exportsTapSnippet('', ['Client'], 'patch', '/p.ts', true, true, 0),
+    run: () => exportsTap('', TAP, true, true),
   },
   {
     // same parse+validate, but the source crosses napi as a zero-copy Buffer
     // instead of a UTF-16 string paying an O(n) conversion
     label: 'oxc exports tap complete (dist-es, buffer in)',
-    run: () => exportsTapSnippetFromBuffer(esmBuffer, ['Client'], 'patch', '/p.ts', false, true, 0),
+    run: () => exportsTapFromBuffer(esmBuffer, TAP, false, true),
   },
   {
     // the whole per-module hook operation on string plumbing: decode the
@@ -90,33 +92,27 @@ const cases: { label: string; run: () => void }[] = [
     label: 'hook op, strings (toString + tap + append)',
     run: () => {
       const source = esmBuffer.toString('utf8')
-      void (source + exportsTapSnippet(source, ['Client'], 'patch', '/p.ts', false, true, 0))
+      void (source + exportsTap(source, TAP, false, true).snippets)
     },
   },
   {
     // the same operation with the source never leaving UTF-8
     label: 'hook op, buffer (tap + Buffer.concat)',
     run: () => {
-      void Buffer.concat([
-        esmBuffer,
-        Buffer.from(exportsTapSnippetFromBuffer(esmBuffer, ['Client'], 'patch', '/p.ts', false, true, 0)),
-      ])
+      void Buffer.concat([esmBuffer, Buffer.from(exportsTapFromBuffer(esmBuffer, TAP, false, true).snippets)])
     },
   },
   {
     label: 'hook op, strings (dist-cjs-sized module)',
     run: () => {
       const source = esmBigBuffer.toString('utf8')
-      void (source + exportsTapSnippet(source, ['Client'], 'patch', '/p.ts', false, true, 0))
+      void (source + exportsTap(source, TAP, false, true).snippets)
     },
   },
   {
     label: 'hook op, buffer (dist-cjs-sized module)',
     run: () => {
-      void Buffer.concat([
-        esmBigBuffer,
-        Buffer.from(exportsTapSnippetFromBuffer(esmBigBuffer, ['Client'], 'patch', '/p.ts', false, true, 0)),
-      ])
+      void Buffer.concat([esmBigBuffer, Buffer.from(exportsTapFromBuffer(esmBigBuffer, TAP, false, true).snippets)])
     },
   },
   {

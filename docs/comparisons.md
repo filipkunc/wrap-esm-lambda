@@ -22,23 +22,29 @@ that real file:
 
 | transform (same `@smithy/core` client file)         |  latency |
 | --------------------------------------------------- | -------: |
-| oxc exports tap (`dist-es`, parse + validate)       |   ~10 µs |
-| oxc exports tap (CJS snippet, nothing crosses napi) |  ~0.7 µs |
-| orchestrion `Client#send` query (stock)             | ~1150 µs |
-| orchestrion `Client#send` query (cached selector)   |  ~800 µs |
+| oxc exports tap (`dist-es`, parse + validate)       |   ~14 µs |
+| oxc exports tap (CJS snippet, nothing crosses napi) |  ~2.4 µs |
+| orchestrion `Client#send` query (stock)             | ~1200 µs |
+| orchestrion `Client#send` query (cached selector)   |  ~950 µs |
+
+(The tap's napi contract now takes all of a module's patch entries as one
+array-of-objects call — one parse for N entries and room for the rewrite
+path's `code`/`map` results. That object plumbing costs a fixed couple of
+microseconds over the old scalar per-entry call, which is why the CJS
+snippet row reads ~2.4 µs; the per-module totals below absorb it.)
 
 A profiling pass changed the tap's napi contract: originally the whole module
 source round-tripped across the boundary just to append a few hundred bytes,
 and the two O(n) UTF-16<->UTF-8 conversions dominated (the 42 KB CJS file
 measured ~39 µs round-tripped vs ~0.7 µs snippet-only). Rust now returns just
 the snippet and JS concatenates; the CJS path sends no source at all. What
-remains of the ESM cost (~1 µs napi floor + ~9 µs) is the full-AST oxc parse
+remains of the ESM cost is dominated by the full-AST oxc parse
 itself — the price of validation `lexEsm` doesn't attempt (const-ness, local
 binding resolution, loud missing-export errors).
 
 A second pass removed the string conversions that were left, exploiting that
 `registerHooks`' `nextLoad` hands the hook the module source as UTF-8 bytes
-and accepts bytes back. `exportsTapSnippetFromBuffer` (and
+and accepts bytes back. `exportsTapFromBuffer` (and
 `transformLambdaFromBuffer` for the wrap) take that Buffer as-is: it crosses
 napi zero-copy and oxc parses the UTF-8 in place, so the hook no longer pays
 `source.toString()` nor the UTF-16 -> UTF-8 conversion of a napi string
@@ -54,7 +60,8 @@ and the retired UTF-16 allocation (`pnpm bench:patch` measures both paths,
 small and large).
 
 The ~100x gap is architectural, not incidental: the tap's oxc parse only
-validates exports and appends, while orchestrion parses, queries and
+validates exports and appends (regenerating the module solely for export
+shapes that need restructuring), while orchestrion parses, queries and
 regenerates the method body through its wasm/esquery pipeline — and unlike
 the handler benchmark, memoizing `esquery.parse` no longer rescues it,
 because the body rewrite itself dominates. The flip side is honest:
@@ -81,7 +88,7 @@ iitm 3.x, which needs Node >= 22.22.3 / 24.11.1 / 26):
 
 One number in the transform table needs its scope read carefully: iitm's
 `lexEsm` (~5 µs) is only its _scan step_ — export names out of es-module-lexer,
-nothing else — while the tap's ~10 µs is the _complete_ per-module operation:
+nothing else — while the tap's ~14 µs is the _complete_ per-module operation:
 full-AST parse, binding validation with local-name and const-ness resolution,
 and the emitted accessors. iitm's remaining per-module work (facade source
 generation, evaluating an extra module per interception, Hook callback

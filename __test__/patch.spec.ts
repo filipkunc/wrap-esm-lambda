@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
-import { exportsTapSnippet, exportsTapSnippetFromBuffer } from '../index'
+import { exportsTap, exportsTapFromBuffer } from '../index'
 
 // Declarative patches end-to-end: one TypeScript config entry naming a
 // package, a version range and the exports to hand over, plus a plain
@@ -27,36 +27,50 @@ const { default: config } = await import(pathToFileURL(fixture('wrap.config.ts')
 
 const hookEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.ts') }
 
-test('esm tap emission (import delivery): snippet only, source never round-trips', (t) => {
+const tapEntry = (bindings: string[], aliasIndex = 0) => ({
+  bindings,
+  patchName: 'patchIt',
+  patchFrom: '/abs/patch.ts',
+  aliasIndex,
+})
+
+test('esm tap, fast path (import delivery): snippet only, source never round-trips', (t) => {
+  const source = 'export class Client {}\n'
+  const out = exportsTap(source, [tapEntry(['Client'])], false, false)
+  t.is(out.code, undefined, 'a mutable binding stays on the append-only fast path')
+  t.false(out.snippets.includes('export class'), 'only the appended snippet is returned')
+  t.true(out.snippets.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'))
+  t.true(out.snippets.includes('get Client() { return Client; }'))
+  t.true(out.snippets.includes('set Client(v) { Client = v; }'))
+})
+
+test('esm tap, rewrite path: export const is demoted to let and gets a setter', (t) => {
   const source = 'export class Client {}\nexport const VERSION = "1.0.0";\n'
-  const out = exportsTapSnippet(source, ['Client', 'VERSION'], 'patchIt', '/abs/patch.ts', false, false, 0)
-  t.false(out.includes('export class'), 'only the appended snippet is returned')
-  t.true(out.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'))
-  t.true(out.includes('get Client() { return Client; }'))
-  t.true(out.includes('set Client(v) { Client = v; }'))
-  t.true(out.includes('get VERSION() { return VERSION; }'))
-  t.false(out.includes('set VERSION'), 'const exports must not get a setter')
+  const out = exportsTap(source, [tapEntry(['Client', 'VERSION'])], false, false, 'mod.js')
+  t.truthy(out.code, 'a const binding takes the rewrite path')
+  t.true(out.code!.includes('export let VERSION'), 'const demoted to let')
+  t.truthy(out.map, 'the rewrite emits a source map')
+  t.true(out.snippets.includes('set VERSION(v) { VERSION = v; }'), 'demoted const is rebindable')
 })
 
 test('cjs tap emission (registry delivery): module.exports accessors, no injected require', (t) => {
   // CJS needs no static validation, so not even the source crosses napi
-  const out = exportsTapSnippet('', ['Client'], 'patchIt', '/abs/patch.ts', true, true, 0)
-  t.true(out.startsWith('\n'), 'append-ready snippet')
-  t.false(out.includes('require('), 'hook-overridden CJS cannot serve an injected require')
-  t.true(out.includes('Symbol.for("wrap-esm-lambda.patches")'))
-  t.true(out.includes('["/abs/patch.ts#patchIt"]'))
-  t.true(out.includes('get Client() { return module.exports.Client; }'))
+  const out = exportsTap('', [tapEntry(['Client'])], true, true)
+  t.is(out.code, undefined, 'CJS never rewrites')
+  t.true(out.snippets.startsWith('\n'), 'append-ready snippet')
+  t.false(out.snippets.includes('require('), 'hook-overridden CJS cannot serve an injected require')
+  t.true(out.snippets.includes('Symbol.for("wrap-esm-lambda.patches")'))
+  t.true(out.snippets.includes('["/abs/patch.ts#patchIt"]'))
+  t.true(out.snippets.includes('get Client() { return module.exports.Client; }'))
 })
 
 test('buffer-input tap emission: identical to the string variant', (t) => {
   // The runtime-hook shape: source stays the UTF-8 Buffer nextLoad provided
   const source = 'export class Client {}\nexport const VERSION = "1.0.0";\n'
-  const esm = exportsTapSnippetFromBuffer(Buffer.from(source), ['Client'], 'patchIt', '/abs/patch.ts', false, true, 0)
-  t.deepEqual(esm, exportsTapSnippet(source, ['Client'], 'patchIt', '/abs/patch.ts', false, true, 0))
+  const esm = exportsTapFromBuffer(Buffer.from(source), [tapEntry(['Client', 'VERSION'])], false, true, 'mod.js')
+  t.deepEqual(esm, exportsTap(source, [tapEntry(['Client', 'VERSION'])], false, true, 'mod.js'))
 
-  const err = t.throws(() =>
-    exportsTapSnippetFromBuffer(Buffer.from([0xff, 0xfe]), ['Client'], 'patchIt', '/abs/patch.ts', false, true, 0),
-  )
+  const err = t.throws(() => exportsTapFromBuffer(Buffer.from([0xff, 0xfe]), [tapEntry(['Client'])], false, true))
   t.regex(err!.message, /not valid UTF-8/)
 })
 
@@ -81,7 +95,7 @@ test('applyMatched buffer fast path: Buffer in, Buffer out, same bytes as the st
 })
 
 test('requesting a missing export fails loudly at transform time', (t) => {
-  const err = t.throws(() => exportsTapSnippet('export class Client {}\n', ['Klient'], 'p', '/p.ts', false, false, 0))
+  const err = t.throws(() => exportsTap('export class Client {}\n', [tapEntry(['Klient'])], false, false))
   t.regex(err!.message, /export 'Klient' not found/)
   t.regex(err!.message, /Client/, 'error lists what is available')
 })

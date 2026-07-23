@@ -393,8 +393,8 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
-module.exports.exportsTapSnippet = nativeBinding.exportsTapSnippet
-module.exports.exportsTapSnippetFromBuffer = nativeBinding.exportsTapSnippetFromBuffer
+module.exports.exportsTap = nativeBinding.exportsTap
+module.exports.exportsTapFromBuffer = nativeBinding.exportsTapFromBuffer
 module.exports.transformLambda = nativeBinding.transformLambda
 module.exports.transformLambdaFromBuffer = nativeBinding.transformLambdaFromBuffer
 module.exports.transformLambdaWithChainedMap = nativeBinding.transformLambdaWithChainedMap
