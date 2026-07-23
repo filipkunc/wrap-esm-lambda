@@ -62,19 +62,25 @@ requested `bindings`:
     binding accepts assignment. (Consequence: the whole declaration loses
     const-ness, including co-declared names; the module itself never
     reassigns what it declared `const`, so this is unobservable in practice.)
+  - Destructuring exports — `export const { a, b: c } = ...`, array
+    patterns, defaults and rest elements: every name the pattern binds is
+    tappable, with the same const demotion. This also covers a top-level
+    `const` pattern re-exported through an `export { ... }` list.
   - `export default` — a named default function/class is tapped through its
     local binding (`bindings.default`); an anonymous one is named into a
     local and re-exported as `default`.
-  - `export { a as b } from "m"` (re-exports) and list exports of
-    import-backed locals — split into an import plus a rebindable `let`
+  - `export { a as b } from "m"` (re-exports, including
+    `export { default as X }`), `export * as ns from "m"` (namespace
+    re-exports) and list exports of import-backed locals (named, default or
+    namespace imports) — split into an import plus a rebindable `let`
     snapshot. **Snapshot caveat**: after the split, `b` no longer tracks
     later live-binding updates of `a` in `m`; for the overwhelmingly common
     class/function exports this is indistinguishable, but if the source
     module reassigns its export after evaluation, importers of the patched
     module keep the snapshot (until the patch itself rebinds).
-  - `export * from` is the one shape that stays out of reach — its names are
-    not statically visible; a binding requested from it fails loudly as
-    not-found. Target the defining module.
+  - Bare `export * from "m"` is the one shape that stays out of reach — its
+    names are not statically visible; a binding requested from it fails
+    loudly as not-found. Target the defining module.
 - CJS getter-only exports (esbuild-bundled packages) make rebind assignment
   throw in strict-mode modules but **silently no-op in sloppy-mode ones** —
   the tap's CJS setter verifies the write took and throws if not; prototype

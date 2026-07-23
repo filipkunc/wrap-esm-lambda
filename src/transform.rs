@@ -549,6 +549,36 @@ enum NamedKind {
   /// means splitting the specifier into an import plus a rebindable local
   /// (a rewrite, with documented snapshot semantics).
   ReExport,
+  /// `export * as ns from "m"` — the namespace object under a static name;
+  /// tapping it replaces the statement with a namespace import plus a
+  /// rebindable local (a rewrite, same snapshot semantics).
+  ReExportAll,
+}
+
+/// Every name a binding pattern declares: identifiers, object/array
+/// destructuring (including defaults and rest), recursively —
+/// `export const { a, b: [c], ...rest } = obj` exports `a`, `c` and `rest`.
+fn collect_bound_names(pattern: &BindingPattern, out: &mut Vec<String>) {
+  match pattern {
+    BindingPattern::BindingIdentifier(ident) => out.push(ident.name.to_string()),
+    BindingPattern::ObjectPattern(object) => {
+      for property in &object.properties {
+        collect_bound_names(&property.value, out);
+      }
+      if let Some(rest) = &object.rest {
+        collect_bound_names(&rest.argument, out);
+      }
+    }
+    BindingPattern::ArrayPattern(array) => {
+      for element in array.elements.iter().flatten() {
+        collect_bound_names(element, out);
+      }
+      if let Some(rest) = &array.rest {
+        collect_bound_names(&rest.argument, out);
+      }
+    }
+    BindingPattern::AssignmentPattern(assignment) => collect_bound_names(&assignment.left, out),
+  }
 }
 
 struct NamedInfo {
@@ -600,10 +630,12 @@ fn build_export_index(program: &Program) -> ExportIndex {
       }
       Statement::VariableDeclaration(var) => {
         if var.kind == VariableDeclarationKind::Const {
+          let mut names = Vec::new();
           for decl in &var.declarations {
-            if let BindingPattern::BindingIdentifier(ident) = &decl.id {
-              index.top_const.insert(ident.name.to_string(), stmt_idx);
-            }
+            collect_bound_names(&decl.id, &mut names);
+          }
+          for name in names {
+            index.top_const.insert(name, stmt_idx);
           }
         }
       }
@@ -612,25 +644,26 @@ fn build_export_index(program: &Program) -> ExportIndex {
           match declaration {
             Declaration::VariableDeclaration(var) => {
               let constant = var.kind == VariableDeclarationKind::Const;
+              let mut names = Vec::new();
               for decl in &var.declarations {
-                if let BindingPattern::BindingIdentifier(ident) = &decl.id {
-                  let name = ident.name.to_string();
-                  if constant {
-                    index.top_const.insert(name.clone(), stmt_idx);
-                  }
-                  index.named.push(NamedInfo {
-                    exported: name.clone(),
-                    local: name,
-                    kind: if constant {
-                      NamedKind::DeclConst
-                    } else {
-                      NamedKind::DeclMutable
-                    },
-                    stmt_idx,
-                    spec_idx: 0,
-                    source: None,
-                  });
+                collect_bound_names(&decl.id, &mut names);
+              }
+              for name in names {
+                if constant {
+                  index.top_const.insert(name.clone(), stmt_idx);
                 }
+                index.named.push(NamedInfo {
+                  exported: name.clone(),
+                  local: name,
+                  kind: if constant {
+                    NamedKind::DeclConst
+                  } else {
+                    NamedKind::DeclMutable
+                  },
+                  stmt_idx,
+                  spec_idx: 0,
+                  source: None,
+                });
               }
             }
             Declaration::FunctionDeclaration(func) => {
@@ -677,6 +710,21 @@ fn build_export_index(program: &Program) -> ExportIndex {
           }
         }
       }
+      Statement::ExportAllDeclaration(export) => {
+        // `export * as ns from "m"` has a statically visible name; bare
+        // `export * from "m"` does not and stays unreachable by design.
+        if let Some(exported) = &export.exported {
+          let name = exported.name().to_string();
+          index.named.push(NamedInfo {
+            exported: name.clone(),
+            local: name,
+            kind: NamedKind::ReExportAll,
+            stmt_idx,
+            spec_idx: 0,
+            source: Some(export.source.value.to_string()),
+          });
+        }
+      }
       Statement::ExportDefaultDeclaration(export) => {
         use oxc_ast::ast::ExportDefaultDeclarationKind;
         index.default = Some(match &export.declaration {
@@ -707,6 +755,16 @@ struct RewriteOps {
   default_anon: Option<(usize, String)>,
   /// export specifiers split into an (optional) import + rebindable local
   splits: Vec<Split>,
+  /// `export * as ns from "m"` statements replaced by a namespace import +
+  /// rebindable local
+  ns_splits: Vec<NsSplit>,
+}
+
+struct NsSplit {
+  stmt_idx: usize,
+  exported: String,
+  source: String,
+  local_ident: String,
 }
 
 struct Split {
@@ -724,7 +782,10 @@ struct Split {
 
 impl RewriteOps {
   fn is_empty(&self) -> bool {
-    self.demote.is_empty() && self.default_anon.is_none() && self.splits.is_empty()
+    self.demote.is_empty()
+      && self.default_anon.is_none()
+      && self.splits.is_empty()
+      && self.ns_splits.is_empty()
   }
 }
 
@@ -796,6 +857,23 @@ fn resolve_binding(
         }
       }
       NamedKind::ReExport => split_local(ops, fresh, info),
+      NamedKind::ReExportAll => {
+        if let Some(existing) = ops.ns_splits.iter().find(|s| s.stmt_idx == info.stmt_idx) {
+          existing.local_ident.clone()
+        } else {
+          let local_ident = fresh.numbered("__wel_l");
+          ops.ns_splits.push(NsSplit {
+            stmt_idx: info.stmt_idx,
+            exported: info.exported.clone(),
+            source: info
+              .source
+              .clone()
+              .expect("ReExportAll always has a source"),
+            local_ident: local_ident.clone(),
+          });
+          local_ident
+        }
+      }
     });
   }
   if name == "default" {
@@ -985,6 +1063,28 @@ fn import_alias_statement<'a>(
   ))
 }
 
+/// `import * as <local> from "<source>";`
+fn import_namespace_statement<'a>(
+  allocator: &'a Allocator,
+  ast: &oxc_ast::AstBuilder<'a>,
+  local: &str,
+  source: &str,
+) -> Statement<'a> {
+  Statement::ImportDeclaration(ast.alloc_import_declaration(
+    SPAN,
+    Some(
+      ast.vec1(ast.import_declaration_specifier_import_namespace_specifier(
+        SPAN,
+        ast.binding_identifier(SPAN, arena_ident(allocator, local)),
+      )),
+    ),
+    ast.string_literal(SPAN, arena_ident(allocator, source), None),
+    None,
+    NONE,
+    ImportOrExportKind::Value,
+  ))
+}
+
 /// Apply the accumulated rewrites to the program in place:
 /// - demotions flip `const` declarations to `let` where they stand;
 /// - the anonymous default is replaced *at its position* by
@@ -1039,7 +1139,9 @@ fn apply_rewrites<'a>(
       other => match other.as_expression() {
         Some(expr) => expr.clone_in_with_semantic_ids(allocator),
         None => {
-          return Err("export default of a TypeScript-only declaration is not tappable".to_string());
+          return Err(
+            "export default of a TypeScript-only declaration is not tappable".to_string(),
+          );
         }
       },
     };
@@ -1090,6 +1192,27 @@ fn apply_rewrites<'a>(
       &ast,
       &split.local_ident,
       &split.exported,
+    ));
+  }
+
+  for ns in &ops.ns_splits {
+    // the namespace import keeps the source module's load (and gives the
+    // snapshot a binding); the original `export * as ns` statement is what
+    // it replaces
+    let import_local = format!("{}_src", ns.local_ident);
+    program.body[ns.stmt_idx] =
+      import_namespace_statement(allocator, &ast, &import_local, &ns.source);
+    appended.push(let_statement(
+      allocator,
+      &ast,
+      &ns.local_ident,
+      ast.expression_identifier(SPAN, arena_ident(allocator, &import_local)),
+    ));
+    appended.push(export_alias_statement(
+      allocator,
+      &ast,
+      &ns.local_ident,
+      &ns.exported,
     ));
   }
 
@@ -1451,6 +1574,89 @@ mod tests {
     println!("{}", code);
     assert!(code.contains("let __wel_l0 = x;"));
     assert!(code.contains("export { __wel_l0 as x }"));
+  }
+
+  #[test]
+  fn test_exports_tap_destructured_const_export() {
+    let source = "export const { greet, meta: [info] } = make();\n";
+    let out = tap1(source, &["greet", "info"], false, true).unwrap();
+    let code = out
+      .code
+      .expect("destructured const must take the rewrite path");
+    println!("{}\n{}", code, out.snippets);
+    assert!(
+      code.contains("export let {"),
+      "the whole pattern declaration is demoted"
+    );
+    assert!(out.snippets.contains("set greet(v) { greet = v; }"));
+    assert!(out.snippets.contains("set info(v) { info = v; }"));
+  }
+
+  #[test]
+  fn test_exports_tap_destructured_let_export_is_fast_path() {
+    let source = "export let { greet } = make();\n";
+    let out = tap1(source, &["greet"], false, true).unwrap();
+    assert!(
+      out.code.is_none(),
+      "let destructuring is already reassignable — append only"
+    );
+    assert!(out.snippets.contains("set greet(v) { greet = v; }"));
+  }
+
+  #[test]
+  fn test_exports_tap_top_level_const_pattern_behind_list_export() {
+    let source = "const { a } = make();\nexport { a as alpha };\n";
+    let out = tap1(source, &["alpha"], false, true).unwrap();
+    let code = out
+      .code
+      .expect("the const pattern behind the list export must be demoted");
+    println!("{}", code);
+    assert!(code.contains("let {"), "top-level const pattern demoted");
+    assert!(out.snippets.contains("set alpha(v) { a = v; }"));
+  }
+
+  #[test]
+  fn test_exports_tap_namespace_reexport() {
+    let source = "export * as ns from \"./m.js\";\n";
+    let out = tap1(source, &["ns"], false, true).unwrap();
+    let code = out.code.expect("export * as ns must take the rewrite path");
+    println!("{}\n{}", code, out.snippets);
+    assert!(code.contains("import * as __wel_l0_src from \"./m.js\";"));
+    assert!(code.contains("let __wel_l0 = __wel_l0_src;"));
+    assert!(code.contains("export { __wel_l0 as ns }"));
+    assert!(out.snippets.contains("set ns(v) { __wel_l0 = v; }"));
+  }
+
+  #[test]
+  fn test_exports_tap_bare_export_star_stays_unreachable() {
+    let source = "export * from \"./m.js\";\nexport class Client {}\n";
+    let err = tap1(source, &["Hidden"], false, true).unwrap_err();
+    assert!(
+      err.contains("export 'Hidden' not found"),
+      "bare star names are not static: {err}"
+    );
+  }
+
+  #[test]
+  fn test_exports_tap_default_reexport_split() {
+    let source = "export { default as Client } from \"./client.js\";\n";
+    let out = tap1(source, &["Client"], false, true).unwrap();
+    let code = out
+      .code
+      .expect("re-exported default must take the rewrite path");
+    println!("{}", code);
+    assert!(code.contains("import { default as __wel_l0_src } from \"./client.js\";"));
+    assert!(code.contains("export { __wel_l0 as Client }"));
+  }
+
+  #[test]
+  fn test_exports_tap_export_list_of_default_import() {
+    let source = "import Client from \"./client.js\";\nexport { Client };\n";
+    let out = tap1(source, &["Client"], false, true).unwrap();
+    let code = out.code.expect("default-import-backed export must split");
+    println!("{}", code);
+    assert!(code.contains("let __wel_l0 = Client;"));
+    assert!(code.contains("export { __wel_l0 as Client }"));
   }
 
   #[test]

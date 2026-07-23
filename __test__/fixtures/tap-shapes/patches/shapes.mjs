@@ -19,3 +19,20 @@ export function patchBarrel(bindings) {
     }
   }
 }
+
+export function patchDestructured(bindings) {
+  const orig = bindings.greet
+  bindings.greet = () => `wrapped:${orig()}`
+}
+
+export function patchNs(bindings) {
+  const OrigInner = bindings.inner.Inner
+  bindings.inner = {
+    ...bindings.inner,
+    Inner: class extends OrigInner {
+      greet() {
+        return `ns:${super.greet()}`
+      }
+    },
+  }
+}

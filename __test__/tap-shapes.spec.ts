@@ -8,15 +8,17 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
 // The export shapes the tap's rewrite path unlocks, end-to-end: an exported
-// const (the canonical Lambda handler shape), an anonymous default export,
-// and a re-export barrel — each REBOUND by its patch, the operation the
-// append-only tap had to refuse. Same fixture through the runtime hook and
-// through esbuild.
+// const (the canonical Lambda handler shape), an anonymous default export, a
+// re-export barrel, a destructured const export and a namespace re-export —
+// each REBOUND by its patch, the operation the append-only tap had to
+// refuse. Same fixture through the runtime hook and through esbuild; the
+// app also consumes the const module as a namespace import to prove the
+// rebind propagates through every consumer shape.
 
 const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/tap-shapes/${name}`, import.meta.url))
 
-const EXPECTED = 'wrapped:hi:x wrapped:dflt:y patched:inner'
+const EXPECTED = 'wrapped:hi:x wrapped:hi:n wrapped:dflt:y patched:inner wrapped:greet ns:inner'
 const hookEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.shapes.mjs') }
 
 test('runtime mode: const, anonymous default and barrel re-export all rebind', async (t) => {
