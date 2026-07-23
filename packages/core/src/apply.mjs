@@ -2,7 +2,7 @@
 // native `wrap-esm-lambda` oxc addon. Both shells call `applyMatched`, so
 // the instrumented output is byte-identical whichever mode produced it.
 import { basename } from 'node:path'
-import { transformLambdaWithMapObject, exportsTapSnippet, exportsTapSnippetFromBuffer } from 'wrap-esm-lambda'
+import { transformLambdaWithMapObject, exportsTap, exportsTapFromBuffer } from 'wrap-esm-lambda'
 import { cleanPath } from './paths.mjs'
 import { moduleKindFor } from './format.mjs'
 
@@ -42,11 +42,27 @@ export function transformMatched(source, entry, idOrUrl) {
   return { code: finalCode, map: map ?? null }
 }
 
+/** The tap inputs for the native call, one element per patch entry. */
+function tapEntries(patches) {
+  return patches.map((entry, aliasIndex) => ({
+    bindings: entry.bindings,
+    patchName: entry.patch.name,
+    patchFrom: entry.patch.from,
+    aliasIndex,
+  }))
+}
+
 /**
  * Apply every matching entry to a module, in one pass shared by both shells.
- * Wrap entries run first (they re-generate the whole module); patch entries
- * append their exports tap after, so nothing they add is disturbed. The
- * sentinel lands once at the end.
+ * Wrap entries run first (they re-generate the whole module); the patch
+ * entries then go to the native exports tap in a single call — one parse for
+ * all of them. The sentinel lands once at the end.
+ *
+ * The tap itself is tiered: bindings that are already reassignable locals
+ * cost only an appended snippet, while shapes that need restructuring
+ * (`export const`, an anonymous `export default`, re-exports, import-backed
+ * list exports) come back as a regenerated module plus a source map — which
+ * is chained through the wrap map when a wrap entry ran first.
  *
  * `delivery` decides how the tap reaches the user's patch function:
  * - 'import' (build time, default): a static import is appended and the
@@ -57,14 +73,13 @@ export function transformMatched(source, entry, idOrUrl) {
  *   require, so this is the only delivery that works universally at runtime.
  *
  * A `Buffer` (or any TypedArray/ArrayBuffer, e.g. straight from a
- * `registerHooks` load hook's `nextLoad`) is also accepted as `source`. When
- * every matching entry is a patch entry the source then never leaves UTF-8 —
- * it crosses napi zero-copy for validation and one `Buffer.concat` appends
- * the snippets — and `code` in the result is a `Buffer` a load hook can
- * return as-is. Decoding the source to a JS string (and sending it back
- * across napi as UTF-16) would cost O(n) per module for a few appended
- * bytes. Wrap entries regenerate the whole module, so a buffer source falls
- * back to one decode and the string path.
+ * `registerHooks` load hook's `nextLoad`) is also accepted as `source`. For
+ * patch-only matches that stay on the tap's fast path the source then never
+ * leaves UTF-8 — it crosses napi zero-copy for validation and one
+ * `Buffer.concat` appends the snippets — and `code` in the result is a
+ * `Buffer` a load hook can return as-is. When the tap has to rewrite, the
+ * regenerated module comes back as a string (that O(n) is the price of the
+ * shapes that need it, paid only by modules that need it).
  *
  * @param {string | Buffer | ArrayBuffer | NodeJS.TypedArray} source
  * @param {import('./config.mjs').InstrumentEntry[]} entries
@@ -85,78 +100,51 @@ export function applyMatched(source, entries, idOrUrl, options = {}) {
     return null
   }
   const kind = moduleKindFor(idOrUrl, options.format)
+  const cjs = kind === 'cjs'
   const registry = options.delivery === 'registry'
+  const filename = basename(cleanPath(idOrUrl))
+  const wraps = entries.filter((entry) => !entry.patch)
+  const patches = entries.filter((entry) => entry.patch)
+
   if (Buffer.isBuffer(source)) {
-    if (entries.every((entry) => entry.patch)) {
-      return applyPatchesToBuffer(source, entries, kind, registry)
+    if (wraps.length === 0) {
+      // patch-only buffer fast path: the source crosses napi zero-copy; only
+      // when the tap must rewrite does it come back as a (string) module
+      const tap = exportsTapFromBuffer(cjs ? EMPTY_BUFFER : source, tapEntries(patches), cjs, registry, filename)
+      const trailer = `${tap.snippets}\n${SENTINEL}\n`
+      if (tap.code == null) {
+        return { code: Buffer.concat([source, Buffer.from(trailer)]), map: null }
+      }
+      return { code: tap.code + trailer, map: tap.map ?? null }
     }
     source = source.toString('utf8')
   }
-  const ordered = [...entries].sort((a, b) => (a.patch ? 1 : 0) - (b.patch ? 1 : 0))
+
   let code = source
   let map = null
-  let aliasIndex = 0
-  for (const entry of ordered) {
-    if (entry.patch) {
-      // Only the snippet crosses the napi boundary; for CJS not even the
-      // source does (no static validation there) — round-tripping the module
-      // text cost two O(n) string conversions for a few appended bytes.
-      const cjs = kind === 'cjs'
-      code += exportsTapSnippet(
-        cjs ? '' : code,
-        entry.bindings,
-        entry.patch.name,
-        entry.patch.from,
-        cjs,
-        registry,
-        aliasIndex,
-      )
-      aliasIndex += 1
-    } else {
-      const filename = basename(cleanPath(idOrUrl))
-      const wrapped = transformLambdaWithMapObject(code, entry.handler, entry.wrapper.name, filename)
-      code = wrapped.code
-      if (entry.wrapper.from) {
-        code += `\nimport { ${entry.wrapper.name} } from ${JSON.stringify(entry.wrapper.from)};`
-      }
-      map = wrapped.map ?? null
+  for (const entry of wraps) {
+    const wrapped = transformLambdaWithMapObject(code, entry.handler, entry.wrapper.name, filename)
+    code = wrapped.code
+    if (entry.wrapper.from) {
+      code += `\nimport { ${entry.wrapper.name} } from ${JSON.stringify(entry.wrapper.from)};`
     }
+    map = wrapped.map ?? null
+  }
+  if (patches.length > 0) {
+    // one native call for all patch entries; a wrap map chains through any
+    // tap rewrite so the final map still reaches the original source
+    const tap = exportsTap(cjs ? '' : code, tapEntries(patches), cjs, registry, filename, map ?? undefined)
+    if (tap.code != null) {
+      code = tap.code
+      map = tap.map ?? null
+    }
+    code += tap.snippets
   }
   code += `\n${SENTINEL}\n`
   return { code, map }
 }
 
-/**
- * Patch-only fast path of {@link applyMatched}: the module source never
- * leaves UTF-8. Each entry validates against the original source (taps only
- * append — they never add or remove exports, so validating against the
- * evolving text like the string path does would resolve identically), and a
- * single `Buffer.concat` performs every append at once. The snippets
- * themselves travel as strings: a few hundred bytes each, they cost far less
- * to convert than the module source whose conversions this path exists to
- * avoid.
- */
-function applyPatchesToBuffer(source, entries, kind, registry) {
-  const cjs = kind === 'cjs'
-  let appended = ''
-  let aliasIndex = 0
-  for (const entry of entries) {
-    appended += cjs
-      ? // CJS taps need no static validation — no source crosses napi at all
-        exportsTapSnippet('', entry.bindings, entry.patch.name, entry.patch.from, true, registry, aliasIndex)
-      : exportsTapSnippetFromBuffer(
-          source,
-          entry.bindings,
-          entry.patch.name,
-          entry.patch.from,
-          false,
-          registry,
-          aliasIndex,
-        )
-    aliasIndex += 1
-  }
-  return { code: Buffer.concat([source, Buffer.from(`${appended}\n${SENTINEL}\n`)]), map: null }
-}
+const EMPTY_BUFFER = Buffer.alloc(0)
 
 /** Inline a v3 map JSON as a trailing `//# sourceMappingURL=` data URL. */
 export function inlineMap(code, mapJson) {

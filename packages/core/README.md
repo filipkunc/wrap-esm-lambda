@@ -55,30 +55,48 @@ requested `bindings`:
 - `bindings.X = wrapped` **rebinds**: in ESM it reassigns the module-local
   binding (live bindings propagate to every importer), in CJS it writes
   `module.exports.X`.
-- Rebinding edges:
-  - ESM `export const` gets no setter — assignment throws loudly; mutate the
-    object instead.
-  - `export { a as b }` list exports always get a setter; if the local is a
-    `const`, assigning throws at runtime.
-  - CJS getter-only exports (esbuild-bundled packages) make rebind assignment
-    throw in strict-mode modules but **silently no-op in sloppy-mode ones** —
-    prototype mutation is the reliable operation on bundled CJS.
+- Every statically-visible ESM export shape is rebindable. Shapes that are
+  not naturally rebindable make the tap **restructure the module** (an AST
+  rewrite through oxc codegen, with a source map) instead of refusing:
+  - `export const X = ...` — the declaration is demoted to `let` so the
+    binding accepts assignment. (Consequence: the whole declaration loses
+    const-ness, including co-declared names; the module itself never
+    reassigns what it declared `const`, so this is unobservable in practice.)
+  - `export default` — a named default function/class is tapped through its
+    local binding (`bindings.default`); an anonymous one is named into a
+    local and re-exported as `default`.
+  - `export { a as b } from "m"` (re-exports) and list exports of
+    import-backed locals — split into an import plus a rebindable `let`
+    snapshot. **Snapshot caveat**: after the split, `b` no longer tracks
+    later live-binding updates of `a` in `m`; for the overwhelmingly common
+    class/function exports this is indistinguishable, but if the source
+    module reassigns its export after evaluation, importers of the patched
+    module keep the snapshot (until the patch itself rebinds).
+  - `export * from` is the one shape that stays out of reach — its names are
+    not statically visible; a binding requested from it fails loudly as
+    not-found. Target the defining module.
+- CJS getter-only exports (esbuild-bundled packages) make rebind assignment
+  throw in strict-mode modules but **silently no-op in sloppy-mode ones** —
+  the tap's CJS setter verifies the write took and throws if not; prototype
+  mutation is the reliable operation on bundled CJS.
 - Validation: a requested export that does not exist is a **hard error at
   transform time for ESM** (the version-drift alarm). CJS cannot be validated
   statically — a missing name arrives as `undefined`.
 
 ### Reach limits (by design)
 
-The tap reaches exactly what `Module._load` monkey-patching ever could:
+The tap reaches what `Module._load` monkey-patching ever could:
 
-- Only exports listed in `bindings` — no non-exported internals.
-- No re-exports: `export ... from` has no local binding; the transform
-  refuses loudly. Target the defining file instead (see the AWS config,
-  which taps `smithy-client/client.js` rather than the barrel `index.js`).
+- Only exports listed in `bindings` — no non-exported internals, no
+  call-site interiors.
 - Nothing that already happened _during_ the module's own top-level
   evaluation can be intercepted, and code that captured a direct method
   reference before the tap ran keeps the unpatched one.
-- `export default` is currently unsupported (prototype gap, not principle).
+- Re-export barrels are tappable (see the snapshot caveat above), but
+  targeting the defining file remains the recommended config (see the AWS
+  config, which taps `smithy-client/client.js` rather than the barrel
+  `index.js`): no restructuring, no snapshot semantics, and the patch lands
+  no matter which path imports the class.
 
 ### Delivery-mode asymmetry
 

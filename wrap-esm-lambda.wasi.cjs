@@ -108,8 +108,8 @@ const { instance: __napiInstance, module: __wasiModule, napiModule: __napiModule
   },
 })
 module.exports = __napiModule.exports
-module.exports.exportsTapSnippet = __napiModule.exports.exportsTapSnippet
-module.exports.exportsTapSnippetFromBuffer = __napiModule.exports.exportsTapSnippetFromBuffer
+module.exports.exportsTap = __napiModule.exports.exportsTap
+module.exports.exportsTapFromBuffer = __napiModule.exports.exportsTapFromBuffer
 module.exports.transformLambda = __napiModule.exports.transformLambda
 module.exports.transformLambdaFromBuffer = __napiModule.exports.transformLambdaFromBuffer
 module.exports.transformLambdaWithChainedMap = __napiModule.exports.transformLambdaWithChainedMap

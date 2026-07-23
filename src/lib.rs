@@ -82,75 +82,125 @@ pub fn transform_lambda_with_chained_map(
   )
 }
 
-/// The generic "exports tap" behind declarative patches: returns the snippet
-/// the caller appends after the module source, calling a user-provided patch
-/// function with the module's live bindings as get/set accessors. Only the
-/// snippet crosses the napi boundary — round-tripping the whole source cost
-/// two O(n) string conversions and dominated the latency. `input` is parsed
-/// for export validation in ESM mode; in CJS mode (`cjs = true`) it is
-/// ignored — pass an empty string. `registry` picks patch delivery: false
-/// emits a static import of `patchFrom` (build time, aliased by
-/// `aliasIndex`); true looks the patch up in the
-/// `Symbol.for("wrap-esm-lambda.patches")` global registry the runtime shell
-/// preloads (no injected import/require at all). Throws when a requested
-/// export does not exist in an ESM module.
-#[napi]
-pub fn exports_tap_snippet(
-  input: String,
-  bindings: Vec<String>,
-  patch_name: String,
-  patch_from: String,
-  cjs: bool,
-  registry: bool,
-  alias_index: u32,
-) -> napi::Result<String> {
-  transform::exports_tap_snippet(
-    &input,
-    bindings,
-    &patch_name,
-    &patch_from,
-    cjs,
-    registry,
-    alias_index,
-  )
-  .map_err(napi::Error::from_reason)
+/// One patch entry's inputs to the exports tap — mirrors the JS config entry.
+/// `aliasIndex` keeps the injected import alias unique when several entries
+/// patch the same module in import delivery.
+#[napi(object)]
+pub struct TapEntryInput {
+  pub bindings: Vec<String>,
+  pub patch_name: String,
+  pub patch_from: String,
+  pub alias_index: u32,
 }
 
-/// Buffer-input variant of `exportsTapSnippet`, for the runtime hook path
-/// where `registerHooks`' `nextLoad` already provides the source as UTF-8
-/// bytes: the Buffer crosses napi zero-copy, so validating a module's exports
-/// no longer converts the whole source UTF-16 -> UTF-8 (that conversion is
-/// exactly proportional to module size — the one cost of the string variant
-/// left after the snippet-only contract). The snippet itself stays a string:
-/// it is a few hundred bytes, and a napi string is cheaper to create than an
-/// external buffer. In CJS mode `input` is ignored — pass an empty buffer.
-/// Throws if `input` is not valid UTF-8.
+/// Result of `exportsTap` for one module (all entries at once):
+/// - `code == null` — the append-only fast path: every requested binding was
+///   already a reassignable local. Append `snippets` after the untouched
+///   source (a byte-buffer caller never decodes it).
+/// - `code != null` — the module needed restructuring (a `const` export, an
+///   anonymous default, a re-export or import-backed list export) and was
+///   regenerated from its AST; `map` is the v3 source map of that rewrite
+///   (already chained through `upstreamMap` when one was given). Append
+///   `snippets` after `code`.
+#[napi(object)]
+pub struct TapResult {
+  pub snippets: String,
+  pub code: Option<String>,
+  pub map: Option<String>,
+}
+
+fn tap_entries(entries: Vec<TapEntryInput>) -> Vec<transform::TapEntry> {
+  entries
+    .into_iter()
+    .map(|entry| transform::TapEntry {
+      bindings: entry.bindings,
+      patch_name: entry.patch_name,
+      patch_from: entry.patch_from,
+      alias_index: entry.alias_index,
+    })
+    .collect()
+}
+
+/// The generic "exports tap" behind declarative patches, for every patch
+/// entry of one module in a single call (one parse, at most one codegen):
+/// each entry's patch function is handed the module's live bindings as
+/// get/set accessors. The module is parsed once and every requested name
+/// validated against its statically visible exports — a missing export
+/// throws (the version-drift alarm). Bindings that are already reassignable
+/// locals cost only the appended snippet; bindings that need restructuring
+/// (`export const`, anonymous `export default`, re-exports, import-backed
+/// locals) trigger an AST rewrite and `code`/`map` come back non-null. In
+/// CJS mode (`cjs = true`) accessors go through `module.exports`, no
+/// validation or rewrite happens and `input` is ignored — pass an empty
+/// string. `registry` picks patch delivery: false emits a static import of
+/// each entry's `patchFrom` (build time); true looks patches up in the
+/// `Symbol.for("wrap-esm-lambda.patches")` global registry the runtime
+/// shell preloads (no injected import/require at all). `filename` names the
+/// module in the rewrite source map; `upstreamMap` chains an
+/// already-applied transform's map through the rewrite.
 #[napi]
-pub fn exports_tap_snippet_from_buffer(
-  input: Buffer,
-  bindings: Vec<String>,
-  patch_name: String,
-  patch_from: String,
+pub fn exports_tap(
+  input: String,
+  entries: Vec<TapEntryInput>,
   cjs: bool,
   registry: bool,
-  alias_index: u32,
-) -> napi::Result<String> {
+  filename: Option<String>,
+  upstream_map: Option<String>,
+) -> napi::Result<TapResult> {
+  let out = transform::exports_tap(
+    &input,
+    &tap_entries(entries),
+    cjs,
+    registry,
+    filename.as_deref(),
+    upstream_map.as_deref(),
+  )
+  .map_err(napi::Error::from_reason)?;
+  Ok(TapResult {
+    snippets: out.snippets,
+    code: out.code,
+    map: out.map,
+  })
+}
+
+/// Buffer-input variant of `exportsTap`, for the runtime hook path where
+/// `registerHooks`' `nextLoad` already provides the source as UTF-8 bytes:
+/// the Buffer crosses napi zero-copy, so validating a module's exports never
+/// converts the whole source UTF-16 -> UTF-8. On the fast path (`code ==
+/// null`) the source is never decoded at all — the caller appends `snippets`
+/// bytes to the original buffer. On the rewrite path the regenerated module
+/// comes back as a string (Node compiles from UTF-16 either way, so a string
+/// costs the same single conversion). In CJS mode `input` is ignored — pass
+/// an empty buffer. Throws if `input` is not valid UTF-8.
+#[napi]
+pub fn exports_tap_from_buffer(
+  input: Buffer,
+  entries: Vec<TapEntryInput>,
+  cjs: bool,
+  registry: bool,
+  filename: Option<String>,
+  upstream_map: Option<String>,
+) -> napi::Result<TapResult> {
   let source = if cjs {
     ""
   } else {
     std::str::from_utf8(&input)
       .map_err(|err| napi::Error::from_reason(format!("module source is not valid UTF-8: {err}")))?
   };
-  transform::exports_tap_snippet(
+  let out = transform::exports_tap(
     source,
-    bindings,
-    &patch_name,
-    &patch_from,
+    &tap_entries(entries),
     cjs,
     registry,
-    alias_index,
+    filename.as_deref(),
+    upstream_map.as_deref(),
   )
-  .map_err(napi::Error::from_reason)
+  .map_err(napi::Error::from_reason)?;
+  Ok(TapResult {
+    snippets: out.snippets,
+    code: out.code,
+    map: out.map,
+  })
 }
 
 /// Like `transformLambdaWithChainedMap`, but returns the code and the chained
