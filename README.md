@@ -270,6 +270,50 @@ tracing channels for http and friends are the sanctioned alternative — no
 patching at all; the eager patch is for when you need to wrap or rebind,
 the same reach split as the orchestrion comparison below.)
 
+#### Real packages: express, fastify, and dual packages like hono
+
+The mechanism split people reach for — `Module._load` patching for CJS
+consumers, source transforms for ESM — is not actually needed: the tap
+source-patches both module systems from one declarative entry, and
+[`__test__/frameworks.spec.ts`](__test__/frameworks.spec.ts) proves it on
+the real packages, one per shape:
+
+- **express** (pure CJS, no ESM build): the entry targets `lib/express.js`
+  and taps named `module.exports` properties (`json`, `Router`,
+  `application`). Both consumer paths pass — `require('express')` and
+  `import express from 'express'`, the CJS-over-ESM-loader corridor where
+  `Module._load` patching was unreliable pre-fix. (The hook derives the
+  format Node itself would assign — extension, then nearest package.json
+  `"type"` — when `nextLoad` reports none, so a `.js` CJS file is never
+  mis-parsed as ESM.)
+- **fastify** (CJS whose `module.exports` IS the API function): wrapping the
+  factory means rebinding the callable itself, which the reserved
+  `"module.exports"` binding expresses — `bindings: ['module.exports']`,
+  and the patch receives get/set accessors over the whole exports slot. One
+  contract note: a package that self-references
+  (`module.exports.fastify = fastify`, `.default`) needs its aliases
+  rebound with it, ordinary monkey-patch duty.
+- **hono** (true dual package: `dist/` ESM + `dist/cjs/` bundled CJS, both
+  loadable in one process): one entry lists files from both trees and each
+  is transformed in its own mode — the hook resolves the kind per tree via
+  the nameless `{"type":"commonjs"}` package.json hono drops in `dist/cjs`.
+  Two lessons generalize:
+  - _Target the defining module, not the barrel._ `dist/index.js` only
+    re-exports `Hono`; re-exports have no local binding to tap, so the ESM
+    entry points at `dist/hono.js` where the class is declared.
+  - _Mutation works everywhere; rebinding meets bundler reality._ Wrapping
+    `Hono.prototype.route` (a get-only mutation) lands on both builds. But
+    hono's `request`/`fetch` are class _fields_ — per-instance, invisible to
+    prototype patching — so intercepting them means rebinding the export to
+    a subclass. The ESM build's local binding allows that; the bundled CJS
+    build defines exports as non-configurable getters **in sloppy mode**,
+    where plain assignment is a silent no-op. The tap's CJS setter therefore
+    verifies the rebind took and throws
+    (`rebinding Hono had no effect (getter-only CJS export)`) — a loud
+    failure at patch time instead of silently missing instrumentation. This
+    is the one reach edge a loader facade (import-in-the-middle) keeps: its
+    proxy can swap even getter-only exports, at the price of its mechanism.
+
 #### Compared to orchestrion-js
 
 Both tools express the same intent declaratively — a module matcher with a

@@ -13,6 +13,7 @@ import {
   applyMatched,
   inlineMap,
   builtinPatchEntries,
+  runtimeFormatFor,
   PATCH_REGISTRY,
   patchKey,
 } from '@wrap-esm-lambda/core'
@@ -35,8 +36,12 @@ export function createLoadHook(config) {
     // napi, one Buffer.concat) and `applied.code` comes back as a Buffer,
     // which a load hook may return directly — decoding to a string here cost
     // two O(n) encoding conversions per matched module for nothing.
+    // nextLoad reports no format for require()d .js files — fall back to the
+    // format Node itself will assign (extension, then nearest package.json
+    // "type"), so a pure-CJS express is never parsed as ESM and each tree of
+    // a dual package (hono dist/ vs dist/cjs/) gets its real kind.
     const applied = applyMatched(result.source, entries, url, {
-      format: result.format,
+      format: result.format ?? runtimeFormatFor(url),
       delivery: 'registry',
     })
     if (!applied) {

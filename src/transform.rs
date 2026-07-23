@@ -574,23 +574,54 @@ fn collect_esm_exports(program: &Program) -> Vec<TapBinding> {
   out
 }
 
+/// True when `name` can appear bare as an object-literal property name.
+fn is_plain_property_name(name: &str) -> bool {
+  !name.is_empty()
+    && !name.chars().next().unwrap().is_ascii_digit()
+    && name
+      .chars()
+      .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+}
+
 /// Append the get/set accessor properties for the tapped bindings. `local` is
 /// how the module reaches the value (a local identifier for ESM, a
 /// `module.exports.X` path for CJS); a missing setter makes assignment throw
-/// loudly in strict mode.
-fn push_accessors(out: &mut String, bindings: &[(String, String, bool)]) {
-  for (exported, local, reassignable) in bindings {
+/// loudly in strict mode. Names that are not plain identifiers (the reserved
+/// `"module.exports"` binding) are emitted as quoted property names.
+///
+/// `verify_set` (the CJS property accessors) guards the one silent failure
+/// mode assignment has: bundled CJS (esbuild/tsup output) defines exports as
+/// non-configurable getters and is NOT strict mode, so `module.exports.X = v`
+/// on it is a silent no-op — the setter re-reads the property and throws if
+/// the rebind did not take.
+fn push_accessors(out: &mut String, bindings: &[(String, String, bool, bool)]) {
+  for (exported, local, reassignable, verify_set) in bindings {
+    let quoted;
+    let name: &str = if is_plain_property_name(exported) {
+      exported
+    } else {
+      quoted = quote_js_string(exported);
+      &quoted
+    };
     out.push_str("\n  get ");
-    out.push_str(exported);
+    out.push_str(name);
     out.push_str("() { return ");
     out.push_str(local);
     out.push_str("; },");
     if *reassignable {
       out.push_str("\n  set ");
-      out.push_str(exported);
+      out.push_str(name);
       out.push_str("(v) { ");
       out.push_str(local);
-      out.push_str(" = v; },");
+      out.push_str(" = v;");
+      if *verify_set {
+        out.push_str(" if (");
+        out.push_str(local);
+        out.push_str(" !== v) throw new TypeError(\"wrap-esm-lambda: rebinding ");
+        out.push_str(exported);
+        out.push_str(" had no effect (getter-only CJS export)\");");
+      }
+      out.push_str(" },");
     }
   }
 }
@@ -639,10 +670,23 @@ pub fn exports_tap_snippet(
   registry: bool,
   alias_index: u32,
 ) -> Result<String, String> {
-  let accessors: Vec<(String, String, bool)> = if cjs {
+  let accessors: Vec<(String, String, bool, bool)> = if cjs {
     bindings
       .iter()
-      .map(|name| (name.clone(), format!("module.exports.{}", name), true))
+      .map(|name| {
+        // Reserved binding: the whole `module.exports` — for CJS packages
+        // whose exports object IS the API (express, fastify), where wrapping
+        // the callable means rebinding module.exports itself. The name can
+        // never collide with a real property (it is not an identifier), and
+        // the patch reaches it as bindings["module.exports"]. Assigning the
+        // `module.exports` slot always works (plain writable property), so
+        // no set verification there.
+        if name == "module.exports" {
+          (name.clone(), "module.exports".to_string(), true, false)
+        } else {
+          (name.clone(), format!("module.exports.{}", name), true, true)
+        }
+      })
       .collect()
   } else {
     let allocator = Allocator::default();
@@ -661,10 +705,13 @@ pub fn exports_tap_snippet(
             .join(", ")
         ));
       };
+      // ESM locals are strict-mode bindings: a bad rebind (const) already
+      // throws on its own, so no set verification needed.
       resolved.push((
         binding.exported.clone(),
         binding.local.clone(),
         binding.reassignable,
+        false,
       ));
     }
     resolved
@@ -802,6 +849,23 @@ mod tests {
   }
 
   #[test]
+  fn test_exports_tap_cjs_module_exports_binding() {
+    let out = exports_tap_snippet(
+      "",
+      vec!["module.exports".to_string()],
+      "patchFactory",
+      "/abs/p.ts",
+      true,
+      true,
+      0,
+    )
+    .unwrap();
+    println!("{}", out);
+    assert!(out.contains("get \"module.exports\"() { return module.exports; }"));
+    assert!(out.contains("set \"module.exports\"(v) { module.exports = v; }"));
+  }
+
+  #[test]
   fn test_exports_tap_cjs_registry_delivery() {
     let source = "class Client {}\nmodule.exports.Client = Client;\n";
     let out = exports_tap_snippet(
@@ -822,7 +886,11 @@ mod tests {
     );
     assert!(out.contains("[\"/abs/patches/smithy.ts#patchSmithy\"]"));
     assert!(out.contains("get Client() { return module.exports.Client; }"));
-    assert!(out.contains("set Client(v) { module.exports.Client = v; }"));
+    assert!(out.contains("set Client(v) { module.exports.Client = v;"));
+    assert!(
+      out.contains("if (module.exports.Client !== v) throw new TypeError"),
+      "CJS setter must verify the rebind took — sloppy-mode bundles no-op silently on getter-only exports"
+    );
   }
 
   #[test]
