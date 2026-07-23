@@ -1,0 +1,15 @@
+{
+  "name": "example-express-route",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runnable example: declaratively patch express to capture http.route, with zero app changes.",
+  "scripts": {
+    "start": "WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs node --import @wrap-esm-lambda/hooks/register app.mjs"
+  },
+  "dependencies": {
+    "@wrap-esm-lambda/core": "workspace:^",
+    "@wrap-esm-lambda/hooks": "workspace:^",
+    "express": "^5.2.1"
+  }
+}

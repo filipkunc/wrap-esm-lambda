@@ -144,6 +144,18 @@ importers:
         specifier: ^3.3.0
         version: 3.3.0(esbuild@0.28.1)
 
+  examples/express-route:
+    dependencies:
+      '@wrap-esm-lambda/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@wrap-esm-lambda/hooks':
+        specifier: workspace:^
+        version: link:../../packages/hooks
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1
+
   packages/core:
     dependencies:
       semver:
