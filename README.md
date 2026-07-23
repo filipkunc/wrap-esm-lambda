@@ -314,6 +314,25 @@ the real packages, one per shape:
     is the one reach edge a loader facade (import-in-the-middle) keeps: its
     proxy can swap even getter-only exports, at the price of its mechanism.
 
+The toy markers above prove mechanics; the _actual work_ such patches do is
+captured in [`__test__/http-route.spec.ts`](__test__/http-route.spec.ts):
+per-request **`http.route`** — the matched route _template_
+(`/api/users/:id`, never `/users/42`), OTel's hardest-won HTTP semantic
+attribute. Each patch in
+[`patches/http-route.mjs`](__test__/fixtures/patch/patches/http-route.mjs)
+mirrors the mechanism its opentelemetry-js-contrib counterpart uses,
+delivered declaratively instead of via require-in-the-middle:
+
+- **express** — observe at the app boundary (`application.handle`), wrap
+  `res.end`, and read `req.baseUrl + req.route.path` at handler time, so
+  mounted routers compose (`/api` + `/users/:id`).
+- **fastify** — the wrapped factory adds an `onRequest` hook; routing has
+  already resolved, so `request.routeOptions.url` is the template.
+- **hono** — the subclass rebind auto-installs a middleware that reads
+  `c.req.routePath` after `await next()` (the `@hono/otel` shape). ESM
+  build only; on a require()d hono the capture is knowingly absent while
+  the app keeps serving — degradation is open, never silent breakage.
+
 #### Compared to orchestrion-js
 
 Both tools express the same intent declaratively — a module matcher with a
