@@ -1,4 +1,6 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { captureThrows } from './helpers'
 import semver from 'semver'
 
 // The mini range parser must agree with the real `semver` package on the
@@ -96,31 +98,31 @@ const RANGES = [
   '^1.0.0-alpha',
 ]
 
-test('differential: satisfies() agrees with the semver package across the grammar', (t) => {
+test('differential: satisfies() agrees with the semver package across the grammar', () => {
   for (const range of RANGES) {
     for (const version of VERSIONS) {
       const expected = semver.satisfies(version, range)
       const actual = satisfies(version, range)
-      t.is(actual, expected, `satisfies('${version}', '${range}') must be ${expected}`)
+      assert.strictEqual(actual, expected, `satisfies('${version}', '${range}') must be ${expected}`)
     }
   }
 })
 
-test('an invalid range throws loudly instead of silently matching nothing', (t) => {
+test('an invalid range throws loudly instead of silently matching nothing', () => {
   for (const bad of ['not a range', '>=x.y.z', '1.2.3 - 2 - 3', '>>1.0.0']) {
-    const err = t.throws(() => satisfies('1.0.0', bad))
-    t.regex(err!.message, /invalid version range/, `'${bad}' must be rejected loudly`)
+    const err = captureThrows(() => satisfies('1.0.0', bad))
+    assert.match(err.message, /invalid version range/, `'${bad}' must be rejected loudly`)
   }
 })
 
-test('an invalid version fails to match, like semver', (t) => {
+test('an invalid version fails to match, like semver', () => {
   for (const bad of ['garbage', '1.2', '1.2.3.4', '']) {
-    t.is(satisfies(bad, '>=0'), false)
-    t.is(satisfies(bad, '>=0'), semver.satisfies(bad, '>=0'))
+    assert.strictEqual(satisfies(bad, '>=0'), false)
+    assert.strictEqual(satisfies(bad, '>=0'), semver.satisfies(bad, '>=0'))
   }
 })
 
-test('parseVersion handles v-prefix, prerelease and build metadata', (t) => {
-  t.deepEqual(parseVersion('v1.2.3-rc.1+build.5'), { major: 1, minor: 2, patch: 3, prerelease: ['rc', '1'] })
-  t.is(parseVersion('nope'), null)
+test('parseVersion handles v-prefix, prerelease and build metadata', () => {
+  assert.deepStrictEqual(parseVersion('v1.2.3-rc.1+build.5'), { major: 1, minor: 2, patch: 3, prerelease: ['rc', '1'] })
+  assert.strictEqual(parseVersion('nope'), null)
 })

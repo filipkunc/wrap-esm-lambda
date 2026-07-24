@@ -1,4 +1,6 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { captureThrows } from './helpers'
 
 import * as oxc from '../index.js'
 // @ts-expect-error untyped workspace package
@@ -50,38 +52,38 @@ const SHAPES: [string, string, string[]][] = [
 ]
 
 for (const [label, source, bindings] of SHAPES) {
-  test(`both engines emit identical output: ${label}`, (t) => {
+  test(`both engines emit identical output: ${label}`, () => {
     for (const registry of [true, false]) {
       const fromOxc = tap(oxc, source, bindings, registry)
       const fromAcorn = tap(acorn as Engine, source, bindings, registry)
-      t.is(fromAcorn.snippets, fromOxc.snippets, 'snippets are byte-identical')
-      t.is(fromAcorn.code ?? null, fromOxc.code ?? null, 'rewrite output (or its absence) matches')
-      t.is(fromAcorn.map == null, fromOxc.map == null, 'both engines agree on whether a map is emitted')
+      assert.strictEqual(fromAcorn.snippets, fromOxc.snippets, 'snippets are byte-identical')
+      assert.strictEqual(fromAcorn.code ?? null, fromOxc.code ?? null, 'rewrite output (or its absence) matches')
+      assert.strictEqual(fromAcorn.map == null, fromOxc.map == null, 'both engines agree on whether a map is emitted')
     }
   })
 }
 
-test('CJS mode: identical snippets, including module.exports rebinding and verified setters', (t) => {
+test('CJS mode: identical snippets, including module.exports rebinding and verified setters', () => {
   for (const bindings of [['Client'], ['module.exports'], ['Client', 'send']]) {
     const fromOxc = oxc.exportsTap('', [{ ...ENTRY, bindings }], true, true)
     const fromAcorn = (acorn as Engine).exportsTap('', [{ ...ENTRY, bindings }], true, true)
-    t.is(fromAcorn.snippets, fromOxc.snippets)
-    t.is(fromAcorn.code ?? null, null)
-    t.is(fromOxc.code ?? null, null)
+    assert.strictEqual(fromAcorn.snippets, fromOxc.snippets)
+    assert.strictEqual(fromAcorn.code ?? null, null)
+    assert.strictEqual(fromOxc.code ?? null, null)
   }
 })
 
-test('CJS import delivery: identical require() snippets — never an ESM import into CJS', (t) => {
+test('CJS import delivery: identical require() snippets — never an ESM import into CJS', () => {
   for (const bindings of [['Client'], ['module.exports']]) {
     const fromOxc = oxc.exportsTap('', [{ ...ENTRY, bindings }], true, false)
     const fromAcorn = (acorn as Engine).exportsTap('', [{ ...ENTRY, bindings }], true, false)
-    t.is(fromAcorn.snippets, fromOxc.snippets, 'snippets are byte-identical')
-    t.true(fromOxc.snippets.includes('const { patchIt: __wel_patch_0 } = require("/abs/patch.ts");'))
-    t.false(fromOxc.snippets.includes('import {'), 'an import would flip the CJS module format under bundlers')
+    assert.strictEqual(fromAcorn.snippets, fromOxc.snippets, 'snippets are byte-identical')
+    assert.ok(fromOxc.snippets.includes('const { patchIt: __wel_patch_0 } = require("/abs/patch.ts");'))
+    assert.ok(!fromOxc.snippets.includes('import {'), 'an import would flip the CJS module format under bundlers')
   }
 })
 
-test('resolveModule: both engines resolve import-style, byte-identical paths', (t) => {
+test('resolveModule: both engines resolve import-style, byte-identical paths', () => {
   // The star walk's resolver: oxc_resolver natively, its JS twin in the
   // acorn engine. Pinned on the fixture shapes that matter — an exports map
   // under the `import` condition, a map-less `"module"`-before-`"main"`
@@ -97,16 +99,16 @@ test('resolveModule: both engines resolve import-style, byte-identical paths', (
   for (const [specifier, suffix] of cases) {
     const fromOxc = oxc.resolveModule(specifier, shapesDir)
     const fromAcorn = (acorn as Engine).resolveModule(specifier, shapesDir)
-    t.is(fromAcorn, fromOxc, `engines agree on ${specifier}`)
+    assert.strictEqual(fromAcorn, fromOxc, `engines agree on ${specifier}`)
     if (suffix === null) {
-      t.is(fromOxc, null, `${specifier} resolves nowhere`)
+      assert.strictEqual(fromOxc, null, `${specifier} resolves nowhere`)
     } else {
-      t.true(fromOxc !== null && fromOxc.endsWith(suffix), `${specifier} -> .../${suffix} (got ${fromOxc})`)
+      assert.ok(fromOxc !== null && fromOxc.endsWith(suffix), `${specifier} -> .../${suffix} (got ${fromOxc})`)
     }
   }
 })
 
-test('hasModuleSyntax: both engines answer the CJS-or-ESM syntax question identically', (t) => {
+test('hasModuleSyntax: both engines answer the CJS-or-ESM syntax question identically', () => {
   const cases: [string, boolean][] = [
     ['export const x = 1;\n', true],
     ['import x from "y";\n', true],
@@ -118,12 +120,12 @@ test('hasModuleSyntax: both engines answer the CJS-or-ESM syntax question identi
     ['with (obj) { x = 1; }\n', false],
   ]
   for (const [source, expected] of cases) {
-    t.is(oxc.hasModuleSyntax(source), expected, `oxc on ${JSON.stringify(source)}`)
-    t.is((acorn as Engine).hasModuleSyntax(source), expected, `acorn on ${JSON.stringify(source)}`)
+    assert.strictEqual(oxc.hasModuleSyntax(source), expected, `oxc on ${JSON.stringify(source)}`)
+    assert.strictEqual((acorn as Engine).hasModuleSyntax(source), expected, `acorn on ${JSON.stringify(source)}`)
   }
 })
 
-test('multiple entries share rewrites identically across engines', (t) => {
+test('multiple entries share rewrites identically across engines', () => {
   const source = 'export const VERSION = "1.0.0";\n'
   const entries = [
     { bindings: ['VERSION'], patchName: 'patchA', patchFrom: '/a.ts', aliasIndex: 0 },
@@ -131,12 +133,12 @@ test('multiple entries share rewrites identically across engines', (t) => {
   ]
   const fromOxc = oxc.exportsTap(source, entries, false, false, 'mod.js')
   const fromAcorn = (acorn as Engine).exportsTap(source, entries, false, false, 'mod.js')
-  t.is(fromAcorn.snippets, fromOxc.snippets)
-  t.is(fromAcorn.code, fromOxc.code)
-  t.is(fromAcorn.code!.match(/let VERSION/g)!.length, 1, 'both entries share one demotion')
+  assert.strictEqual(fromAcorn.snippets, fromOxc.snippets)
+  assert.strictEqual(fromAcorn.code, fromOxc.code)
+  assert.strictEqual(fromAcorn.code!.match(/let VERSION/g)!.length, 1, 'both entries share one demotion')
 })
 
-test('star resolutions produce identical append-only stubs', (t) => {
+test('star resolutions produce identical append-only stubs', () => {
   const source = 'export * from "./m.js";\n'
   const run = (engine: Engine) =>
     engine.exportsTap(source, [{ ...ENTRY, bindings: ['Hidden'] }], false, true, 'mod.js', undefined, [
@@ -144,42 +146,42 @@ test('star resolutions produce identical append-only stubs', (t) => {
     ])
   const fromOxc = run(oxc)
   const fromAcorn = run(acorn as Engine)
-  t.is(fromAcorn.snippets, fromOxc.snippets)
-  t.is(fromAcorn.code ?? null, null, 'star shadowing stays append-only')
-  t.is(fromOxc.code ?? null, null)
+  assert.strictEqual(fromAcorn.snippets, fromOxc.snippets)
+  assert.strictEqual(fromAcorn.code ?? null, null, 'star shadowing stays append-only')
+  assert.strictEqual(fromOxc.code ?? null, null)
 })
 
-test('a missing export throws the same message from both engines', (t) => {
+test('a missing export throws the same message from both engines', () => {
   const source = 'export * from "./m.js";\nexport class Client {}\nexport default 1;\n'
-  const errors = engines.map(([, engine]) => t.throws(() => tap(engine, source, ['Hidden']))!.message)
-  t.is(errors[1], errors[0])
-  t.regex(errors[0], /export 'Hidden' not found in module/)
-  t.regex(errors[0], /available: Client, default/)
-  t.regex(errors[0], /unresolved 'export \*' sources: \.\/m\.js/)
+  const errors = engines.map(([, engine]) => captureThrows(() => tap(engine, source, ['Hidden'])).message)
+  assert.strictEqual(errors[1], errors[0])
+  assert.match(errors[0], /export 'Hidden' not found in module/)
+  assert.match(errors[0], /available: Client, default/)
+  assert.match(errors[0], /unresolved 'export \*' sources: \.\/m\.js/)
 })
 
-test('esmModuleExports reports the same surface from both engines', (t) => {
+test('esmModuleExports reports the same surface from both engines', () => {
   const source = 'export const a = 1;\nexport * from "./x.js";\nexport * as ns from "./y.js";\nexport default 2;\n'
   const fromOxc = oxc.esmModuleExports(source)
   const fromAcorn = (acorn as Engine).esmModuleExports(source)
-  t.deepEqual(fromAcorn.names, fromOxc.names)
-  t.deepEqual(fromAcorn.starSources, fromOxc.starSources)
-  t.deepEqual(fromAcorn.starSources, ['./x.js'], 'only the bare star is a walk source')
+  assert.deepStrictEqual(fromAcorn.names, fromOxc.names)
+  assert.deepStrictEqual(fromAcorn.starSources, fromOxc.starSources)
+  assert.deepStrictEqual(fromAcorn.starSources, ['./x.js'], 'only the bare star is a walk source')
 })
 
-test('acorn rewrite map: positions in untouched code resolve to the original source', async (t) => {
+test('acorn rewrite map: positions in untouched code resolve to the original source', async () => {
   const source = 'export const handler = async (event) => {\n  throw new Error("boom");\n};\n'
   const out = tap(acorn as Engine, source, ['handler'])
-  t.truthy(out.map)
+  assert.ok(out.map)
   const { TraceMap, originalPositionFor } = await import('@jridgewell/trace-mapping')
   const tracer = new TraceMap(JSON.parse(out.map!))
   // the throw sits on line 2 in both the original and the demoted module
   const original = originalPositionFor(tracer, { line: 2, column: 8 })
-  t.is(original.source, 'mod.js')
-  t.is(original.line, 2)
+  assert.strictEqual(original.source, 'mod.js')
+  assert.strictEqual(original.line, 2)
 })
 
-test('acorn chained map reaches the upstream original source', (t) => {
+test('acorn chained map reaches the upstream original source', () => {
   // Simulate the tsc pipeline: handler.js with an upstream map back to
   // handler.ts — the wrap map must chain through it (same scenario as the
   // Rust test_chained_source_map).
@@ -195,39 +197,39 @@ test('acorn chained map reaches the upstream original source', (t) => {
     'handler.js',
     upstream,
   )
-  t.true(code.includes('wrapper('))
+  assert.ok(code.includes('wrapper('))
   const parsed = JSON.parse(map!)
-  t.deepEqual(parsed.sources, ['handler.ts'])
-  t.truthy(parsed.sourcesContent, 'chaining carries the original content over')
+  assert.deepStrictEqual(parsed.sources, ['handler.ts'])
+  assert.ok(parsed.sourcesContent, 'chaining carries the original content over')
 })
 
 // The wrap transform, acorn side: same behavior contract as the Rust unit
 // tests (test_var_transform, test_fn_transform, test_export_list,
 // test_export_from), formatting kept from the source instead of regenerated.
-test('acorn wrap: variable export wraps the initializer in place', (t) => {
+test('acorn wrap: variable export wraps the initializer in place', () => {
   const source = 'export const handler = async function(event) {\n\treturn "Hi";\n}, other = 123;\n'
   const out = (acorn as Engine).transformLambda(source, 'handler', 'wrapper')
-  t.is(out, 'export const handler = wrapper(async function(event) {\n\treturn "Hi";\n}), other = 123;\n')
+  assert.strictEqual(out, 'export const handler = wrapper(async function(event) {\n\treturn "Hi";\n}), other = 123;\n')
 })
 
-test('acorn wrap: function declaration becomes a wrapped const', (t) => {
+test('acorn wrap: function declaration becomes a wrapped const', () => {
   const out = (acorn as Engine).transformLambda(
     'export async function handler(event) {\n  return 1;\n}\n',
     'handler',
     'wrapper',
   )
-  t.is(out, 'export const handler = wrapper(async function (event) {\n  return 1;\n});\n')
+  assert.strictEqual(out, 'export const handler = wrapper(async function (event) {\n  return 1;\n});\n')
 })
 
-test('acorn wrap: renamed list export wraps the local declaration', (t) => {
+test('acorn wrap: renamed list export wraps the local declaration', () => {
   const source = 'const x = 1;\nconst y = async (event) => "Hi";\nexport { x, y as z };\n'
   const out = (acorn as Engine).transformLambda(source, 'z', 'wrapper')
-  t.true(out.includes('const y = wrapper(async (event) => "Hi");'))
-  t.true(out.includes('export { x, y as z };'))
+  assert.ok(out.includes('const y = wrapper(async (event) => "Hi");'))
+  assert.ok(out.includes('export { x, y as z };'))
 })
 
-test('acorn wrap: re-export from another module imports and wraps the original', (t) => {
+test('acorn wrap: re-export from another module imports and wraps the original', () => {
   const out = (acorn as Engine).transformLambda('export { handler } from "other.js";', 'handler', 'wrapper')
-  t.true(out.includes('import { handler as orig_handler } from "other.js";'))
-  t.true(out.includes('export const handler = wrapper(orig_handler);'))
+  assert.ok(out.includes('import { handler as orig_handler } from "other.js";'))
+  assert.ok(out.includes('export const handler = wrapper(orig_handler);'))
 })

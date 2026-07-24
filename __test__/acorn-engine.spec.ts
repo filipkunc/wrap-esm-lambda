@@ -1,4 +1,5 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -22,34 +23,34 @@ const acornEnv = (extra: Record<string, string>) => ({ ...process.env, WRAP_ESM_
 
 const SHAPES_EXPECTED = 'wrapped:hi:x wrapped:hi:n wrapped:dflt:y patched:inner wrapped:greet ns:inner star:inner'
 
-testRuntime('acorn engine, runtime mode: the hybrid wrap fixture behaves identically', async (t) => {
+testRuntime('acorn engine, runtime mode: the hybrid wrap fixture behaves identically', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('hybrid', 'main.mjs')],
     { env: acornEnv({ WRAP_ESM_LAMBDA_CONFIG: fixture('hybrid', 'wrap.config.mjs') }) },
   )
-  t.is(stdout.trim(), 'wrapped:hi:42')
+  assert.strictEqual(stdout.trim(), 'wrapped:hi:42')
 })
 
-testRuntime('acorn engine, runtime mode: every tap rewrite shape rebinds', async (t) => {
+testRuntime('acorn engine, runtime mode: every tap rewrite shape rebinds', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('tap-shapes', 'app-shapes.mjs')],
     { env: acornEnv({ WRAP_ESM_LAMBDA_CONFIG: fixture('tap-shapes', 'wrap.config.shapes.mjs') }) },
   )
-  t.is(stdout.trim(), SHAPES_EXPECTED)
+  assert.strictEqual(stdout.trim(), SHAPES_EXPECTED)
 })
 
-testRuntime('acorn engine, runtime mode: bare-specifier export * resolves through the JS resolver', async (t) => {
+testRuntime('acorn engine, runtime mode: bare-specifier export * resolves through the JS resolver', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('tap-shapes', 'app-star-bare.mjs')],
     { env: acornEnv({ WRAP_ESM_LAMBDA_CONFIG: fixture('tap-shapes', 'wrap.config.star-bare.mjs') }) },
   )
-  t.is(stdout.trim(), 'starpkg:star-pkg wrapped:plain:p')
+  assert.strictEqual(stdout.trim(), 'starpkg:star-pkg wrapped:plain:p')
 })
 
-test('acorn engine, build mode: the same rewrites land through esbuild', async (t) => {
+test('acorn engine, build mode: the same rewrites land through esbuild', async () => {
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-acorn-'))
   try {
     const outfile = join(outDir, 'bundle.mjs')
@@ -87,18 +88,18 @@ test('acorn engine, build mode: the same rewrites land through esbuild', async (
       { env: acornEnv({}) },
     )
     const bundled = await readFile(outfile, 'utf8')
-    t.true(bundled.includes('patchConstHandler'), 'patch code is bundled in')
+    assert.ok(bundled.includes('patchConstHandler'), 'patch code is bundled in')
 
     // plain node, no hooks, no env — rewrites are baked into the artifact
     const { stdout } = await execFileAsync(process.execPath, [outfile])
-    t.is(stdout.trim(), SHAPES_EXPECTED)
+    assert.strictEqual(stdout.trim(), SHAPES_EXPECTED)
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
 })
 
-test('an unknown engine name fails loudly at load', async (t) => {
-  await t.throwsAsync(
+test('an unknown engine name fails loudly at load', async () => {
+  await assert.rejects(
     execFileAsync(process.execPath, ['--import', '@wrap-esm-lambda/hooks/register', fixture('hybrid', 'main.mjs')], {
       env: {
         ...process.env,

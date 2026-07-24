@@ -184,13 +184,13 @@ jobs:
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
           options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
-          # node:25+ images bundle no package manager (yarn/corepack removed),
-          # so run the ava bin shim directly — it only needs node on PATH.
+          # node:25+ images bundle no package manager (yarn/corepack removed);
+          # the suite runs on node's own test runner, so plain node suffices.
           # Second run: the whole suite again on the pure-JS acorn engine, so
           # the JS-only mode stays as covered as the native one.
           run: |
-            ./node_modules/.bin/ava
-            WRAP_ESM_LAMBDA_ENGINE=acorn ./node_modules/.bin/ava
+            OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+            WRAP_ESM_LAMBDA_ENGINE=acorn OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
   test-wasi:
     name: Test WASI target
     needs:

@@ -1,4 +1,5 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
@@ -24,25 +25,29 @@ const run = async (setup: string, app: string) => {
   return stdout.trim()
 }
 
-test('off-thread iitm intercepts the ESM import path', async (t) => {
-  t.is(await run('iitm-setup-offthread.mjs', 'app.mjs'), 'iitm:sent:hello')
+test('off-thread iitm intercepts the ESM import path', async () => {
+  assert.strictEqual(await run('iitm-setup-offthread.mjs', 'app.mjs'), 'iitm:sent:hello')
 })
 
-test('off-thread iitm never sees a pure require() chain', async (t) => {
-  t.is(await run('iitm-setup-offthread.mjs', 'app.cjs'), 'sent:hello', 'unpatched — CJS entry bypasses the facade')
+test('off-thread iitm never sees a pure require() chain', async () => {
+  assert.strictEqual(
+    await run('iitm-setup-offthread.mjs', 'app.cjs'),
+    'sent:hello',
+    'unpatched — CJS entry bypasses the facade',
+  )
 })
 
-testSyncIitm('sync iitm intercepts the ESM import path', async (t) => {
-  t.is(await run('iitm-setup.mjs', 'app.mjs'), 'iitm:sent:hello')
+testSyncIitm('sync iitm intercepts the ESM import path', async () => {
+  assert.strictEqual(await run('iitm-setup.mjs', 'app.mjs'), 'iitm:sent:hello')
 })
 
-testSyncIitm('sync iitm still never sees a pure require() chain; the tap does', async (t) => {
-  t.is(await run('iitm-setup.mjs', 'app.cjs'), 'sent:hello', 'unpatched even in sync mode')
+testSyncIitm('sync iitm still never sees a pure require() chain; the tap does', async () => {
+  assert.strictEqual(await run('iitm-setup.mjs', 'app.cjs'), 'sent:hello', 'unpatched even in sync mode')
 
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.cjs')],
     { env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.ts') } },
   )
-  t.is(stdout.trim(), 'patched:sent:hello', 'the exports tap patches the same require() chain')
+  assert.strictEqual(stdout.trim(), 'patched:sent:hello', 'the exports tap patches the same require() chain')
 })

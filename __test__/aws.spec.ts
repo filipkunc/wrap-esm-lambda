@@ -1,4 +1,5 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -22,16 +23,16 @@ const { default: config } = await import(pathToFileURL(fixture('aws.config.ts'))
 
 const hookEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('aws.config.ts') }
 
-test('runtime mode: real S3Client send intercepted via @smithy/core dist-cjs', async (t) => {
+test('runtime mode: real S3Client send intercepted via @smithy/core dist-cjs', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
     { env: hookEnv },
   )
-  t.is(stdout.trim(), 'PutObjectCommand')
+  assert.strictEqual(stdout.trim(), 'PutObjectCommand')
 })
 
-test('build mode: real S3Client send intercepted via @smithy/core dist-es', async (t) => {
+test('build mode: real S3Client send intercepted via @smithy/core dist-es', async () => {
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-aws-'))
   try {
     const outfile = join(outDir, 'bundle.mjs')
@@ -48,7 +49,7 @@ test('build mode: real S3Client send intercepted via @smithy/core dist-es', asyn
     })
     // plain node, no hooks — the interception is baked into the bundle
     const { stdout } = await execFileAsync(process.execPath, [outfile])
-    t.is(stdout.trim(), 'PutObjectCommand')
+    assert.strictEqual(stdout.trim(), 'PutObjectCommand')
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }

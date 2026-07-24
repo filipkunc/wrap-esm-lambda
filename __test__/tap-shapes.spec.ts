@@ -1,4 +1,6 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { captureThrows } from './helpers'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -21,16 +23,16 @@ const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/tap-shapes/$
 const EXPECTED = 'wrapped:hi:x wrapped:hi:n wrapped:dflt:y patched:inner wrapped:greet ns:inner star:inner'
 const hookEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.shapes.mjs') }
 
-test('runtime mode: const, anonymous default and barrel re-export all rebind', async (t) => {
+test('runtime mode: const, anonymous default and barrel re-export all rebind', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-shapes.mjs')],
     { env: hookEnv },
   )
-  t.is(stdout.trim(), EXPECTED)
+  assert.strictEqual(stdout.trim(), EXPECTED)
 })
 
-test('build mode: the same rewrites land through esbuild', async (t) => {
+test('build mode: the same rewrites land through esbuild', async () => {
   // @ts-expect-error untyped workspace package
   const { unplugin } = await import('@wrap-esm-lambda/unplugin')
   const { default: config } = await import(pathToFileURL(fixture('wrap.config.shapes.mjs')).href)
@@ -47,11 +49,11 @@ test('build mode: the same rewrites land through esbuild', async (t) => {
       logLevel: 'silent',
     })
     const bundled = await readFile(outfile, 'utf8')
-    t.true(bundled.includes('patchConstHandler'), 'patch code is bundled in')
+    assert.ok(bundled.includes('patchConstHandler'), 'patch code is bundled in')
 
     // plain node, no hooks — rewrites are baked into the artifact
     const { stdout } = await execFileAsync(process.execPath, [outfile])
-    t.is(stdout.trim(), EXPECTED)
+    assert.strictEqual(stdout.trim(), EXPECTED)
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
@@ -63,16 +65,16 @@ test('build mode: the same rewrites land through esbuild', async (t) => {
 const STAR_BARE_EXPECTED = 'starpkg:star-pkg wrapped:plain:p'
 const starBareEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.star-bare.mjs') }
 
-test('runtime mode: bare-specifier export * resolves through package resolution', async (t) => {
+test('runtime mode: bare-specifier export * resolves through package resolution', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-star-bare.mjs')],
     { env: starBareEnv },
   )
-  t.is(stdout.trim(), STAR_BARE_EXPECTED)
+  assert.strictEqual(stdout.trim(), STAR_BARE_EXPECTED)
 })
 
-test('build mode: bare-specifier export * lands through esbuild', async (t) => {
+test('build mode: bare-specifier export * lands through esbuild', async () => {
   // @ts-expect-error untyped workspace package
   const { unplugin } = await import('@wrap-esm-lambda/unplugin')
   const { default: config } = await import(pathToFileURL(fixture('wrap.config.star-bare.mjs')).href)
@@ -89,13 +91,13 @@ test('build mode: bare-specifier export * lands through esbuild', async (t) => {
       logLevel: 'silent',
     })
     const { stdout } = await execFileAsync(process.execPath, [outfile])
-    t.is(stdout.trim(), STAR_BARE_EXPECTED)
+    assert.strictEqual(stdout.trim(), STAR_BARE_EXPECTED)
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
 })
 
-test('bare-specifier export *: the shadow export imports from the specifier as written', async (t) => {
+test('bare-specifier export *: the shadow export imports from the specifier as written', async () => {
   // Resolution informs the walk only — the emitted stub must keep the bare
   // specifier so Node or the bundler still performs its own resolution.
   // @ts-expect-error untyped workspace package
@@ -113,17 +115,16 @@ test('bare-specifier export *: the shadow export imports from the specifier as w
     format: 'module',
     delivery: 'registry',
   })
-  t.truthy(applied)
-  t.true(applied.code.includes('import { StarPkg as __wel_l0_src } from "@fake/star-pkg";'))
-  t.true(applied.code.includes('export { __wel_l0 as StarPkg };'), 'explicit export shadows the star')
-  t.true(applied.code.includes("export * from '@fake/star-pkg'"), 'the star statement itself is untouched')
+  assert.ok(applied)
+  assert.ok(applied.code.includes('import { StarPkg as __wel_l0_src } from "@fake/star-pkg";'))
+  assert.ok(applied.code.includes('export { __wel_l0 as StarPkg };'), 'explicit export shadows the star')
+  assert.ok(applied.code.includes("export * from '@fake/star-pkg'"), 'the star statement itself is untouched')
 })
 
-test('bare-specifier export *: an uninstalled package keeps the loud not-found error', async (t) => {
+test('bare-specifier export *: an uninstalled package keeps the loud not-found error', async () => {
   // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const barePath = fixture('node_modules/@fake/shapes/star-bare.js')
-  const { readFileSync } = await import('node:fs')
   const source = 'export * from "@fake/not-installed";\n'
   const entries = [
     {
@@ -132,12 +133,14 @@ test('bare-specifier export *: an uninstalled package keeps the loud not-found e
       bindings: ['Ghost'],
     },
   ]
-  const err = t.throws(() => core.applyMatched(source, entries, barePath, { format: 'module', delivery: 'registry' }))
-  t.regex(err!.message, /export 'Ghost' not found/)
-  t.regex(err!.message, /unresolved 'export \*' sources/)
+  const err = captureThrows(() =>
+    core.applyMatched(source, entries, barePath, { format: 'module', delivery: 'registry' }),
+  )
+  assert.match(err.message, /export 'Ghost' not found/)
+  assert.match(err.message, /unresolved 'export \*' sources/)
 })
 
-test('the Lambda handler shape: a wrap-style patch entry needs no wrap entry anymore', async (t) => {
+test('the Lambda handler shape: a wrap-style patch entry needs no wrap entry anymore', async () => {
   // The original problem statement of this repo — wrap `export const
   // handler` — expressed as a plain patch entry rebinding the handler.
   // Before the rewrite path this threw "Cannot set property handler".
@@ -155,19 +158,19 @@ test('the Lambda handler shape: a wrap-style patch entry needs no wrap entry any
     format: 'module',
     delivery: 'registry',
   })
-  t.truthy(applied)
-  t.true(applied.code.includes('export let handler'), 'const demoted so the patch can rebind')
-  t.truthy(applied.map, 'the rewrite carries a source map for the demotion')
+  assert.ok(applied)
+  assert.ok(applied.code.includes('export let handler'), 'const demoted so the patch can rebind')
+  assert.ok(applied.map, 'the rewrite carries a source map for the demotion')
 
   // buffer path takes the same rewrite (string out, since the module changed)
   const viaBuffer = core.applyMatched(Buffer.from(source), entries, fixture('node_modules/@fake/shapes/const.js'), {
     format: 'module',
     delivery: 'registry',
   })
-  t.is(viaBuffer.code.toString(), applied.code, 'buffer and string paths emit identical modules')
+  assert.strictEqual(viaBuffer.code.toString(), applied.code, 'buffer and string paths emit identical modules')
 })
 
-test('bare export *: the star-source walk resolves names through a transitive chain', async (t) => {
+test('bare export *: the star-source walk resolves names through a transitive chain', async () => {
   // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const starPath = fixture('node_modules/@fake/shapes/star.js')
@@ -183,13 +186,13 @@ test('bare export *: the star-source walk resolves names through a transitive ch
     format: 'module',
     delivery: 'registry',
   })
-  t.truthy(applied)
-  t.true(applied.code.includes('import { Inner as __wel_l0_src } from "./star-mid.js";'))
-  t.true(applied.code.includes('export { __wel_l0 as Inner };'), 'explicit export shadows the star')
-  t.true(applied.code.includes("export * from './star-mid.js'"), 'the star statement itself is untouched')
+  assert.ok(applied)
+  assert.ok(applied.code.includes('import { Inner as __wel_l0_src } from "./star-mid.js";'))
+  assert.ok(applied.code.includes('export { __wel_l0 as Inner };'), 'explicit export shadows the star')
+  assert.ok(applied.code.includes("export * from './star-mid.js'"), 'the star statement itself is untouched')
 })
 
-test('bare export *: an ambiguous name (two star providers) fails loudly', async (t) => {
+test('bare export *: an ambiguous name (two star providers) fails loudly', async () => {
   // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const ambPath = fixture('node_modules/@fake/shapes/amb.js')
@@ -201,14 +204,14 @@ test('bare export *: an ambiguous name (two star providers) fails loudly', async
       bindings: ['Dup'],
     },
   ]
-  const err = t.throws(() =>
+  const err = captureThrows(() =>
     core.applyMatched(readFileSync(ambPath, 'utf8'), entries, ambPath, { format: 'module', delivery: 'registry' }),
   )
-  t.regex(err!.message, /ambiguous/)
-  t.regex(err!.message, /amb-a\.js.*amb-b\.js/)
+  assert.match(err.message, /ambiguous/)
+  assert.match(err.message, /amb-a\.js.*amb-b\.js/)
 })
 
-test('bare export *: a name no star source provides keeps the loud not-found error', async (t) => {
+test('bare export *: a name no star source provides keeps the loud not-found error', async () => {
   // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const starPath = fixture('node_modules/@fake/shapes/star.js')
@@ -220,9 +223,9 @@ test('bare export *: a name no star source provides keeps the loud not-found err
       bindings: ['Nonexistent'],
     },
   ]
-  const err = t.throws(() =>
+  const err = captureThrows(() =>
     core.applyMatched(readFileSync(starPath, 'utf8'), entries, starPath, { format: 'module', delivery: 'registry' }),
   )
-  t.regex(err!.message, /export 'Nonexistent' not found/)
-  t.regex(err!.message, /unresolved 'export \*' sources/)
+  assert.match(err.message, /export 'Nonexistent' not found/)
+  assert.match(err.message, /unresolved 'export \*' sources/)
 })
