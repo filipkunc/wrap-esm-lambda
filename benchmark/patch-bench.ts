@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 import { exportsTap, exportsTapFromBuffer } from '../index.js'
+// @ts-expect-error untyped workspace package
+import * as acornEngine from '@wrap-esm-lambda/engine-acorn'
 
 const TAP = [{ bindings: ['Client'], patchName: 'patch', patchFrom: '/p.ts', aliasIndex: 0 }]
 // @ts-expect-error untyped internal module
@@ -116,6 +118,31 @@ const cases: { label: string; run: () => void }[] = [
     },
   },
   {
+    // the same parse+validate through the pure-JS engine: what the tap costs
+    // with no Rust in the loop (acorn parse instead of oxc-across-napi)
+    label: 'acorn exports tap complete (dist-es, parse + validate)',
+    run: () => acornEngine.exportsTap(esmSource, TAP, false, true),
+  },
+  {
+    label: 'acorn exports tap (cjs snippet, pure JS)',
+    run: () => acornEngine.exportsTap('', TAP, true, true),
+  },
+  {
+    // the whole per-module hook operation, JS-only: decode + parse + append
+    label: 'acorn hook op, strings (toString + tap + append)',
+    run: () => {
+      const source = esmBuffer.toString('utf8')
+      void (source + acornEngine.exportsTap(source, TAP, false, true).snippets)
+    },
+  },
+  {
+    label: 'acorn hook op, strings (dist-cjs-sized module)',
+    run: () => {
+      const source = esmBigBuffer.toString('utf8')
+      void (source + acornEngine.exportsTap(source, TAP, false, true).snippets)
+    },
+  },
+  {
     // iitm's per-module analysis step (es-module-lexer): the fair mechanism
     // comparison for our parse+validate. Its full per-module cost additionally
     // includes generating and evaluating a facade module per interception.
@@ -188,6 +215,12 @@ const coldStarts: [string, string[], NodeJS.ProcessEnv, string][] = [
     'exports tap runtime hook (.mjs config)',
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
     hookEnvMjs,
+    'patched:sent:hello',
+  ],
+  [
+    'exports tap runtime hook (acorn engine, .mjs config)',
+    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
+    { ...hookEnvMjs, WRAP_ESM_LAMBDA_ENGINE: 'acorn' },
     'patched:sent:hello',
   ],
   [

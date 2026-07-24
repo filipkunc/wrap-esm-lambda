@@ -186,7 +186,11 @@ jobs:
           options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
           # node:25+ images bundle no package manager (yarn/corepack removed),
           # so run the ava bin shim directly — it only needs node on PATH.
-          run: ./node_modules/.bin/ava
+          # Second run: the whole suite again on the pure-JS acorn engine, so
+          # the JS-only mode stays as covered as the native one.
+          run: |
+            ./node_modules/.bin/ava
+            WRAP_ESM_LAMBDA_ENGINE=acorn ./node_modules/.bin/ava
   test-wasi:
     name: Test WASI target
     needs:

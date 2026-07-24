@@ -2,7 +2,10 @@
 
 Shared core of the hybrid instrumentation setup: one declarative config
 (`defineConfig` / `definePatches`), one matcher (`matchEntries`), and one
-apply step (`applyMatched`) built on the native `wrap-esm-lambda` oxc addon.
+apply step (`applyMatched`) built on a pluggable transform engine — the
+native `wrap-esm-lambda` oxc addon by default, or the pure-JS
+[`@wrap-esm-lambda/engine-acorn`](../engine-acorn) (see
+[Choosing the engine](#choosing-the-engine)).
 
 Both shells consume this package, so the instrumented output is byte-identical
 whichever mode produced it:
@@ -21,10 +24,32 @@ re-exported from [`src/index.mjs`](src/index.mjs):
 | [`src/config.mjs`](src/config.mjs)     | the entry shapes users write (`defineConfig` / `definePatches`, typedefs)                 |
 | [`src/match.mjs`](src/match.mjs)       | which entries apply to which module: package identity, semver range, files, builtin split |
 | [`src/format.mjs`](src/format.mjs)     | the CJS-or-ESM decision, reproducing Node's own format rules                              |
-| [`src/apply.mjs`](src/apply.mjs)       | entries -> instrumented source via the native oxc addon, plus the double-wrap sentinel    |
+| [`src/engine.mjs`](src/engine.mjs)     | the transform engine binding: native oxc addon (default) or the pure-JS acorn engine      |
+| [`src/apply.mjs`](src/apply.mjs)       | entries -> instrumented source via the selected engine, plus the double-wrap sentinel     |
 | [`src/registry.mjs`](src/registry.mjs) | the runtime patch-function registry contract shared with the Rust emission                |
 | [`src/stars.mjs`](src/stars.mjs)       | the `export * from` graph walk resolving star-forwarded names at transform time           |
 | [`src/range.mjs`](src/range.mjs)       | the semver-range matcher (replaces the `semver` package for cold start; loud on typos)    |
+
+## Choosing the engine
+
+Every transform call goes through [`src/engine.mjs`](src/engine.mjs), which
+binds once, at load time, to one of two implementations of the same surface:
+
+- `oxc` (default) — the native `wrap-esm-lambda` addon: oxc parse/codegen in
+  Rust, module sources crossing napi zero-copy as UTF-8 buffers;
+- `acorn` — [`@wrap-esm-lambda/engine-acorn`](../engine-acorn): acorn +
+  magic-string, pure JS, no native binary anywhere.
+
+```sh
+WRAP_ESM_LAMBDA_ENGINE=acorn node --import @wrap-esm-lambda/hooks/register app.mjs
+```
+
+The choice is process-wide by design (both shells instrument every matched
+module with it), and an unknown name fails loudly at startup. The engines
+emit byte-identical snippets, share error messages, and pass the identical
+test suite; the trade-off is performance — the parse-dominated tap runs ~6x
+faster through oxc — versus running with no native dependency at all. Numbers
+in [docs/benchmarks.md](../../docs/benchmarks.md#js-only-vs-js--rust-the-two-engines).
 
 ## Patch author contract
 

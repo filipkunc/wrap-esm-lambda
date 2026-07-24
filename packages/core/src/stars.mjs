@@ -17,7 +17,7 @@
 //   Node derives at runtime) simply cannot provide the name statically.
 import { readFileSync } from 'node:fs'
 import { dirname, resolve as resolvePath } from 'node:path'
-import { esmModuleExports } from 'wrap-esm-lambda'
+import { esmModuleExports } from './engine.mjs'
 
 function isRelative(specifier) {
   return specifier.startsWith('./') || specifier.startsWith('../')

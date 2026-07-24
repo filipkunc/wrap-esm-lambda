@@ -153,12 +153,13 @@ every Node 22/24/26 rung, including the minors where sync hooks and
 
 ## The packages
 
-| package                                          | role                                                                                                                                       |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`@wrap-esm-lambda/core`](packages/core)         | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)   |
-| [`@wrap-esm-lambda/hooks`](packages/hooks)       | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                           |
-| [`@wrap-esm-lambda/unplugin`](packages/unplugin) | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack              |
-| [`wrap-esm-lambda`](index.d.ts) (repo root)      | the native oxc addon both shells call: `exportsTap*` (the tap) and `transformLambda*` (the handler wrap), with zero-copy `Buffer` variants |
+| package                                                  | role                                                                                                                                           |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@wrap-esm-lambda/core`](packages/core)                 | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)       |
+| [`@wrap-esm-lambda/hooks`](packages/hooks)               | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                               |
+| [`@wrap-esm-lambda/unplugin`](packages/unplugin)         | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack                  |
+| [`wrap-esm-lambda`](index.d.ts) (repo root)              | the native oxc addon — the default engine: `exportsTap*` (the tap) and `transformLambda*` (the handler wrap), with zero-copy `Buffer` variants |
+| [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) | the pure-JS engine (acorn + magic-string), same surface and byte-identical snippets — select with `WRAP_ESM_LAMBDA_ENGINE=acorn`               |
 
 The `core` source mirrors the pipeline a patch travels:
 [`config.mjs`](packages/core/src/config.mjs) (the entry shapes) ->
@@ -322,6 +323,12 @@ The headline numbers (details and methodology in
   `.mjs` config (not `.ts`) where cold start matters.
 - Module sources cross the napi boundary zero-copy as UTF-8 buffers on the
   runtime path; only the few-hundred-byte snippet comes back.
+- A pure-JS engine ([`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn),
+  `WRAP_ESM_LAMBDA_ENGINE=acorn`) runs the whole setup with no native binary:
+  same emitted code, ~6x slower on the parse-dominated tap (~86 µs vs ~14 µs
+  per matched ESM module), ~14 ms more cold start — the measured JS-only vs
+  JS + Rust trade-off, detailed in
+  [docs/benchmarks.md](docs/benchmarks.md#js-only-vs-js--rust-the-two-engines).
 
 ## Design notes & further reading
 

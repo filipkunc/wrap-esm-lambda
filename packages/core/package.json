@@ -12,6 +12,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@wrap-esm-lambda/engine-acorn": "workspace:^",
     "wrap-esm-lambda": "workspace:^"
   }
 }

@@ -64,7 +64,12 @@ validates exports and appends (regenerating the module solely for export
 shapes that need restructuring), while orchestrion parses, queries and
 regenerates the method body through its wasm/esquery pipeline — and unlike
 the handler benchmark, memoizing `esquery.parse` no longer rescues it,
-because the body rewrite itself dominates. The flip side is honest:
+because the body rewrite itself dominates. The clean proof that the gap is
+architecture rather than Rust: running the tap through the pure-JS acorn
+engine (same contract, no native code — see
+[benchmarks.md](benchmarks.md#js-only-vs-js--rust-the-two-engines)) costs
+~86 µs on the same file, still ~11x ahead of orchestrion while parsing with
+a JS parser just like it does. The flip side is honest:
 orchestrion's body injection can instrument _non-exported_ functions and
 call-site interiors, which the exports tap by design cannot reach — its
 reach is exactly what `Module._load` monkey-patching ever had.

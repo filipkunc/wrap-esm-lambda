@@ -1,8 +1,9 @@
 // The apply step: turn matched entries into instrumented source, via the
-// native `wrap-esm-lambda` oxc addon. Both shells call `applyMatched`, so
-// the instrumented output is byte-identical whichever mode produced it.
+// selected transform engine (native oxc by default, pure-JS acorn via
+// WRAP_ESM_LAMBDA_ENGINE — see engine.mjs). Both shells call `applyMatched`,
+// so the instrumented output is byte-identical whichever mode produced it.
 import { basename } from 'node:path'
-import { transformLambdaWithMapObject, exportsTap, exportsTapFromBuffer } from 'wrap-esm-lambda'
+import { transformLambdaWithMapObject, exportsTap, exportsTapFromBuffer } from './engine.mjs'
 import { cleanPath } from './paths.mjs'
 import { moduleKindFor } from './format.mjs'
 import { tapWithStarRetry } from './stars.mjs'
@@ -22,7 +23,7 @@ export const SENTINEL = `/*! ${SENTINEL_TEXT} */`
 
 /**
  * The original wrap transform: rebind an exported const through the wrapper
- * via the native oxc transform, append the wrapper import (ESM imports are
+ * via the engine's wrap transform, append the wrapper import (ESM imports are
  * hoisted, so appending keeps every existing line — and therefore the source
  * map — intact) and the double-wrap sentinel.
  *
