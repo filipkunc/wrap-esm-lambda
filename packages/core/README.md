@@ -112,12 +112,18 @@ requested `bindings`:
     one provides the requested name, then appends a shadow export
     redirecting it through a rebindable local. An explicit named export
     shadows `export *` for the same name, so the star statement itself is
-    untouched and the whole fix is append-only. Loud limits: a star with a
-    **bare specifier** (`export * from "pkg"`) is not walked (the transform
-    owns no module resolution — the error names the unresolved sources), a
-    name provided by **two** star sources is refused as ambiguous (importers
-    cannot link it either), and a star pointing at a **CJS** file has no
-    statically knowable names.
+    untouched and the whole fix is append-only. Star sources with **bare
+    specifiers** (`export * from "pkg"`) are followed too, through full
+    import-style package resolution — oxc_resolver natively, its JS twin in
+    the acorn engine: `node_modules` walk, `"exports"` maps under the
+    `node`/`import` conditions, `"module"` before `"main"` for map-less
+    packages. Resolution only informs the walk; the emitted shadow export
+    imports from the specifier as written, so Node or the bundler still
+    resolves it in the output. Loud limits: a name provided by **two** star
+    sources is refused as ambiguous (importers cannot link it either), a
+    star pointing at a **CJS** file has no statically knowable names, and a
+    specifier that resolves nowhere (package not installed) provides
+    nothing — the error names the unresolved sources.
 - CJS getter-only exports (esbuild-bundled packages) make rebind assignment
   throw in strict-mode modules but **silently no-op in sloppy-mode ones** —
   the tap's CJS setter verifies the write took and throws if not; prototype

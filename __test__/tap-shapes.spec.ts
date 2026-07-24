@@ -57,6 +57,86 @@ test('build mode: the same rewrites land through esbuild', async (t) => {
   }
 })
 
+// Bare-SPECIFIER stars: `export * from "@fake/star-pkg"` — the star walk
+// resolves the packages themselves (exports map under the `import`
+// condition; `"module"` before `"main"`) to attribute the requested names.
+const STAR_BARE_EXPECTED = 'starpkg:star-pkg wrapped:plain:p'
+const starBareEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.star-bare.mjs') }
+
+test('runtime mode: bare-specifier export * resolves through package resolution', async (t) => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-star-bare.mjs')],
+    { env: starBareEnv },
+  )
+  t.is(stdout.trim(), STAR_BARE_EXPECTED)
+})
+
+test('build mode: bare-specifier export * lands through esbuild', async (t) => {
+  // @ts-expect-error untyped workspace package
+  const { unplugin } = await import('@wrap-esm-lambda/unplugin')
+  const { default: config } = await import(pathToFileURL(fixture('wrap.config.star-bare.mjs')).href)
+  const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-star-bare-'))
+  try {
+    const outfile = join(outDir, 'bundle.mjs')
+    await build({
+      entryPoints: [fixture('app-star-bare.mjs')],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      outfile,
+      plugins: [unplugin.esbuild(config)],
+      logLevel: 'silent',
+    })
+    const { stdout } = await execFileAsync(process.execPath, [outfile])
+    t.is(stdout.trim(), STAR_BARE_EXPECTED)
+  } finally {
+    await rm(outDir, { recursive: true, force: true })
+  }
+})
+
+test('bare-specifier export *: the shadow export imports from the specifier as written', async (t) => {
+  // Resolution informs the walk only — the emitted stub must keep the bare
+  // specifier so Node or the bundler still performs its own resolution.
+  // @ts-expect-error untyped workspace package
+  const core = await import('@wrap-esm-lambda/core')
+  const barePath = fixture('node_modules/@fake/shapes/star-bare.js')
+  const { readFileSync } = await import('node:fs')
+  const entries = [
+    {
+      module: { name: '@fake/shapes', files: ['star-bare.js'] },
+      patch: { name: 'patchStarPkg', from: fixture('patches/star-bare.mjs') },
+      bindings: ['StarPkg'],
+    },
+  ]
+  const applied = core.applyMatched(readFileSync(barePath, 'utf8'), entries, barePath, {
+    format: 'module',
+    delivery: 'registry',
+  })
+  t.truthy(applied)
+  t.true(applied.code.includes('import { StarPkg as __wel_l0_src } from "@fake/star-pkg";'))
+  t.true(applied.code.includes('export { __wel_l0 as StarPkg };'), 'explicit export shadows the star')
+  t.true(applied.code.includes("export * from '@fake/star-pkg'"), 'the star statement itself is untouched')
+})
+
+test('bare-specifier export *: an uninstalled package keeps the loud not-found error', async (t) => {
+  // @ts-expect-error untyped workspace package
+  const core = await import('@wrap-esm-lambda/core')
+  const barePath = fixture('node_modules/@fake/shapes/star-bare.js')
+  const { readFileSync } = await import('node:fs')
+  const source = 'export * from "@fake/not-installed";\n'
+  const entries = [
+    {
+      module: { name: '@fake/shapes', files: ['star-bare.js'] },
+      patch: { name: 'patchStarPkg', from: fixture('patches/star-bare.mjs') },
+      bindings: ['Ghost'],
+    },
+  ]
+  const err = t.throws(() => core.applyMatched(source, entries, barePath, { format: 'module', delivery: 'registry' }))
+  t.regex(err!.message, /export 'Ghost' not found/)
+  t.regex(err!.message, /unresolved 'export \*' sources/)
+})
+
 test('the Lambda handler shape: a wrap-style patch entry needs no wrap entry anymore', async (t) => {
   // The original problem statement of this repo — wrap `export const
   // handler` — expressed as a plain patch entry rebinding the handler.

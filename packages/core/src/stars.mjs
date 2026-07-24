@@ -5,22 +5,37 @@
 // linker and iitm's export scanner perform) and learn which source provides
 // a requested name. The tap then reroutes that name through an append-only
 // shadow export: an explicit named export shadows `export *` for the same
-// name, so the star statement never needs touching.
+// name, so the star statement never needs touching. Relative sources
+// (`./x.js`) resolve by plain path join; bare specifiers
+// (`export * from "lodash-es"`) go through the engine's `resolveModule` —
+// full import-style resolution (oxc_resolver natively, its JS twin in the
+// acorn engine). Resolution only informs the walk: the emitted shadow
+// export keeps importing from the specifier as written, so Node or the
+// bundler still performs its own resolution in the output.
 //
 // Deliberate limits, all loud:
-// - only relative star sources (`./x.js`, `../y.js`) are followed — bare
-//   specifiers (`export * from "lodash-es"`) would need full Node/bundler
-//   resolution the transform doesn't own;
 // - a name provided by MORE THAN ONE star source is ambiguous per the spec
 //   (importers get a linking error for it) and is refused;
 // - a star source that parses to no exports (e.g. a CJS file, whose names
-//   Node derives at runtime) simply cannot provide the name statically.
+//   Node derives at runtime) simply cannot provide the name statically;
+// - a specifier that does not resolve (package not installed) provides
+//   nothing, and the not-found error names the unresolved sources.
 import { readFileSync } from 'node:fs'
 import { dirname, resolve as resolvePath } from 'node:path'
-import { esmModuleExports } from './engine.mjs'
+import { esmModuleExports, resolveModule } from './engine.mjs'
 
 function isRelative(specifier) {
   return specifier.startsWith('./') || specifier.startsWith('../')
+}
+
+/**
+ * The file behind a star source specifier, from the directory of the module
+ * that wrote it — a cheap path join for relative sources, the engine's full
+ * import-style resolution for everything else. Null when nothing resolves.
+ */
+function starSourcePath(specifier, fromDir) {
+  if (isRelative(specifier)) return resolvePath(fromDir, specifier)
+  return resolveModule(specifier, fromDir)
 }
 
 /** Parse cache for the walk: absolute path -> { names, starSources }. */
@@ -43,9 +58,10 @@ function providesName(absPath, name, cache, seen) {
   seen.add(absPath)
   const info = moduleInfo(absPath, cache)
   if (info.names.includes(name)) return true
-  return info.starSources.some(
-    (specifier) => isRelative(specifier) && providesName(resolvePath(dirname(absPath), specifier), name, cache, seen),
-  )
+  return info.starSources.some((specifier) => {
+    const source = starSourcePath(specifier, dirname(absPath))
+    return source !== null && providesName(source, name, cache, seen)
+  })
 }
 
 /**
@@ -65,9 +81,10 @@ export function resolveStarBindings(missingNames, starSources, modulePath) {
   const dir = dirname(modulePath)
   const resolutions = []
   for (const name of missingNames) {
-    const providers = starSources.filter(
-      (specifier) => isRelative(specifier) && providesName(resolvePath(dir, specifier), name, cache, new Set()),
-    )
+    const providers = starSources.filter((specifier) => {
+      const source = starSourcePath(specifier, dir)
+      return source !== null && providesName(source, name, cache, new Set())
+    })
     if (providers.length > 1) {
       throw new Error(
         `export '${name}' is ambiguous: provided by multiple 'export *' sources (${providers.join(', ')}) — importers cannot resolve it either; patch the defining module instead`,

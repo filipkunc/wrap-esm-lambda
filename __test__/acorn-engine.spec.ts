@@ -40,6 +40,15 @@ testRuntime('acorn engine, runtime mode: every tap rewrite shape rebinds', async
   t.is(stdout.trim(), SHAPES_EXPECTED)
 })
 
+testRuntime('acorn engine, runtime mode: bare-specifier export * resolves through the JS resolver', async (t) => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--import', '@wrap-esm-lambda/hooks/register', fixture('tap-shapes', 'app-star-bare.mjs')],
+    { env: acornEnv({ WRAP_ESM_LAMBDA_CONFIG: fixture('tap-shapes', 'wrap.config.star-bare.mjs') }) },
+  )
+  t.is(stdout.trim(), 'starpkg:star-pkg wrapped:plain:p')
+})
+
 test('acorn engine, build mode: the same rewrites land through esbuild', async (t) => {
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-acorn-'))
   try {
