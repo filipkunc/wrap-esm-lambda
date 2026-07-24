@@ -50,6 +50,14 @@ pins, against the native engine:
 - **identical `esmModuleExports` surfaces** — the star walk behaves the same
   on either engine.
 
+[`__test__/comment-preservation.spec.ts`](../../__test__/comment-preservation.spec.ts)
+additionally pins that the rewrite path keeps bundler-semantic comments on
+both engines (`/* @__PURE__ */`, webpack magic comments, `/*!` legal
+comments) — and proves it downstream: an esbuild bundle built through the
+unplugin still tree-shakes on the surviving annotation. magic-string makes
+this structural (unedited bytes cannot change); oxc codegen preserves
+comments as a feature.
+
 ## How the rewrite differs (by design)
 
 The native engine regenerates the whole module through oxc codegen. This
