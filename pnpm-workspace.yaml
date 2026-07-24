@@ -9,6 +9,9 @@ allowBuilds:
   canvas: true
   esbuild: true
 
+minimumReleaseAgeExclude:
+  - webpack@5.109.0
+
 # @napi-rs/cli's setWasiEnv does require.resolve('emnapi') from its own
 # location without declaring the dependency — yarn's hoisting satisfied that
 # by accident, pnpm's isolation correctly doesn't. Patch it in.

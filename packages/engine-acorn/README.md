@@ -50,6 +50,24 @@ pins, against the native engine:
 - **identical `esmModuleExports` surfaces** — the star walk behaves the same
   on either engine.
 
+[`__test__/comment-preservation.spec.ts`](../../__test__/comment-preservation.spec.ts)
+additionally pins that the rewrite path keeps bundler-semantic comments on
+both engines (`/* @__PURE__ */`, webpack magic comments, `/*!` legal
+comments) — and proves it downstream: bundles built through the unplugin
+with esbuild, rollup, rolldown and webpack (production + terser) still
+tree-shake on the surviving annotation, and webpack honors a surviving
+`webpackIgnore`. magic-string makes preservation structural (unedited bytes
+cannot change); oxc codegen preserves comments as a feature.
+
+[`__test__/bundlers.spec.ts`](../../__test__/bundlers.spec.ts) runs the full
+tap-shapes fixture through rollup, rolldown and webpack for both engines —
+webpack's production pipeline is the harshest consumer, and promptly caught
+the one real divergence: a statement this engine _creates_ must always end
+in `;` even when the source relied on ASI, or webpack's statement removal
+fuses a trailing template literal with the next expression into a
+tagged-template call. The engine now terminates every statement it emits;
+untouched author code keeps its own style.
+
 ## How the rewrite differs (by design)
 
 The native engine regenerates the whole module through oxc codegen. This
