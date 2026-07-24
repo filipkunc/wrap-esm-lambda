@@ -79,3 +79,28 @@ export function resolveStarBindings(missingNames, starSources, modulePath) {
   }
   return resolutions
 }
+
+/**
+ * The native tap call with one star-resolution retry — the entry point
+ * `applyMatched` uses. `tap` is the bound native function (string or buffer
+ * variant), `decode` lazily yields the source text for the walk, and the
+ * walk itself only runs when the first call fails on a name that a bare
+ * `export * from` might forward. Names no star source provides rethrow the
+ * original loud error; ambiguous names (two sources — importers cannot
+ * link them either) throw their own.
+ */
+export function tapWithStarRetry(tap, decode, modulePath, entriesInput, cjs, registry, filename, upstreamMap) {
+  try {
+    return tap(entriesInput, cjs, registry, filename, upstreamMap, undefined)
+  } catch (err) {
+    if (cjs || !/not found in module/.test(String(err?.message))) throw err
+    const sourceText = decode()
+    const { names, starSources } = esmModuleExports(sourceText)
+    if (starSources.length === 0) throw err
+    const known = new Set(names)
+    const missing = new Set(entriesInput.flatMap((entry) => entry.bindings).filter((name) => !known.has(name)))
+    const resolutions = resolveStarBindings(missing, starSources, modulePath)
+    if (resolutions.length === 0) throw err
+    return tap(entriesInput, cjs, registry, filename, upstreamMap, resolutions)
+  }
+}
