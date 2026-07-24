@@ -208,11 +208,17 @@ A config is a list of entries; two kinds exist and mix freely.
 - `patch.from` should be an **absolute path** (compute it via
   `import.meta.url`). TypeScript patch files ride on Node's type stripping at
   runtime and on the bundler at build time.
-- **Builtin targets** (`node:http`, `os`, ...) have no source to transform:
-  the runtime shell patches their exports object **eagerly at preload**,
-  before any user code loads, so `require()`, ESM default import and ESM
-  named import all observe the patch. Builtin entries are runtime-only and
-  reject `files`.
+- **Builtin targets** (`node:http`, `os`, ...) have no source to transform,
+  so each shell reaches them through what it owns. The runtime shell patches
+  their exports object **eagerly at preload**, before any user code loads.
+  The build shell owns module **resolution** instead: every configured
+  builtin specifier is aliased to a generated wrapper module that patches
+  the real exports object via `process.getBuiltinModule` (Node >= 22.3
+  where the bundle runs) and re-exports the patched bindings. In both modes
+  `require()`, ESM default import and ESM named import all observe the
+  patch, and a shared guard keeps the hybrid combination single-patched.
+  Builtin entries reject `files`; `versionRange` gates on the running Node
+  at preload and on the building Node at bundle time.
 - Validation is loud: a requested binding missing from an ESM module (or a
   builtin) is a hard error, and a rebind that cannot take effect (getter-only
   CJS exports of a sloppy-mode bundle) throws instead of silently no-opping.
@@ -243,7 +249,7 @@ The test suite doubles as a recipe book — each spec runs the real package:
 | **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself, in both shells                                                                                                                                | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
 | **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                                                                    | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
 | **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                                                             | [`http-route.spec.ts`](__test__/http-route.spec.ts) |
-| **builtins** (`node:os`)           | eager preload patching observed by require, default import and named import                                                                                                                                                                         | [`patch.spec.ts`](__test__/patch.spec.ts)           |
+| **builtins** (`node:os`)           | eager preload patching at runtime, a resolution-aliased wrapper module at build time — require, default import and named import all observe it either way, single-patched when combined                                                             | [`patch.spec.ts`](__test__/patch.spec.ts)           |
 | **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — relative and bare package specifiers alike — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](__test__/tap-shapes.spec.ts) |
 | **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                                                             | [`hybrid.spec.ts`](__test__/hybrid.spec.ts)         |
 | **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                                                                      | [`patch.spec.ts`](__test__/patch.spec.ts)           |

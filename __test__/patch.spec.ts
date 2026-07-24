@@ -153,6 +153,51 @@ test('builtin patch: node:os patched at preload, seen by named import, default i
   t.is(stdout.trim(), 'builtin:patched-all')
 })
 
+test('builtin wrapper emission: guarded patch application over the real exports object', async (t) => {
+  const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
+  const entry = builtinConfig.entries[0]
+  const source = core.builtinWrapperSource('node:os', [entry])
+  t.true(source.includes('process.getBuiltinModule("node:os")'), 'no builtin import — nothing to race or alias')
+  t.true(source.includes(`import { patchOs as __wel_bp_0 } from ${JSON.stringify(entry.patch.from)};`))
+  t.true(source.includes(JSON.stringify(core.builtinGuardKey(entry))), 'hybrid guard key baked in')
+  t.true(source.includes('get hostname()'), 'requested binding handed over as accessors')
+  t.true(source.includes('export default __wel_target;'))
+  t.true(source.includes('as hostname'), 'named exports re-exported after patching')
+
+  const err = t.throws(() => core.builtinWrapperSource('node:os', [{ ...entry, bindings: ['notAnOsExport'] }]))
+  t.regex(err!.message, /'notAnOsExport' not found in node:os/, 'validation is loud at bundle time')
+})
+
+test('hybrid builtin guard: a build-time wrapper and the runtime preload patch exactly once', async (t) => {
+  const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-builtin-hybrid-'))
+  try {
+    const outfile = join(outDir, 'bundle.mjs')
+    await build({
+      entryPoints: [fixture('app-builtin-raw.mjs')],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      outfile,
+      plugins: [unplugin.esbuild((await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)).default)],
+      logLevel: 'silent',
+    })
+    // bundle alone: patched once
+    const alone = await execFileAsync(process.execPath, [outfile])
+    t.regex(alone.stdout.trim(), /^patched:/)
+    t.notRegex(alone.stdout.trim(), /^patched:patched:/)
+
+    // bundle under the runtime hook with the same config: the shared
+    // globalThis guard must keep it patched exactly once, not twice
+    const hybrid = await execFileAsync(process.execPath, ['--import', '@wrap-esm-lambda/hooks/register', outfile], {
+      env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.builtin.mjs') },
+    })
+    t.regex(hybrid.stdout.trim(), /^patched:/)
+    t.notRegex(hybrid.stdout.trim(), /^patched:patched:/)
+  } finally {
+    await rm(outDir, { recursive: true, force: true })
+  }
+})
+
 test('builtin patch: versionRange gates on the running Node', async (t) => {
   // Same entry but a range excluding the current Node: preload must skip the
   // patch (matcher semantics), leaving the builtin untouched.

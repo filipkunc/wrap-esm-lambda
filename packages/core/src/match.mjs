@@ -50,7 +50,9 @@ function entryMatches(entry, path) {
   if (entry.module !== undefined) {
     // Built-in targets (node:http, ...) have no source for a load hook or
     // bundler to transform — they never match a file. The runtime shell
-    // patches them eagerly at preload instead (see builtinPatchEntries).
+    // patches them eagerly at preload; the build shell aliases their
+    // specifiers to generated wrapper modules (see builtinPatchEntries and
+    // builtins.mjs).
     if (isBuiltin(entry.module.name)) return false
     const pkg = nearestPackage(path)
     if (!pkg || pkg.name !== entry.module.name) return false

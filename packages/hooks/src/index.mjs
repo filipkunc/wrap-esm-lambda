@@ -13,6 +13,7 @@ import {
   applyMatched,
   inlineMap,
   builtinPatchEntries,
+  builtinGuardKey,
   runtimeFormatFor,
   PATCH_REGISTRY,
   patchKey,
@@ -103,6 +104,13 @@ const requireBuiltin = createRequire(import.meta.url)
 export function applyBuiltinPatches(config) {
   const registry = globalThis[PATCH_REGISTRY] ?? Object.create(null)
   for (const entry of builtinPatchEntries(config)) {
+    // hybrid guard, shared with the build shell's generated wrapper: when a
+    // bundle already carries this entry's builtin patch, skip it here — the
+    // builtin's exports object is process-global, so applying twice would
+    // wrap its methods twice
+    const guard = Symbol.for(builtinGuardKey(entry))
+    if (globalThis[guard]) continue
+    globalThis[guard] = true
     const target = requireBuiltin(entry.module.name)
     const accessors = {}
     for (const name of entry.bindings) {

@@ -20,9 +20,9 @@
  *
  * @typedef {Object} ModuleMatch
  * @property {string} name - package name, from the nearest package.json — or a
- *   Node builtin (`node:http`, `os`): builtin entries are patched eagerly at
- *   preload by the runtime shell (no source to transform; build-time shells
- *   cannot reach them)
+ *   Node builtin (`node:http`, `os`): no source to transform, so the runtime
+ *   shell patches its exports object eagerly at preload, and the build shell
+ *   aliases the specifier to a generated wrapper module (see builtins.mjs)
  * @property {string} [versionRange] - semver range the package version must
  *   satisfy; for a builtin entry, checked against `process.versions.node`
  * @property {string[]} [files] - path suffixes within the package (e.g. 'dist-es/client.js');
