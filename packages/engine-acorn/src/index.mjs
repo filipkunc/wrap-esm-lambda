@@ -10,9 +10,11 @@
 // - tap.mjs           — the exports tap (fast path + magic-string rewrites)
 // - wrap.mjs          — the original handler-wrap transform
 // - sourcemaps.mjs    — map chaining and data-URL inlining
+// - resolve.mjs       — import-style module resolution (oxc_resolver's twin)
 
 export { esmModuleExports, hasModuleSyntax } from './exports-index.mjs'
 export { exportsTap, exportsTapFromBuffer } from './tap.mjs'
+export { resolveModule } from './resolve.mjs'
 export {
   transformLambda,
   transformLambdaFromBuffer,

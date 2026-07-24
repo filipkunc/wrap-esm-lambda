@@ -397,6 +397,7 @@ module.exports.esmModuleExports = nativeBinding.esmModuleExports
 module.exports.exportsTap = nativeBinding.exportsTap
 module.exports.exportsTapFromBuffer = nativeBinding.exportsTapFromBuffer
 module.exports.hasModuleSyntax = nativeBinding.hasModuleSyntax
+module.exports.resolveModule = nativeBinding.resolveModule
 module.exports.transformLambda = nativeBinding.transformLambda
 module.exports.transformLambdaFromBuffer = nativeBinding.transformLambdaFromBuffer
 module.exports.transformLambdaWithChainedMap = nativeBinding.transformLambdaWithChainedMap

@@ -57,6 +57,7 @@ export const esmModuleExports = __napiModule.exports.esmModuleExports
 export const exportsTap = __napiModule.exports.exportsTap
 export const exportsTapFromBuffer = __napiModule.exports.exportsTapFromBuffer
 export const hasModuleSyntax = __napiModule.exports.hasModuleSyntax
+export const resolveModule = __napiModule.exports.resolveModule
 export const transformLambda = __napiModule.exports.transformLambda
 export const transformLambdaFromBuffer = __napiModule.exports.transformLambdaFromBuffer
 export const transformLambdaWithChainedMap = __napiModule.exports.transformLambdaWithChainedMap

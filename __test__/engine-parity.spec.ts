@@ -81,6 +81,31 @@ test('CJS import delivery: identical require() snippets — never an ESM import 
   }
 })
 
+test('resolveModule: both engines resolve import-style, byte-identical paths', (t) => {
+  // The star walk's resolver: oxc_resolver natively, its JS twin in the
+  // acorn engine. Pinned on the fixture shapes that matter — an exports map
+  // under the `import` condition, a map-less `"module"`-before-`"main"`
+  // package, a relative file, and a specifier that resolves nowhere.
+  const shapesDir = new URL('./fixtures/tap-shapes/node_modules/@fake/shapes', import.meta.url).pathname
+  const cases: [string, string | null][] = [
+    ['@fake/star-pkg', 'star-pkg/esm/index.js'],
+    ['@fake/star-plain', 'star-plain/esm.js'],
+    ['./star-mid.js', 'shapes/star-mid.js'],
+    ['@fake/not-installed', null],
+    ['node:path', null],
+  ]
+  for (const [specifier, suffix] of cases) {
+    const fromOxc = oxc.resolveModule(specifier, shapesDir)
+    const fromAcorn = (acorn as Engine).resolveModule(specifier, shapesDir)
+    t.is(fromAcorn, fromOxc, `engines agree on ${specifier}`)
+    if (suffix === null) {
+      t.is(fromOxc, null, `${specifier} resolves nowhere`)
+    } else {
+      t.true(fromOxc !== null && fromOxc.endsWith(suffix), `${specifier} -> .../${suffix} (got ${fromOxc})`)
+    }
+  }
+})
+
 test('hasModuleSyntax: both engines answer the CJS-or-ESM syntax question identically', (t) => {
   const cases: [string, boolean][] = [
     ['export const x = 1;\n', true],

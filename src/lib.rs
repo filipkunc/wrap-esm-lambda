@@ -4,6 +4,8 @@ mod transform;
 
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
+use oxc_resolver::{ResolveOptions, Resolver};
+use std::sync::OnceLock;
 
 #[napi]
 pub fn transform_lambda(input: String, handler: String, wrapper: String) -> String {
@@ -129,6 +131,35 @@ pub struct TapStarResolution {
 pub struct EsmExportsInfo {
   pub names: Vec<String>,
   pub star_sources: Vec<String>,
+}
+
+static STAR_RESOLVER: OnceLock<Resolver> = OnceLock::new();
+
+/// Resolve a module specifier from a directory, the way an `import` (or an
+/// ESM `export * from`) would: full Node/bundler resolution via
+/// [oxc_resolver](https://docs.rs/oxc_resolver) — `node_modules` walk,
+/// `"exports"` maps under the `node`/`import` conditions, `"module"` before
+/// `"main"` for map-less packages (the ESM tree is what a star re-export
+/// forwards), symlink-real paths (pnpm layouts included). This is what lets
+/// core's star-graph walk follow `export * from "pkg"` with a **bare**
+/// specifier: the walk needs the file behind the specifier to learn which
+/// names it provides, while the emitted shadow export keeps importing from
+/// the original specifier — resolution informs the transform, it never
+/// lands in the output. Returns null when the specifier does not resolve;
+/// the caller keeps its loud unresolved-star error.
+#[napi]
+pub fn resolve_module(specifier: String, from_dir: String) -> Option<String> {
+  let resolver = STAR_RESOLVER.get_or_init(|| {
+    Resolver::new(ResolveOptions {
+      condition_names: vec!["node".into(), "import".into()],
+      main_fields: vec!["module".into(), "main".into()],
+      ..ResolveOptions::default()
+    })
+  });
+  resolver
+    .resolve(&from_dir, &specifier)
+    .ok()
+    .map(|resolution| resolution.full_path().to_string_lossy().into_owned())
 }
 
 /// Whether the source contains ESM module syntax (`import`/`export`

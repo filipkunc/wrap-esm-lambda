@@ -74,6 +74,22 @@ export declare function exportsTapFromBuffer(
 export declare function hasModuleSyntax(input: string): boolean
 
 /**
+ * Resolve a module specifier from a directory, the way an `import` (or an
+ * ESM `export * from`) would: full Node/bundler resolution via
+ * [oxc_resolver](https://docs.rs/oxc_resolver) — `node_modules` walk,
+ * `"exports"` maps under the `node`/`import` conditions, `"module"` before
+ * `"main"` for map-less packages (the ESM tree is what a star re-export
+ * forwards), symlink-real paths (pnpm layouts included). This is what lets
+ * core's star-graph walk follow `export * from "pkg"` with a **bare**
+ * specifier: the walk needs the file behind the specifier to learn which
+ * names it provides, while the emitted shadow export keeps importing from
+ * the original specifier — resolution informs the transform, it never
+ * lands in the output. Returns null when the specifier does not resolve;
+ * the caller keeps its loud unresolved-star error.
+ */
+export declare function resolveModule(specifier: string, fromDir: string): string | null
+
+/**
  * One patch entry's inputs to the exports tap — mirrors the JS config entry.
  * `aliasIndex` keeps the injected import alias unique when several entries
  * patch the same module in import delivery.
