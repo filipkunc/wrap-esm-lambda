@@ -10,8 +10,10 @@
 // - match.mjs    — which entries apply to which module (package identity,
 //                  semver range, file suffixes; builtins split out)
 // - format.mjs   — the CJS-or-ESM decision the emitted tap depends on
-// - apply.mjs    — entries -> instrumented source, via the native oxc addon,
-//                  plus the double-wrap sentinel
+// - engine.mjs   — the transform engine binding: native oxc addon (default)
+//                  or the pure-JS acorn engine (WRAP_ESM_LAMBDA_ENGINE)
+// - apply.mjs    — entries -> instrumented source, via the engine, plus the
+//                  double-wrap sentinel
 // - registry.mjs — the runtime patch-function registry contract
 
 /**
@@ -25,6 +27,7 @@
  */
 
 export { defineConfig, definePatches } from './config.mjs'
+export { engineName } from './engine.mjs'
 export { nearestPackage, matchEntries, createMatcher, builtinPatchEntries } from './match.mjs'
 export { runtimeFormatFor, moduleKindFor } from './format.mjs'
 export { SENTINEL, SENTINEL_TEXT, transformMatched, applyMatched, inlineMap } from './apply.mjs'

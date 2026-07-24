@@ -13,6 +13,8 @@ import {
 } from './orchestrion-transform.js'
 import { transformOxcInlineMap, transformOxcChainedToTs, transformOxcChainedToTsRust } from './oxc-sourcemap.js'
 import { transformAcornInlineMap, transformAcornChainedToTs } from './acorn-sourcemap.js'
+// @ts-expect-error untyped workspace package
+import * as acornEngine from '@wrap-esm-lambda/engine-acorn'
 
 const b = new Bench()
 
@@ -54,6 +56,15 @@ b.add('acorn + source map', () => {
 
 b.add('acorn + map chained to .ts', () => {
   transformAcornChainedToTs()
+})
+
+// the shipped JS engine (acorn + magic-string edits, no astring codegen)
+b.add('acorn engine (magic-string)', () => {
+  acornEngine.transformLambda(testInput, 'handler', 'wrapper')
+})
+
+b.add('acorn engine + source map', () => {
+  acornEngine.transformLambdaWithMapObject(testInput, 'handler', 'wrapper', 'handler.mjs')
 })
 
 b.add('regex', () => {

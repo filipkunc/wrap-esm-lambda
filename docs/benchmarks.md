@@ -71,3 +71,55 @@ Notes on the transform-latency comparison:
 The patch-transform and cold-start comparisons against orchestrion-js and
 import-in-the-middle (`pnpm bench:patch`) are discussed with their context in
 [comparisons.md](comparisons.md).
+
+## JS-only vs JS + Rust: the two engines
+
+Every transform in core runs through one of two interchangeable engines
+(selected by `WRAP_ESM_LAMBDA_ENGINE`, see the
+[core README](../packages/core/README.md#choosing-the-engine)): the native
+`wrap-esm-lambda` oxc addon, and the pure-JS
+[`@wrap-esm-lambda/engine-acorn`](../packages/engine-acorn) built on acorn +
+magic-string. They emit byte-identical snippets and pass the identical test
+suite, so the numbers below isolate exactly one variable — whether the parse
+and rewrite run in Rust across napi or in JavaScript in-process.
+
+`pnpm bench:patch` measures the tap on the real `@smithy/core` client file
+(1.8 KB dist-es; the "big module" rows pad it to the 42 KB of the dist-cjs
+bundle), `pnpm bench` the handler wrap. Representative numbers (Node 22,
+x86_64 Linux):
+
+| operation                                            | oxc (JS + Rust) | acorn (JS only) |
+| ---------------------------------------------------- | --------------: | --------------: |
+| exports tap, ESM parse + validate (1.8 KB)           |          ~14 µs |          ~86 µs |
+| whole hook op on a 42 KB module                      |          ~41 µs |          ~91 µs |
+| exports tap, CJS snippet (no parse)                  |         ~2.9 µs |         ~0.4 µs |
+| handler wrap                                         |         ~3.5 µs |          ~14 µs |
+| handler wrap + source map                            |         ~5.3 µs |          ~26 µs |
+| runtime-hook cold start (fixture app, `.mjs` config) |          ~72 ms |          ~86 ms |
+
+What the numbers say:
+
+- **Parsing dominates, and Rust parses ~6x faster.** The tap's per-module
+  cost is almost entirely the full-AST parse; oxc's arena parser beats
+  acorn's by roughly 6x on the same file, and that ratio holds as modules
+  grow (the napi boundary is amortized — buffers cross zero-copy).
+- **When nothing is parsed, JS wins.** The CJS tap is pure string building;
+  the acorn engine does it in-process for ~0.4 µs while the native call pays
+  ~2.5 µs of napi overhead just to reach Rust. Boundary costs are real in
+  both directions.
+- **Cold start favors the native addon, mildly.** The JS engine swaps the
+  addon's dlopen for the acorn + magic-string + remapping module graph,
+  which reads as ~14 ms more on the fixture app. Both sit well under the
+  off-thread loader baseline in [comparisons.md](comparisons.md).
+- **Absolute numbers stay small either way.** Even the JS-only tap is ~11x
+  cheaper than orchestrion's body-rewriting transform on the same file
+  (~86 µs vs ~950–1200 µs), because the architecture — validate + append,
+  rewrite only when a shape demands it — matters more than the parser.
+
+The engines differ in _how_ they rewrite, deliberately: oxc regenerates the
+module through codegen, while the acorn engine makes surgical magic-string
+edits (demote one keyword, replace one statement, append), so untouched
+lines keep their exact source text. On conventionally formatted sources even
+the rewrite output converges byte-for-byte — pinned, along with snippet
+byte-identity and error-message parity, by
+[`__test__/engine-parity.spec.ts`](../__test__/engine-parity.spec.ts).
