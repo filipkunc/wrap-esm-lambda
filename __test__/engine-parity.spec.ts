@@ -38,6 +38,10 @@ const SHAPES: [string, string, string[]][] = [
   ['destructured const demotion', 'export const { greet, meta: [info] } = make();\n', ['greet', 'info']],
   ['const pattern behind list export', 'const { a } = make();\nexport { a as alpha };\n', ['alpha']],
   ['anonymous default naming', 'export default async (event) => event;\n', ['default']],
+  // ASI style: the created `let` must gain a terminator, or webpack's
+  // statement removal fuses the template with the next expression into a
+  // tagged-template call (caught by the webpack leg of bundlers.spec.ts)
+  ['anonymous default naming (ASI, template)', 'export default async (event) => `dflt:${event}`\n', ['default']],
   ['re-export split', 'export { Client, VERSION } from "./client.js";\n', ['Client']],
   ['default re-export split', 'export { default as Client } from "./client.js";\n', ['Client']],
   ['import-backed list export split', 'import { x } from "./dep.js";\nexport { x };\n', ['x']],

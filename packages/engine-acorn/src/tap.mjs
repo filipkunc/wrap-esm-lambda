@@ -176,6 +176,11 @@ function applyRewrites(ms, input, ops, index) {
   if (ops.defaultAnon !== null) {
     const { stmt, ident } = ops.defaultAnon
     ms.overwrite(stmt.start, stmt.declaration.start, `let ${ident} = `)
+    // terminate the statement we created even when the source relied on ASI:
+    // bundlers that delete an adjacent statement (webpack's production
+    // generator does) would otherwise fuse `let x = \`tpl\`` with whatever
+    // follows into a tagged-template call
+    if (input[stmt.end - 1] !== ';') ms.appendRight(stmt.end, ';')
     appended.push(`export { ${ident} as default };`)
   }
 

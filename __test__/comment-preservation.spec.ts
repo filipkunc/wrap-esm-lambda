@@ -1,7 +1,7 @@
 import test from 'ava'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -16,9 +16,10 @@ import * as acorn from '@wrap-esm-lambda/engine-acorn'
 // sentinel). The tap's fast path appends only, so it cannot touch them —
 // but the REWRITE path regenerates (oxc) or edits (acorn) the module, so
 // both engines must be pinned to keep every bundler-semantic comment. The
-// build-mode tests then prove the annotations still WORK downstream: an
-// esbuild bundle produced through the unplugin must tree-shake on the
-// surviving @__PURE__ and retain the legal comment.
+// build-mode matrix then proves the annotations still WORK downstream, in
+// every bundler the unplugin ships an adapter for: the bundle must
+// tree-shake on the surviving @__PURE__ (with an unannotated control kept),
+// and webpack must honor a surviving webpackIgnore.
 
 type Engine = typeof oxc
 const engines: [string, Engine][] = [
@@ -27,6 +28,7 @@ const engines: [string, Engine][] = [
 ]
 
 const execFileAsync = promisify(execFile)
+const driver = fileURLToPath(new URL('./fixtures/bundle-driver.mjs', import.meta.url))
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/comments/${name}`, import.meta.url))
 
 const PRAGMA_SOURCE = [
@@ -57,53 +59,87 @@ for (const [name, engine] of engines) {
   })
 }
 
-for (const engineName of ['oxc', 'acorn']) {
-  test(`${engineName} build mode: surviving pragmas still steer esbuild`, async (t) => {
-    const outDir = await mkdtemp(join(tmpdir(), `wrap-esm-lambda-comments-${engineName}-`))
+/** Bundle a comments-fixture entry through one adapter in a child process. */
+async function bundleFixture(bundler: string, engineName: string, entry: string, outfile: string) {
+  await execFileAsync(
+    process.execPath,
+    [driver, bundler, fixture(entry), fixture('wrap.config.comments.mjs'), outfile],
+    { env: { ...process.env, WRAP_ESM_LAMBDA_ENGINE: engineName } },
+  )
+}
+
+// Where each bundler leaves a /*! legal comment, as measured: esbuild and
+// rolldown keep it in the bundle; webpack (terser) extracts it to
+// <outfile>.LICENSE.txt; rollup drops trailing legal comments on its own —
+// its users attach licenses via output.banner — so only the tree-shaking
+// assertions apply there.
+//
+// Webpack ASI quirk, pinned while building this matrix: when a TREE-SHAKEN
+// statement ends by ASI (no semicolon) and a comment plus any further
+// statement follow it, webpack's production pipeline swallows the comment —
+// on completely untransformed sources too. The fixture uses semicolon style
+// (like published dist code) so every cell measures OUR transforms, not that
+// quirk. It is engine-visible only indirectly: oxc codegen re-adds
+// semicolons everywhere, the acorn engine preserves the author's style
+// verbatim — so on semicolon-free sources webpack keeps the comment behind
+// oxc and drops it behind acorn, with the transform itself blameless in
+// both cases (the comment is present in each engine's emitted module).
+const LEGAL_LOCATION: Record<string, 'bundle' | 'license-file' | 'dropped-by-bundler'> = {
+  esbuild: 'bundle',
+  rollup: 'dropped-by-bundler',
+  rolldown: 'bundle',
+  webpack: 'license-file',
+}
+
+for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+  for (const [engineName] of engines) {
+    test(`${bundler} + ${engineName} engine: surviving pragmas still steer the bundle`, async (t) => {
+      const outDir = await mkdtemp(join(tmpdir(), `wel-comments-${bundler}-${engineName}-`))
+      try {
+        const outfile = join(outDir, 'bundle.mjs')
+        await bundleFixture(bundler, engineName, 'app-comments.mjs', outfile)
+        const bundled = await readFile(outfile, 'utf8')
+
+        // the patch worked, so the module demonstrably took the rewrite path
+        const { stdout } = await execFileAsync(process.execPath, [outfile])
+        t.is(stdout.trim(), 'wrapped:hi:x')
+
+        t.false(
+          bundled.includes('PURE_DROPPED'),
+          'the @__PURE__ call was tree-shaken — the annotation survived the rewrite',
+        )
+        t.true(
+          bundled.includes('KEPT_MARKER'),
+          'control: the unannotated call is kept, so shaking was annotation-driven',
+        )
+        if (LEGAL_LOCATION[bundler] === 'bundle') {
+          t.true(bundled.includes('KEEP-LEGAL'), 'the legal comment reached the bundle')
+        } else if (LEGAL_LOCATION[bundler] === 'license-file') {
+          const license = await readFile(`${outfile}.LICENSE.txt`, 'utf8')
+          t.true(license.includes('KEEP-LEGAL'), 'terser extracted the surviving legal comment')
+        }
+      } finally {
+        await rm(outDir, { recursive: true, force: true })
+      }
+    })
+  }
+}
+
+for (const [engineName] of engines) {
+  test(`webpack + ${engineName} engine: a surviving webpackIgnore keeps the dynamic import at runtime`, async (t) => {
+    const outDir = await mkdtemp(join(tmpdir(), `wel-webpack-ignore-${engineName}-`))
     try {
       const outfile = join(outDir, 'bundle.mjs')
-      // esbuild runs in a child so the plugin's core import binds per engine
-      const driver = `
-        import { build } from 'esbuild'
-        import { pathToFileURL } from 'node:url'
-        const [entry, configPath, outfile] = process.argv.filter((a) => a !== '--').slice(-3)
-        const { unplugin } = await import('@wrap-esm-lambda/unplugin')
-        const { default: config } = await import(pathToFileURL(configPath).href)
-        await build({
-          entryPoints: [entry],
-          bundle: true,
-          format: 'esm',
-          platform: 'node',
-          outfile,
-          plugins: [unplugin.esbuild(config)],
-          logLevel: 'silent',
-        })
-      `
-      await execFileAsync(
-        process.execPath,
-        [
-          '--input-type=module',
-          '-e',
-          driver,
-          '--',
-          fixture('app-comments.mjs'),
-          fixture('wrap.config.comments.mjs'),
-          outfile,
-        ],
-        { env: { ...process.env, WRAP_ESM_LAMBDA_ENGINE: engineName } },
-      )
+      await bundleFixture('webpack', engineName, 'app-webpack.mjs', outfile)
       const bundled = await readFile(outfile, 'utf8')
 
-      // the patch worked, so the module demonstrably took the rewrite path
+      // the module took the rewrite path (const rebind) with the import intact
       const { stdout } = await execFileAsync(process.execPath, [outfile])
-      t.is(stdout.trim(), 'wrapped:hi:x')
+      t.is(stdout.trim(), 'wrapped:lz:x function')
 
-      t.false(
-        bundled.includes('PURE_DROPPED'),
-        'the @__PURE__ call was tree-shaken — the annotation survived the rewrite',
-      )
-      t.true(bundled.includes('KEPT_MARKER'), 'control: the unannotated call is kept, so shaking was annotation-driven')
-      t.true(bundled.includes('KEEP-LEGAL'), 'the legal comment reached the bundle')
+      t.true(bundled.includes('./lazy.js'), 'the ignored import keeps its runtime specifier')
+      const chunks = (await readdir(outDir)).filter((f) => f.endsWith('.mjs'))
+      t.deepEqual(chunks, ['bundle.mjs'], 'webpackIgnore survived — no chunk was split off for lazy.js')
     } finally {
       await rm(outDir, { recursive: true, force: true })
     }

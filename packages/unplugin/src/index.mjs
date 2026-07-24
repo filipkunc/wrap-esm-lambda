@@ -32,6 +32,7 @@ export const unplugin = createUnplugin((config) => {
 
 export const vitePlugin = unplugin.vite
 export const rollupPlugin = unplugin.rollup
+export const rolldownPlugin = unplugin.rolldown
 export const esbuildPlugin = unplugin.esbuild
 export const webpackPlugin = unplugin.webpack
 export const rspackPlugin = unplugin.rspack
