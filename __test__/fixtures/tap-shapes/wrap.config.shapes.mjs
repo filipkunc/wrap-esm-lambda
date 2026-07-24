@@ -17,4 +17,5 @@ export default definePatches([
   entry('barrel.js', 'patchBarrel', ['Inner']),
   entry('destructured.js', 'patchDestructured', ['greet']),
   entry('ns.js', 'patchNs', ['inner']),
+  entry('star.js', 'patchStar', ['Inner']),
 ])

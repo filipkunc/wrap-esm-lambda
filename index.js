@@ -393,6 +393,7 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.esmModuleExports = nativeBinding.esmModuleExports
 module.exports.exportsTap = nativeBinding.exportsTap
 module.exports.exportsTapFromBuffer = nativeBinding.exportsTapFromBuffer
 module.exports.transformLambda = nativeBinding.transformLambda

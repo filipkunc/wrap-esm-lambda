@@ -108,6 +108,7 @@ const { instance: __napiInstance, module: __wasiModule, napiModule: __napiModule
   },
 })
 module.exports = __napiModule.exports
+module.exports.esmModuleExports = __napiModule.exports.esmModuleExports
 module.exports.exportsTap = __napiModule.exports.exportsTap
 module.exports.exportsTapFromBuffer = __napiModule.exports.exportsTapFromBuffer
 module.exports.transformLambda = __napiModule.exports.transformLambda

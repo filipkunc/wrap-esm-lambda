@@ -99,9 +99,12 @@ export is a hard error, the version-drift alarm. Then the tap is **tiered**:
   `export const` is demoted to `let` (destructuring patterns included), an
   anonymous `export default` is named into a local, and re-exports —
   `export { a as b } from`, `export * as ns from`, import-backed list
-  exports — are split into an import plus a rebindable local. Only bare
-  `export * from` stays out of reach (its names are not statically
-  visible), and only modules that need a rewrite pay for one.
+  exports — are split into an import plus a rebindable local. Even a bare
+  `export * from` resolves: the transform walks the star sources' files to
+  find the provider, then appends a shadow export (explicit exports shadow
+  `export *`, so this one is append-only). Only modules that need a
+  rewrite pay for one; what stays loud: bare-specifier stars, ambiguous
+  star names, stars into CJS.
 
 Either way the patch call runs at the end of the module's own evaluation:
 after its definitions exist, before any importer sees them.
@@ -215,17 +218,17 @@ maps that keep stack traces pointing at the original lines (see
 
 The test suite doubles as a recipe book — each spec runs the real package:
 
-| target                             | what it shows                                                                                                                                                                                       | spec                                                |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                     | [`aws.spec.ts`](__test__/aws.spec.ts)               |
-| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch                                                                                             | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
-| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself                                                                                                | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
-| **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                    | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
-| **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                             | [`http-route.spec.ts`](__test__/http-route.spec.ts) |
-| **builtins** (`node:os`)           | eager preload patching observed by require, default import and named import                                                                                                                         | [`patch.spec.ts`](__test__/patch.spec.ts)           |
-| **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels and `export * as ns` — all rebound via the rewrite path, runtime and build mode alike | [`tap-shapes.spec.ts`](__test__/tap-shapes.spec.ts) |
-| **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                             | [`hybrid.spec.ts`](__test__/hybrid.spec.ts)         |
-| **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                      | [`patch.spec.ts`](__test__/patch.spec.ts)           |
+| target                             | what it shows                                                                                                                                                                                          | spec                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                        | [`aws.spec.ts`](__test__/aws.spec.ts)               |
+| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch                                                                                                | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
+| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself                                                                                                   | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
+| **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                       | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
+| **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                | [`http-route.spec.ts`](__test__/http-route.spec.ts) |
+| **builtins** (`node:os`)           | eager preload patching observed by require, default import and named import                                                                                                                            | [`patch.spec.ts`](__test__/patch.spec.ts)           |
+| **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](__test__/tap-shapes.spec.ts) |
+| **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                | [`hybrid.spec.ts`](__test__/hybrid.spec.ts)         |
+| **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                         | [`patch.spec.ts`](__test__/patch.spec.ts)           |
 
 For observe-only needs on core modules, Node's own
 [`diagnostics_channel`](https://nodejs.org/api/diagnostics_channel.html)

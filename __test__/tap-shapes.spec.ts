@@ -18,7 +18,7 @@ import { build } from 'esbuild'
 const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/tap-shapes/${name}`, import.meta.url))
 
-const EXPECTED = 'wrapped:hi:x wrapped:hi:n wrapped:dflt:y patched:inner wrapped:greet ns:inner'
+const EXPECTED = 'wrapped:hi:x wrapped:hi:n wrapped:dflt:y patched:inner wrapped:greet ns:inner star:inner'
 const hookEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.shapes.mjs') }
 
 test('runtime mode: const, anonymous default and barrel re-export all rebind', async (t) => {
@@ -85,4 +85,64 @@ test('the Lambda handler shape: a wrap-style patch entry needs no wrap entry any
     delivery: 'registry',
   })
   t.is(viaBuffer.code.toString(), applied.code, 'buffer and string paths emit identical modules')
+})
+
+test('bare export *: the star-source walk resolves names through a transitive chain', async (t) => {
+  // @ts-expect-error untyped workspace package
+  const core = await import('@wrap-esm-lambda/core')
+  const starPath = fixture('node_modules/@fake/shapes/star.js')
+  const { readFileSync } = await import('node:fs')
+  const entries = [
+    {
+      module: { name: '@fake/shapes', files: ['star.js'] },
+      patch: { name: 'patchStar', from: fixture('patches/shapes.mjs') },
+      bindings: ['Inner'],
+    },
+  ]
+  const applied = core.applyMatched(readFileSync(starPath, 'utf8'), entries, starPath, {
+    format: 'module',
+    delivery: 'registry',
+  })
+  t.truthy(applied)
+  t.true(applied.code.includes('import { Inner as __wel_l0_src } from "./star-mid.js";'))
+  t.true(applied.code.includes('export { __wel_l0 as Inner };'), 'explicit export shadows the star')
+  t.true(applied.code.includes("export * from './star-mid.js'"), 'the star statement itself is untouched')
+})
+
+test('bare export *: an ambiguous name (two star providers) fails loudly', async (t) => {
+  // @ts-expect-error untyped workspace package
+  const core = await import('@wrap-esm-lambda/core')
+  const ambPath = fixture('node_modules/@fake/shapes/amb.js')
+  const { readFileSync } = await import('node:fs')
+  const entries = [
+    {
+      module: { name: '@fake/shapes', files: ['amb.js'] },
+      patch: { name: 'patchStar', from: fixture('patches/shapes.mjs') },
+      bindings: ['Dup'],
+    },
+  ]
+  const err = t.throws(() =>
+    core.applyMatched(readFileSync(ambPath, 'utf8'), entries, ambPath, { format: 'module', delivery: 'registry' }),
+  )
+  t.regex(err!.message, /ambiguous/)
+  t.regex(err!.message, /amb-a\.js.*amb-b\.js/)
+})
+
+test('bare export *: a name no star source provides keeps the loud not-found error', async (t) => {
+  // @ts-expect-error untyped workspace package
+  const core = await import('@wrap-esm-lambda/core')
+  const starPath = fixture('node_modules/@fake/shapes/star.js')
+  const { readFileSync } = await import('node:fs')
+  const entries = [
+    {
+      module: { name: '@fake/shapes', files: ['star.js'] },
+      patch: { name: 'patchStar', from: fixture('patches/shapes.mjs') },
+      bindings: ['Nonexistent'],
+    },
+  ]
+  const err = t.throws(() =>
+    core.applyMatched(readFileSync(starPath, 'utf8'), entries, starPath, { format: 'module', delivery: 'registry' }),
+  )
+  t.regex(err!.message, /export 'Nonexistent' not found/)
+  t.regex(err!.message, /unresolved 'export \*' sources/)
 })

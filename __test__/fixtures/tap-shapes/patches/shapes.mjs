@@ -36,3 +36,12 @@ export function patchNs(bindings) {
     },
   }
 }
+
+export function patchStar(bindings) {
+  const Orig = bindings.Inner
+  bindings.Inner = class extends Orig {
+    greet() {
+      return `star:${super.greet()}`
+    }
+  }
+}

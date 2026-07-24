@@ -2,9 +2,10 @@
 // native `wrap-esm-lambda` oxc addon. Both shells call `applyMatched`, so
 // the instrumented output is byte-identical whichever mode produced it.
 import { basename } from 'node:path'
-import { transformLambdaWithMapObject, exportsTap, exportsTapFromBuffer } from 'wrap-esm-lambda'
+import { transformLambdaWithMapObject, exportsTap, exportsTapFromBuffer, esmModuleExports } from 'wrap-esm-lambda'
 import { cleanPath } from './paths.mjs'
 import { moduleKindFor } from './format.mjs'
+import { resolveStarBindings } from './stars.mjs'
 
 /**
  * Marker appended to every transformed module. Both shells skip sources that
@@ -50,6 +51,35 @@ function tapEntries(patches) {
     patchFrom: entry.patch.from,
     aliasIndex,
   }))
+}
+
+/**
+ * The native tap call, with one retry for names forwarded by bare
+ * `export * from` statements. Such names are invisible in the module's own
+ * source, so the first call fails not-found; the transform then reads and
+ * parses the star sources (relative specifiers only, recursively) to learn
+ * which one provides each missing name, and retries with that provenance —
+ * the tap reroutes those names through append-only shadow exports. Names no
+ * star source provides rethrow the original loud error; ambiguous names
+ * (two sources — importers cannot link them either) throw their own.
+ *
+ * `tap` is the native function to use (string or buffer variant), `decode`
+ * lazily yields the source text for the walk.
+ */
+function tapWithStarRetry(tap, decode, modulePath, entriesInput, cjs, registry, filename, upstreamMap) {
+  try {
+    return tap(entriesInput, cjs, registry, filename, upstreamMap, undefined)
+  } catch (err) {
+    if (cjs || !/not found in module/.test(String(err?.message))) throw err
+    const sourceText = decode()
+    const { names, starSources } = esmModuleExports(sourceText)
+    if (starSources.length === 0) throw err
+    const known = new Set(names)
+    const missing = new Set(entriesInput.flatMap((entry) => entry.bindings).filter((name) => !known.has(name)))
+    const resolutions = resolveStarBindings(missing, starSources, modulePath)
+    if (resolutions.length === 0) throw err
+    return tap(entriesInput, cjs, registry, filename, upstreamMap, resolutions)
+  }
 }
 
 /**
@@ -110,7 +140,17 @@ export function applyMatched(source, entries, idOrUrl, options = {}) {
     if (wraps.length === 0) {
       // patch-only buffer fast path: the source crosses napi zero-copy; only
       // when the tap must rewrite does it come back as a (string) module
-      const tap = exportsTapFromBuffer(cjs ? EMPTY_BUFFER : source, tapEntries(patches), cjs, registry, filename)
+      const buf = source
+      const tap = tapWithStarRetry(
+        (entriesInput, ...rest) => exportsTapFromBuffer(cjs ? EMPTY_BUFFER : buf, entriesInput, ...rest),
+        () => buf.toString('utf8'),
+        cleanPath(idOrUrl),
+        tapEntries(patches),
+        cjs,
+        registry,
+        filename,
+        undefined,
+      )
       const trailer = `${tap.snippets}\n${SENTINEL}\n`
       if (tap.code == null) {
         return { code: Buffer.concat([source, Buffer.from(trailer)]), map: null }
@@ -133,7 +173,17 @@ export function applyMatched(source, entries, idOrUrl, options = {}) {
   if (patches.length > 0) {
     // one native call for all patch entries; a wrap map chains through any
     // tap rewrite so the final map still reaches the original source
-    const tap = exportsTap(cjs ? '' : code, tapEntries(patches), cjs, registry, filename, map ?? undefined)
+    const text = code
+    const tap = tapWithStarRetry(
+      (entriesInput, ...rest) => exportsTap(cjs ? '' : text, entriesInput, ...rest),
+      () => text,
+      cleanPath(idOrUrl),
+      tapEntries(patches),
+      cjs,
+      registry,
+      filename,
+      map ?? undefined,
+    )
     if (tap.code != null) {
       code = tap.code
       map = tap.map ?? null

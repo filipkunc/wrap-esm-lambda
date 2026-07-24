@@ -109,6 +109,50 @@ pub struct TapResult {
   pub map: Option<String>,
 }
 
+/// A resolution for a name forwarded by a bare `export * from`: `binding`
+/// is (transitively) provided by the star source `source`. Produced by the
+/// caller's star-graph walk over `esmModuleExports`; the tap then reroutes
+/// the name through an append-only shadow export (explicit named exports
+/// shadow `export *` for the same name — no rewrite needed).
+#[napi(object)]
+pub struct TapStarResolution {
+  pub binding: String,
+  pub source: String,
+}
+
+/// The statically visible surface of an ESM module: every exported name
+/// (including `default` and `export * as ns` names) plus the specifiers of
+/// bare `export * from` statements. The building block for resolving
+/// star-forwarded names: walk the star sources' files with this, then pass
+/// the found provenance to `exportsTap` as `starResolutions`.
+#[napi(object)]
+pub struct EsmExportsInfo {
+  pub names: Vec<String>,
+  pub star_sources: Vec<String>,
+}
+
+#[napi]
+pub fn esm_module_exports(input: String) -> EsmExportsInfo {
+  let (names, star_sources) = transform::esm_module_exports(&input);
+  EsmExportsInfo {
+    names,
+    star_sources,
+  }
+}
+
+fn star_resolutions_in(
+  resolutions: Option<Vec<TapStarResolution>>,
+) -> Vec<transform::StarResolution> {
+  resolutions
+    .unwrap_or_default()
+    .into_iter()
+    .map(|resolution| transform::StarResolution {
+      binding: resolution.binding,
+      source: resolution.source,
+    })
+    .collect()
+}
+
 fn tap_entries(entries: Vec<TapEntryInput>) -> Vec<transform::TapEntry> {
   entries
     .into_iter()
@@ -146,6 +190,7 @@ pub fn exports_tap(
   registry: bool,
   filename: Option<String>,
   upstream_map: Option<String>,
+  star_resolutions: Option<Vec<TapStarResolution>>,
 ) -> napi::Result<TapResult> {
   let out = transform::exports_tap(
     &input,
@@ -154,6 +199,7 @@ pub fn exports_tap(
     registry,
     filename.as_deref(),
     upstream_map.as_deref(),
+    &star_resolutions_in(star_resolutions),
   )
   .map_err(napi::Error::from_reason)?;
   Ok(TapResult {
@@ -180,6 +226,7 @@ pub fn exports_tap_from_buffer(
   registry: bool,
   filename: Option<String>,
   upstream_map: Option<String>,
+  star_resolutions: Option<Vec<TapStarResolution>>,
 ) -> napi::Result<TapResult> {
   let source = if cjs {
     ""
@@ -194,6 +241,7 @@ pub fn exports_tap_from_buffer(
     registry,
     filename.as_deref(),
     upstream_map.as_deref(),
+    &star_resolutions_in(star_resolutions),
   )
   .map_err(napi::Error::from_reason)?;
   Ok(TapResult {
