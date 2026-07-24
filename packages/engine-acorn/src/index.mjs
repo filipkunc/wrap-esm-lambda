@@ -1,7 +1,7 @@
 // Pure-JavaScript engine for wrap-esm-lambda: the same API surface as the
 // native oxc addon (see index.d.ts at the repo root for the contract docs),
 // implemented on acorn (parse) + magic-string (edit + map) +
-// @ampproject/remapping (map chaining). Core selects between the two engines
+// @jridgewell/remapping (map chaining). Core selects between the two engines
 // via WRAP_ESM_LAMBDA_ENGINE — see packages/core/src/engine.mjs.
 //
 // The module layout mirrors the native side:

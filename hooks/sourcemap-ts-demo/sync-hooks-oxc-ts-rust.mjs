@@ -5,7 +5,7 @@ import { dirname, resolve, basename } from 'node:path'
 import { transformLambdaWithChainedMap } from '../../index.js'
 
 // Same chain as sync-hooks-oxc-ts.mjs, but composed in Rust by oxc_sourcemap
-// instead of @ampproject/remapping: one call wraps the handler, traces its map
+// instead of @jridgewell/remapping: one call wraps the handler, traces its map
 // through tsc's map, and returns code with the .ts-reaching map already inlined.
 
 // Reads the `//# sourceMappingURL=` from a transpiled file and returns the raw

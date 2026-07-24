@@ -41,12 +41,13 @@ If the handler started as TypeScript, `tsc` already produced `handler.js` plus a
 `handler.js` -> `handler.ts` map. Our wrap adds a second step, so its map only
 reaches `handler.js`. To get an exception all the way back to the `.ts`, compose
 the two maps. oxc's map is `transformed -> handler.js`; chain it through the tsc
-map with [`@ampproject/remapping`](https://github.com/ampproject/remapping)
-(synchronous, so it works inside a `registerHooks` load hook).
-`transformLambdaWithMapObject` returns the raw map for this:
+map with [`@jridgewell/remapping`](https://github.com/jridgewell/sourcemaps)
+(the maintained home of `@ampproject/remapping`; synchronous, so it works
+inside a `registerHooks` load hook). `transformLambdaWithMapObject` returns
+the raw map for this:
 
 ```js
-import remapping from '@ampproject/remapping'
+import remapping from '@jridgewell/remapping'
 import { transformLambdaWithMapObject } from 'wrap-esm-lambda'
 
 const { code, map } = transformLambdaWithMapObject(jsSource, 'handler', 'WrapAwsLambda', 'handler.js')

@@ -64,7 +64,7 @@ export function transformAcornInlineMap(code: string, handler: string, wrapper: 
 }
 
 // acorn wrap + composing its map with tsc's map so the result reaches the .ts,
-// the acorn counterpart of transformOxcChainedToTs (same @ampproject/remapping
+// the acorn counterpart of transformOxcChainedToTs (same @jridgewell/remapping
 // compose, so any difference is the parser/codegen, not the chaining).
 export function transformAcornChainedToTs(): string {
   const { map } = acornWrapWithMap(jsCode, 'handler', 'wrapper', 'handler.js')

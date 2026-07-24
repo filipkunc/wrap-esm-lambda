@@ -5,8 +5,9 @@ The pure-JavaScript transform engine: the same API surface as the native
 [`index.d.ts`](../../index.d.ts)), implemented on
 [acorn](https://github.com/acornjs/acorn) (parse),
 [magic-string](https://github.com/rich-harris/magic-string) (edit + source
-map) and [`@ampproject/remapping`](https://github.com/ampproject/remapping)
-(map chaining). No native code anywhere in the graph.
+map) and [`@jridgewell/remapping`](https://github.com/jridgewell/sourcemaps)
+(map chaining — the maintained home of `@ampproject/remapping`). No native
+code anywhere in the graph.
 
 Core binds to one engine per process via `WRAP_ESM_LAMBDA_ENGINE`
 (see [`packages/core/src/engine.mjs`](../core/src/engine.mjs)):

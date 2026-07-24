@@ -103,7 +103,7 @@ test('source map object for chaining', (t) => {
 test('chained source map composed in Rust', (t) => {
   // The full tsc pipeline: transpile a .ts handler, then wrap the emitted .js
   // while chaining the wrap map through tsc's map — in one call, with the
-  // compose done by oxc_sourcemap in Rust instead of @ampproject/remapping.
+  // compose done by oxc_sourcemap in Rust instead of @jridgewell/remapping.
   const tsSource = `export const handler = async (event: { id?: number }): Promise<string> => {
   throw new Error(\`boom \${event?.id}\`);
 };

@@ -2,7 +2,7 @@ import { registerHooks } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, basename } from 'node:path'
-import remapping from '@ampproject/remapping'
+import remapping from '@jridgewell/remapping'
 import { transformLambdaWithMapObject } from '../../index.js'
 
 // Reads the `//# sourceMappingURL=` from a transpiled file and returns the raw
