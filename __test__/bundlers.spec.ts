@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 const execFileAsync = promisify(execFile)
 const driver = fileURLToPath(new URL('./fixtures/bundle-driver.mjs', import.meta.url))
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/tap-shapes/${name}`, import.meta.url))
+const patchFixture = (name: string) => fileURLToPath(new URL(`./fixtures/patch/${name}`, import.meta.url))
 
 const EXPECTED = 'wrapped:hi:x wrapped:hi:n wrapped:dflt:y patched:inner wrapped:greet ns:inner star:inner'
 
@@ -39,6 +40,33 @@ for (const bundler of ['rollup', 'rolldown', 'webpack']) {
       }
     })
   }
+}
+
+// The build shell's builtin reach: `node:os` has no source to transform, so
+// the plugin aliases it to a generated wrapper module that patches the real
+// exports object via process.getBuiltinModule and re-exports the patched
+// bindings. Every consumer shape of the fixture — ESM named import, default
+// import, and a runtime require() that escapes the aliasing entirely — must
+// observe the patch from a plain `node bundle.mjs`. Engine-independent (the
+// wrapper is generated, not parsed), so one run per bundler.
+for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+  test(`${bundler}: builtin patched at build time via the wrapper module`, async (t) => {
+    const outDir = await mkdtemp(join(tmpdir(), `wrap-esm-lambda-builtin-${bundler}-`))
+    try {
+      const outfile = join(outDir, 'bundle.mjs')
+      await execFileAsync(process.execPath, [
+        driver,
+        bundler,
+        patchFixture('app-builtin.mjs'),
+        patchFixture('wrap.config.builtin.mjs'),
+        outfile,
+      ])
+      const { stdout } = await execFileAsync(process.execPath, [outfile])
+      t.is(stdout.trim(), 'builtin:patched-all')
+    } finally {
+      await rm(outDir, { recursive: true, force: true })
+    }
+  })
 }
 
 // The build shell's CJS reach: a pure-CJS `.js` package (no `"type"` field,

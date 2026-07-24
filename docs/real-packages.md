@@ -123,9 +123,27 @@ module is created at its first import — which preload precedes — `require()`
 ESM default import and ESM named import all observe the patch: the matrix's
 `builtin-eager-patch` column is PATCHED_ALL on every rung, broken window
 included. A missing binding fails loudly at preload (the version-drift
-alarm), and builtin entries are runtime-only: they never match a file path,
-so the build-time shell cannot silently claim them — bundle-time
-instrumentation of core modules is impossible in principle.
+alarm).
+
+The build shell reaches the same targets through the one stage it owns:
+**resolution**. A builtin never matches a file, but every configured builtin
+specifier (both spellings — `os` and `node:os`) is aliased to a generated
+wrapper module that grabs the real exports object via
+`process.getBuiltinModule` (a global — no builtin import, so nothing races
+the ESM facade snapshot), applies the patches against it, then re-exports
+the patched bindings. Named imports bind to the wrapper's exports,
+snapshotted after the patches ran; default imports share the real (mutated)
+object; even a runtime `require()` through `createRequire` — which escapes
+the bundle's aliasing entirely — observes the patch, because the wrapper
+mutated the real object, not a copy. An injected entry shim could not make
+these guarantees (named-import bindings snapshot before any entry body code
+runs); owning resolution can. A shared `globalThis` guard keys each entry so
+the hybrid combination — a wrapper-carrying bundle run under the runtime
+hook — patches exactly once, and the same missing-binding validation fires
+at bundle time, where the building Node can be asked. On webpack/rspack the
+node-externals preset would claim builtin requests before any resolver
+runs; the plugin rewrites the request (and its dependency) at
+`beforeResolve`, the one hook that fires earlier.
 
 (For observe-only needs on core modules, Node's own
 [`diagnostics_channel`](https://nodejs.org/api/diagnostics_channel.html)

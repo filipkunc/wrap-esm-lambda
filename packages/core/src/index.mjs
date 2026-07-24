@@ -32,3 +32,4 @@ export { nearestPackage, matchEntries, createMatcher, builtinPatchEntries } from
 export { runtimeFormatFor, moduleKindFor } from './format.mjs'
 export { SENTINEL, SENTINEL_TEXT, transformMatched, applyMatched, inlineMap } from './apply.mjs'
 export { PATCH_REGISTRY, patchKey } from './registry.mjs'
+export { builtinAliases, builtinWrapperSource, builtinGuardKey } from './builtins.mjs'
