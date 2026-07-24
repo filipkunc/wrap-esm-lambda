@@ -71,7 +71,16 @@ import { build } from 'esbuild'
 import { esbuildPlugin } from '@wrap-esm-lambda/unplugin'
 import config from './wrap.config.mjs'
 
-await build({ entryPoints: ['app.mjs'], bundle: true, format: 'esm', plugins: [esbuildPlugin(config)] })
+await build({
+  entryPoints: ['app.mjs'],
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  // express's CJS graph requires node builtins; esbuild's ESM output needs
+  // the standard createRequire shim for those (unrelated to the plugin)
+  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
+  plugins: [esbuildPlugin(config)],
+})
 ```
 
 Both modes produce **byte-identical** instrumented output, and a sentinel
@@ -116,12 +125,17 @@ after its definitions exist, before any importer sees them.
   `'module.exports'` binding rebinds a CJS module whose export _is_ the API
   (fastify's factory); `'default'` taps a default export.
 - ESM and CJS get mode-specific snippets; the CJS-or-ESM decision reproduces
-  Node's own format rules, so a pure-CJS express or the two trees of a dual
-  package like hono each parse correctly.
+  Node's own format rules at runtime (extension, then nearest package.json
+  `"type"`), and falls back to the same **syntax detection** bundlers
+  themselves use at build time, where no format hint exists — so a pure-CJS
+  express, the AWS SDK's `"type"`-less ESM `dist-es`, and the two trees of a
+  dual package like hono each land on their real tap in both shells.
 - Patch delivery differs per mode: at build time a static import of your
-  patch module is appended and bundled; at runtime the register entry
-  preloads patch functions into a global registry the tap reads (a
-  hook-overridden CJS source cannot serve an injected `require`).
+  patch module is appended and bundled (a `require()` call when the patched
+  module is CJS — appended `import` syntax would flip its format under the
+  bundler's own detection); at runtime the register entry preloads patch
+  functions into a global registry the tap reads (a hook-overridden CJS
+  source cannot serve an injected `require`).
 
 Full rules — call timing, rebinding edges, dependency dos and don'ts, failure
 modes — live in the
@@ -222,8 +236,8 @@ The test suite doubles as a recipe book — each spec runs the real package:
 | target                             | what it shows                                                                                                                                                                                          | spec                                                |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
 | **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                        | [`aws.spec.ts`](__test__/aws.spec.ts)               |
-| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch                                                                                                | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
-| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself                                                                                                   | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
+| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch, and the same config lands through esbuild at build time                                       | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
+| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself, in both shells                                                                                   | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
 | **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                       | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
 | **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                | [`http-route.spec.ts`](__test__/http-route.spec.ts) |
 | **builtins** (`node:os`)           | eager preload patching observed by require, default import and named import                                                                                                                            | [`patch.spec.ts`](__test__/patch.spec.ts)           |

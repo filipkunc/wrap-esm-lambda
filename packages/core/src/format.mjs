@@ -4,6 +4,7 @@
 import { dirname, join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { cleanPath } from './paths.mjs'
+import { hasModuleSyntax } from './engine.mjs'
 
 // Nearest "type" field, Node's rule: the FIRST package.json up the tree
 // decides, named or not — dual packages mark their CJS tree with a nameless
@@ -54,14 +55,29 @@ export function runtimeFormatFor(idOrUrl) {
 }
 
 /**
- * 'cjs' or 'esm' for a module: an explicit loader-hook format wins, otherwise
- * a path heuristic (`.cjs`, `dist-cjs`) decides. Bundlers see the `module`
- * entry points, so their default is ESM.
+ * 'cjs' or 'esm' for a module. An explicit loader-hook format wins; then the
+ * unambiguous extensions; then — when the caller can supply the source — the
+ * same syntax detection bundlers and Node's ambiguous-`.js` rule apply: a
+ * module with ESM syntax (`import`/`export` statements, `import.meta`) is
+ * ESM, anything else is CJS. That is the decision that holds at build time,
+ * where a package.json `"type"` walk would misread the many dual/ESM
+ * packages whose `"module"`-field trees carry no `"type"` (the AWS SDK's
+ * `dist-es`) and a path heuristic misread pure-CJS `.js` files (express).
+ *
+ * @param {string} idOrUrl
+ * @param {string} [format] explicit 'commonjs' | 'module' when known
+ * @param {() => string} [sourceText] lazy source accessor for the syntax
+ *   fallback; without it the historic bundler default (ESM) stands
  */
-export function moduleKindFor(idOrUrl, format) {
+export function moduleKindFor(idOrUrl, format, sourceText) {
   if (format === 'commonjs') return 'cjs'
   if (format === 'module') return 'esm'
   const path = cleanPath(idOrUrl)
-  if (path.endsWith('.cjs') || path.includes('/dist-cjs/')) return 'cjs'
+  if (path.endsWith('.cjs')) return 'cjs'
+  if (path.endsWith('.mjs')) return 'esm'
+  if (path.includes('/dist-cjs/')) return 'cjs'
+  if (sourceText !== undefined) {
+    return hasModuleSyntax(sourceText()) ? 'esm' : 'cjs'
+  }
   return 'esm'
 }

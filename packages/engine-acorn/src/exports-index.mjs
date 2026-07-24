@@ -9,6 +9,48 @@ export function parseModule(source) {
   return parse(source, { ecmaVersion: 'latest', sourceType: 'module' })
 }
 
+/** `import.meta` anywhere in the tree (a `MetaProperty` whose meta is `import`). */
+function containsImportMeta(node) {
+  if (node === null || typeof node !== 'object') return false
+  if (Array.isArray(node)) return node.some(containsImportMeta)
+  if (node.type === 'MetaProperty') return node.meta.name === 'import'
+  for (const key in node) {
+    if (key === 'loc' || key === 'start' || key === 'end') continue
+    if (containsImportMeta(node[key])) return true
+  }
+  return false
+}
+
+/**
+ * Does the source contain ESM module syntax — `import`/`export` statements
+ * or `import.meta`? The same question Node's own format detection and every
+ * bundler's syntax sniffing answer for a `.js` file with no `"type"` field;
+ * core's CJS-or-ESM fallback at build time keys on it. A source that fails
+ * to parse as ESM reports `false`: whatever it is, the ESM tap cannot read
+ * it. (A dynamic `import()` alone is valid CJS and does not count — matching
+ * the native engine's oxc `has_module_syntax` semantics exactly.)
+ */
+export function hasModuleSyntax(input) {
+  let program
+  try {
+    program = parseModule(input)
+  } catch {
+    return false
+  }
+  for (const stmt of program.body) {
+    switch (stmt.type) {
+      case 'ImportDeclaration':
+      case 'ExportNamedDeclaration':
+      case 'ExportDefaultDeclaration':
+      case 'ExportAllDeclaration':
+        return true
+      default:
+        break
+    }
+  }
+  return containsImportMeta(program)
+}
+
 /** How a named export reaches its value, as far as static analysis sees. */
 export const NamedKind = Object.freeze({
   /** `export let/var/function/class X` — a mutable module-local binding. */

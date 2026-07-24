@@ -150,7 +150,12 @@ subtlest constraints:
   own imports are not instrumented (no patching-the-patcher). TypeScript
   patch files ride on Node's type stripping (Node >= 22.18, file outside
   `node_modules`).
-- Build: imported _by the patched module_ and bundled into the artifact.
+- Build: imported _by the patched module_ and bundled into the artifact. In
+  an ESM module that is a static `import`; in a CJS module it is a
+  `require()` call — an appended `import` statement would flip the module's
+  format under the bundler's own syntax detection and break its
+  `module.exports`. Bundlers resolve either shape (require-of-ESM included),
+  so the same `.mjs`/`.ts` patch file serves both.
 - Therefore keep the patch module **free of top-level side effects**: they
   would run at preload time in one mode and at patched-module-eval time in
   the other, quietly breaking the identical-behavior guarantee. Pure exported

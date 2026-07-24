@@ -101,7 +101,12 @@ export function applyMatched(source, entries, idOrUrl, options = {}) {
   if (entries.length === 0 || source.includes(SENTINEL_TEXT)) {
     return null
   }
-  const kind = moduleKindFor(idOrUrl, options.format)
+  // With no explicit format (the build shell — bundlers decide a module's
+  // format after transforms run), fall back to the same syntax detection
+  // they use. The thunk never fires on the runtime path: the hook always
+  // passes a format, so the buffer fast path stays zero-copy.
+  const src = source
+  const kind = moduleKindFor(idOrUrl, options.format, () => (typeof src === 'string' ? src : src.toString('utf8')))
   const cjs = kind === 'cjs'
   const registry = options.delivery === 'registry'
   const filename = basename(cleanPath(idOrUrl))

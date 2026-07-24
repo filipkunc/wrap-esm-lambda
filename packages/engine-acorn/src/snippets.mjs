@@ -70,11 +70,14 @@ function accessorProperties(accessors) {
  * Per-entry accessor snippet (the patch call). Registry delivery looks the
  * patch up in the `Symbol.for("wrap-esm-lambda.patches")` global the runtime
  * shell preloads; import delivery emits a static import of `patchFrom`
- * aliased by `aliasIndex` for the bundler to resolve.
+ * aliased by `aliasIndex` for the bundler to resolve — except into a CJS
+ * module, which gets a `require()` in an IIFE instead: an `import` statement
+ * appended to CJS source would flip the module's format under every
+ * bundler's syntax detection and break its `module.exports`.
  *
  * @param {Accessor[]} accessors
  */
-export function buildSnippet(accessors, patchName, patchFrom, registry, aliasIndex) {
+export function buildSnippet(accessors, patchName, patchFrom, registry, aliasIndex, cjs) {
   const props = accessorProperties(accessors)
   if (registry) {
     const key = quoteJsString(`${patchFrom}#${patchName}`)
@@ -85,6 +88,12 @@ export function buildSnippet(accessors, patchName, patchFrom, registry, aliasInd
     )
   }
   const alias = `__wel_patch_${aliasIndex}`
+  if (cjs) {
+    return (
+      `\n;(() => {\nconst { ${patchName}: ${alias} } = require(${quoteJsString(patchFrom)});\n` +
+      `${alias}({${props}\n});\n})();\n`
+    )
+  }
   return `\nimport { ${patchName} as ${alias} } from ${quoteJsString(patchFrom)};\n${alias}({${props}\n});\n`
 }
 

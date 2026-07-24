@@ -131,6 +131,16 @@ pub struct EsmExportsInfo {
   pub star_sources: Vec<String>,
 }
 
+/// Whether the source contains ESM module syntax (`import`/`export`
+/// statements or `import.meta`) — the question Node's own format detection
+/// answers for a `.js` file with no `"type"` field, and the fallback core's
+/// CJS-or-ESM decision uses at build time when no explicit format is
+/// available. A source that does not parse as ESM reports `false`.
+#[napi]
+pub fn has_module_syntax(input: String) -> bool {
+  transform::has_module_syntax(&input)
+}
+
 #[napi]
 pub fn esm_module_exports(input: String) -> EsmExportsInfo {
   let (names, star_sources) = transform::esm_module_exports(&input);

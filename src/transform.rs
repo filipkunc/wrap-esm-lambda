@@ -1297,12 +1297,17 @@ export { ",
 }
 
 /// Per-entry accessor snippet (the patch call), shared by both paths.
+/// Import delivery (`registry = false`) is mode-specific: an ESM module gets
+/// a static `import`, a CJS module a `require()` in an IIFE — an `import`
+/// statement appended to CJS source would flip the module's format under
+/// every bundler's syntax detection and break its `module.exports`.
 fn build_snippet(
   accessors: &[(String, String, bool, bool)],
   patch_name: &str,
   patch_from: &str,
   registry: bool,
   alias_index: u32,
+  cjs: bool,
 ) -> String {
   let mut out = String::with_capacity(512);
   if registry {
@@ -1310,6 +1315,19 @@ fn build_snippet(
     out.push_str("\n;(() => {\nconst __wel_registry = globalThis[Symbol.for(\"wrap-esm-lambda.patches\")];\nconst __wel_patch = __wel_registry && __wel_registry[");
     out.push_str(&quote_js_string(&key));
     out.push_str("];\nif (__wel_patch) __wel_patch({");
+    push_accessors(&mut out, accessors);
+    out.push_str("\n});\n})();\n");
+  } else if cjs {
+    let alias = format!("__wel_patch_{}", alias_index);
+    out.push_str("\n;(() => {\nconst { ");
+    out.push_str(patch_name);
+    out.push_str(": ");
+    out.push_str(&alias);
+    out.push_str(" } = require(");
+    out.push_str(&quote_js_string(patch_from));
+    out.push_str(");\n");
+    out.push_str(&alias);
+    out.push_str("({");
     push_accessors(&mut out, accessors);
     out.push_str("\n});\n})();\n");
   } else {
@@ -1398,6 +1416,7 @@ pub fn exports_tap(
         &entry.patch_from,
         registry,
         entry.alias_index,
+        true,
       ));
     }
     return Ok(TapOutput {
@@ -1462,6 +1481,7 @@ pub fn exports_tap(
       &entry.patch_from,
       registry,
       entry.alias_index,
+      false,
     ));
   }
 
@@ -1493,6 +1513,21 @@ pub fn exports_tap(
     code: Some(ret.code),
     map,
   })
+}
+
+/// Does the source contain ESM module syntax — `import`/`export` statements
+/// or `import.meta`? This is the same question Node's own format detection
+/// and every bundler's syntax sniffing answer for an extensionless-ambiguous
+/// `.js` file, and core's CJS-or-ESM fallback at build time keys on it. A
+/// source that fails to parse as ESM reports `false`: whatever it is, the
+/// ESM tap cannot read it, and CJS is the only tap that could still apply.
+pub fn has_module_syntax(source_text: &str) -> bool {
+  let allocator = Allocator::default();
+  let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
+  if parsed.panicked || !parsed.diagnostics.is_empty() {
+    return false;
+  }
+  parsed.module_record.has_module_syntax
 }
 
 /// The statically visible surface of an ESM module, for the caller's
@@ -1916,6 +1951,45 @@ mod tests {
         .contains("if (module.exports.Client !== v) throw new TypeError"),
       "CJS setter must verify the rebind took — sloppy-mode bundles no-op silently on getter-only exports"
     );
+  }
+
+  #[test]
+  fn test_exports_tap_cjs_import_delivery_emits_require() {
+    // Build-time delivery into a CJS module: a static `import` appended to
+    // CJS source would flip its format under bundler syntax detection, so
+    // import delivery goes through `require()` there.
+    let out = tap1("", &["json"], true, false).unwrap();
+    println!("{}", out.snippets);
+    assert!(
+      !out.snippets.contains("import {"),
+      "no ESM import may reach a CJS module"
+    );
+    assert!(
+      out
+        .snippets
+        .contains("const { patchIt: __wel_patch_0 } = require(\"/abs/patch.ts\");")
+    );
+    assert!(out.snippets.contains("__wel_patch_0({"));
+    assert!(
+      out
+        .snippets
+        .contains("get json() { return module.exports.json; }")
+    );
+  }
+
+  #[test]
+  fn test_has_module_syntax() {
+    assert!(has_module_syntax("export const x = 1;\n"));
+    assert!(has_module_syntax("import x from \"y\";\n"));
+    assert!(has_module_syntax("console.log(import.meta.url);\n"));
+    // pure CJS: `module`/`exports`/`require` are just identifiers to ESM
+    assert!(!has_module_syntax(
+      "const express = require(\"./lib\");\nexports = module.exports = express;\nexports.json = () => {};\n"
+    ));
+    // dynamic import alone is valid in CJS too — not module syntax
+    assert!(!has_module_syntax("import(\"x\").then(() => {});\n"));
+    // does not parse as ESM at all -> not ESM
+    assert!(!has_module_syntax("with (obj) { x = 1; }\n"));
   }
 
   #[test]

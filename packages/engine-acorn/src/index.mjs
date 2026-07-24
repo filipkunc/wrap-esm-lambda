@@ -11,7 +11,7 @@
 // - wrap.mjs          — the original handler-wrap transform
 // - sourcemaps.mjs    — map chaining and data-URL inlining
 
-export { esmModuleExports } from './exports-index.mjs'
+export { esmModuleExports, hasModuleSyntax } from './exports-index.mjs'
 export { exportsTap, exportsTapFromBuffer } from './tap.mjs'
 export {
   transformLambda,

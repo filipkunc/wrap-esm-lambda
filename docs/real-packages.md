@@ -30,7 +30,12 @@ the real packages, one per shape:
   `Module._load` patching was unreliable pre-fix. (The hook derives the
   format Node itself would assign — extension, then nearest package.json
   `"type"` — when `nextLoad` reports none, so a `.js` CJS file is never
-  mis-parsed as ESM.)
+  mis-parsed as ESM. The build shell has no format source at all, so it
+  falls back to the same syntax detection bundlers apply — a `.js` file
+  with no `import`/`export`/`import.meta` is CJS — and delivers the patch
+  by an appended `require()` instead of an `import` that would flip the
+  module's format; the frameworks spec pins all three packages through
+  esbuild.)
 - **fastify** (CJS whose `module.exports` IS the API function): wrapping the
   factory means rebinding the callable itself, which the reserved
   `"module.exports"` binding expresses — `bindings: ['module.exports']`,

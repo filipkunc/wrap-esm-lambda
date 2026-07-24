@@ -63,6 +63,7 @@
     "@napi-rs/cli": "^3.0.3",
     "@napi-rs/wasm-runtime": "^1.0.1",
     "@oxc-node/core": "^0.0.30",
+    "@rollup/plugin-commonjs": "^28.0.9",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@smithy/core": "^3.29.5",
     "@swc/core": "^1.13.3",
