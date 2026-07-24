@@ -1,7 +1,11 @@
 import test from 'ava'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { fileURLToPath } from 'node:url'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { build } from 'esbuild'
 
 // The exports tap against real framework package shapes: pure-CJS express,
 // module.exports-is-the-API fastify, and the dual package hono (separate
@@ -29,6 +33,39 @@ test('frameworks via require: pure CJS chain, fastify factory rebound via "modul
     { env },
   )
   t.is(stdout.trim(), 'express:ok fastify:ok hono:ok')
+})
+
+test('build mode: the same frameworks config lands through esbuild — pure-CJS express and fastify included', async (t) => {
+  // The README quick-start claim, on the real packages: one config, both
+  // shells. At build time express/fastify are classified CJS by syntax
+  // detection and their patches arrive via require-delivery snippets; hono
+  // rides the ESM path. Plain `node bundle.mjs` then proves the behavior.
+  // @ts-expect-error untyped workspace package
+  const { unplugin } = await import('@wrap-esm-lambda/unplugin')
+  const { default: config } = await import(pathToFileURL(fixture('wrap.config.frameworks.mjs')).href)
+  const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-frameworks-'))
+  try {
+    const outfile = join(outDir, 'bundle.mjs')
+    await build({
+      entryPoints: [fixture('app-frameworks.mjs')],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      // the CJS dependency graphs require node builtins, which esbuild's ESM
+      // output serves through a createRequire shim — the standard esbuild
+      // recipe for node targets, unrelated to the tap
+      banner: {
+        js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);",
+      },
+      outfile,
+      plugins: [unplugin.esbuild(config)],
+      logLevel: 'silent',
+    })
+    const { stdout } = await execFileAsync(process.execPath, [outfile])
+    t.is(stdout.trim(), 'express:ok fastify:ok hono:ok')
+  } finally {
+    await rm(outDir, { recursive: true, force: true })
+  }
 })
 
 test('frameworks without the hook: nothing is patched (the ok signals are not ambient)', async (t) => {

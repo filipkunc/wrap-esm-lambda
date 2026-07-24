@@ -31,13 +31,15 @@ switch (bundler) {
   case 'rollup':
   case 'rolldown': {
     // same plugin-driven API on both; rollup additionally needs node-resolve
-    // for bare specifiers, rolldown resolves them natively
+    // for bare specifiers and commonjs for CJS dependencies (both standard
+    // rollup setup), rolldown handles both natively
     const plugins = [unplugin[bundler](config)]
     let bundle
     if (bundler === 'rollup') {
       const { rollup } = await import('rollup')
       const { nodeResolve } = await import('@rollup/plugin-node-resolve')
-      plugins.push(nodeResolve())
+      const { default: commonjs } = await import('@rollup/plugin-commonjs')
+      plugins.push(nodeResolve(), commonjs())
       bundle = await rollup({ input: entry, plugins, onwarn: () => {} })
     } else {
       const { rolldown } = await import('rolldown')

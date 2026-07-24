@@ -240,7 +240,7 @@ function cjsTap(entries, registry) {
       // always works (plain writable property), so no set verification there.
       name === 'module.exports' ? accessor(name, 'module.exports') : accessor(name, `module.exports.${name}`, true),
     )
-    snippets += buildSnippet(accessors, entry.patchName, entry.patchFrom, registry, entry.aliasIndex)
+    snippets += buildSnippet(accessors, entry.patchName, entry.patchFrom, registry, entry.aliasIndex, true)
   }
   return { snippets, code: null, map: null }
 }
@@ -306,7 +306,7 @@ export function exportsTap(input, entries, cjs, registry, filename, upstreamMap,
 
   let snippets = starStubs
   entries.forEach((entry, i) => {
-    snippets += buildSnippet(entryAccessors[i], entry.patchName, entry.patchFrom, registry, entry.aliasIndex)
+    snippets += buildSnippet(entryAccessors[i], entry.patchName, entry.patchFrom, registry, entry.aliasIndex, false)
   })
 
   if (opsAreEmpty(ops)) {

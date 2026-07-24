@@ -40,3 +40,28 @@ for (const bundler of ['rollup', 'rolldown', 'webpack']) {
     })
   }
 }
+
+// The build shell's CJS reach: a pure-CJS `.js` package (no `"type"` field,
+// no telling extension or path — express's exact layout) must be classified
+// by syntax detection and receive require-delivery snippets — an appended
+// ESM `import` would flip the module's format under each bundler's own
+// syntax sniffing. Every bundler of the matrix, both engines.
+for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+  for (const engineName of ['oxc', 'acorn']) {
+    test(`${bundler} + ${engineName} engine: pure-CJS target patched at build time`, async (t) => {
+      const outDir = await mkdtemp(join(tmpdir(), `wrap-esm-lambda-cjs-${bundler}-${engineName}-`))
+      try {
+        const outfile = join(outDir, 'bundle.mjs')
+        await execFileAsync(
+          process.execPath,
+          [driver, bundler, fixture('app-cjs-lib.mjs'), fixture('wrap.config.cjs-lib.mjs'), outfile],
+          { env: { ...process.env, WRAP_ESM_LAMBDA_ENGINE: engineName } },
+        )
+        const { stdout } = await execFileAsync(process.execPath, [outfile])
+        t.is(stdout.trim(), 'wrapped:hi:x')
+      } finally {
+        await rm(outDir, { recursive: true, force: true })
+      }
+    })
+  }
+}

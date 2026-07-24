@@ -64,6 +64,34 @@ test('cjs tap emission (registry delivery): module.exports accessors, no injecte
   t.true(out.snippets.includes('get Client() { return module.exports.Client; }'))
 })
 
+test('cjs tap emission (import delivery): a require() IIFE, never an ESM import', (t) => {
+  // Build-time delivery into a CJS module: an appended `import` statement
+  // would flip the module's format under every bundler's syntax detection
+  // and break its `module.exports`, so the patch arrives via require().
+  const out = exportsTap('', [tapEntry(['json'])], true, false)
+  t.is(out.code, undefined, 'CJS never rewrites')
+  t.false(out.snippets.includes('import {'))
+  t.true(out.snippets.includes('const { patchIt: __wel_patch_0 } = require("/abs/patch.ts");'))
+  t.true(out.snippets.includes('get json() { return module.exports.json; }'))
+})
+
+test('build-time format fallback: module syntax decides when no format or telling path exists', (t) => {
+  // The build shell passes no format and bundled packages rarely have a
+  // telling extension — a pure-CJS `.js` (express's lib/express.js) and an
+  // ESM `.js` with no package `"type"` (the AWS SDK's dist-es) must both
+  // land on their real tap. `.js` all the way down, same path shape.
+  const entries = [{ module: { name: 'fake' }, patch: { name: 'patchIt', from: '/abs/patch.ts' }, bindings: ['json'] }]
+  const viaCjs = core.applyMatched('exports.json = function json() {};\n', entries, '/n/fake/lib/thing.js')
+  t.true(viaCjs.code.includes('require("/abs/patch.ts")'), 'CJS source gets the require-delivery CJS tap')
+  t.true(viaCjs.code.includes('module.exports.json'))
+
+  const viaEsm = core.applyMatched('export function json() {}\n', entries, '/n/fake/lib/thing.js')
+  t.true(
+    viaEsm.code.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'),
+    'ESM syntax gets the ESM tap',
+  )
+})
+
 test('buffer-input tap emission: identical to the string variant', (t) => {
   // The runtime-hook shape: source stays the UTF-8 Buffer nextLoad provided
   const source = 'export class Client {}\nexport const VERSION = "1.0.0";\n'

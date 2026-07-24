@@ -30,5 +30,5 @@ if (!Object.hasOwn(ENGINES, engineName)) {
   )
 }
 
-export const { esmModuleExports, exportsTap, exportsTapFromBuffer, transformLambdaWithMapObject } =
+export const { esmModuleExports, exportsTap, exportsTapFromBuffer, hasModuleSyntax, transformLambdaWithMapObject } =
   await ENGINES[engineName]()

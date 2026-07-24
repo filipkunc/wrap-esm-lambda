@@ -71,6 +71,33 @@ test('CJS mode: identical snippets, including module.exports rebinding and verif
   }
 })
 
+test('CJS import delivery: identical require() snippets — never an ESM import into CJS', (t) => {
+  for (const bindings of [['Client'], ['module.exports']]) {
+    const fromOxc = oxc.exportsTap('', [{ ...ENTRY, bindings }], true, false)
+    const fromAcorn = (acorn as Engine).exportsTap('', [{ ...ENTRY, bindings }], true, false)
+    t.is(fromAcorn.snippets, fromOxc.snippets, 'snippets are byte-identical')
+    t.true(fromOxc.snippets.includes('const { patchIt: __wel_patch_0 } = require("/abs/patch.ts");'))
+    t.false(fromOxc.snippets.includes('import {'), 'an import would flip the CJS module format under bundlers')
+  }
+})
+
+test('hasModuleSyntax: both engines answer the CJS-or-ESM syntax question identically', (t) => {
+  const cases: [string, boolean][] = [
+    ['export const x = 1;\n', true],
+    ['import x from "y";\n', true],
+    ['console.log(import.meta.url);\n', true],
+    ['const lib = require("./lib");\nexports = module.exports = lib;\nexports.json = () => {};\n', false],
+    // dynamic import is valid in CJS too — not module syntax
+    ['import("x").then(() => {});\n', false],
+    // does not parse as ESM at all -> whatever it is, the ESM tap cannot read it
+    ['with (obj) { x = 1; }\n', false],
+  ]
+  for (const [source, expected] of cases) {
+    t.is(oxc.hasModuleSyntax(source), expected, `oxc on ${JSON.stringify(source)}`)
+    t.is((acorn as Engine).hasModuleSyntax(source), expected, `acorn on ${JSON.stringify(source)}`)
+  }
+})
+
 test('multiple entries share rewrites identically across engines', (t) => {
   const source = 'export const VERSION = "1.0.0";\n'
   const entries = [

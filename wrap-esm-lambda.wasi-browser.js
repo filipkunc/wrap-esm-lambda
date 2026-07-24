@@ -5,15 +5,12 @@ import {
   WASI as __WASI,
 } from '@napi-rs/wasm-runtime'
 
-
-
 const __wasi = new __WASI({
   version: 'preview1',
 })
 
 const __wasmUrl = new URL('./wrap-esm-lambda.wasm32-wasi.wasm', import.meta.url).href
 const __emnapiContext = __emnapiGetDefaultContext()
-
 
 const __sharedMemory = new WebAssembly.Memory({
   initial: 4000,
@@ -59,6 +56,7 @@ export default __napiModule.exports
 export const esmModuleExports = __napiModule.exports.esmModuleExports
 export const exportsTap = __napiModule.exports.exportsTap
 export const exportsTapFromBuffer = __napiModule.exports.exportsTapFromBuffer
+export const hasModuleSyntax = __napiModule.exports.hasModuleSyntax
 export const transformLambda = __napiModule.exports.transformLambda
 export const transformLambdaFromBuffer = __napiModule.exports.transformLambdaFromBuffer
 export const transformLambdaWithChainedMap = __napiModule.exports.transformLambdaWithChainedMap
