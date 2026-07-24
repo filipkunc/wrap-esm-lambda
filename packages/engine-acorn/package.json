@@ -11,7 +11,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@ampproject/remapping": "^2.3.0",
+    "@jridgewell/remapping": "^2.3.5",
     "acorn": "^8.15.0",
     "magic-string": "^0.30.17"
   }

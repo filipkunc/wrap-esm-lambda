@@ -14,7 +14,7 @@ export function transformOxcChainedToTs(): string {
 }
 
 // Same wrap and chain, but the compose runs in Rust via oxc_sourcemap instead
-// of @ampproject/remapping — the wrap map never round-trips through JSON, and
+// of @jridgewell/remapping — the wrap map never round-trips through JSON, and
 // the only JS<->Rust traffic is the tsc map in and the chained map out.
 export function transformOxcChainedToTsRust(): string {
   const { code, map } = transformLambdaWithChainedMapObject(jsCode, 'handler', 'wrapper', 'handler.js', tscMap)

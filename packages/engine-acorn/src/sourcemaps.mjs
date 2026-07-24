@@ -1,9 +1,10 @@
 // Source-map composition for the JS engine. The native engine chains maps
 // inside Rust via oxc_sourcemap token lookup; here the same trace runs
-// through @ampproject/remapping — the reference implementation of exactly
-// that compose. Tokens the upstream map has no mapping for are dropped by
-// both, so the two engines agree on chained-map semantics.
-import remapping from '@ampproject/remapping'
+// through @jridgewell/remapping (the maintained home of what used to be
+// @ampproject/remapping) — the reference implementation of exactly that
+// compose. Tokens the upstream map has no mapping for are dropped by both,
+// so the two engines agree on chained-map semantics.
+import remapping from '@jridgewell/remapping'
 
 /**
  * Compose `mapJson` (`transformed -> intermediate`, fresh from this engine)

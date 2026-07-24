@@ -48,7 +48,7 @@ Notes on the transform-latency comparison:
   roughly doubles acorn's time — the map is nearly free when the codegen builds
   it in Rust, but a real per-node cost through a JS generator.
 - The `+ map chained to .ts` bars go further: they transpile a TypeScript handler
-  and compose the wrap map with tsc's map via `@ampproject/remapping` so the
+  and compose the wrap map with tsc's map via `@jridgewell/remapping` so the
   result reaches the original `.ts` (see [source-maps.md](source-maps.md)). The
   compose is the same parser-independent step for both, so the gap between them
   (oxc ~27 µs vs acorn ~47 µs) is the parser/codegen difference, and oxc chained

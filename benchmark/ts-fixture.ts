@@ -1,10 +1,10 @@
 import ts from 'typescript'
 import { createRequire } from 'node:module'
 
-// `@ampproject/remapping` is a CJS default-export function; requiring it avoids
+// `@jridgewell/remapping` is a CJS default-export function; requiring it avoids
 // the ESM-interop typing friction of a default import under NodeNext.
 type Remapping = (map: string, loader: (file: string) => string | null) => { toString(): string }
-const remapping = createRequire(import.meta.url)('@ampproject/remapping') as Remapping
+const remapping = createRequire(import.meta.url)('@jridgewell/remapping') as Remapping
 
 // A representative TypeScript handler, transpiled once so the chained bars can
 // measure the full `.ts` -> `.js` -> wrapped pipeline without touching disk.
