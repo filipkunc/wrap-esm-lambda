@@ -315,10 +315,11 @@ The headline numbers (details and methodology in
   force the tap's rewrite path (`export const`, anonymous defaults,
   re-exports) additionally pay one oxc codegen — the same machinery as the
   wrap transform, still microseconds.
-- Runtime-hook cold start overhead on a real fixture app is **~28 ms**, on
-  par with import-in-the-middle's sync mode and ~3x cheaper than the
-  off-thread loader OTel ships by default. Use a `.mjs` config (not `.ts`)
-  where cold start matters.
+- Runtime-hook cold start overhead on a real fixture app is **~29 ms**
+  (half of which used to be the `semver` package, now replaced by an
+  in-package range matcher), on par with import-in-the-middle's sync mode
+  and ~3x cheaper than the off-thread loader OTel ships by default. Use a
+  `.mjs` config (not `.ts`) where cold start matters.
 - Module sources cross the napi boundary zero-copy as UTF-8 buffers on the
   runtime path; only the few-hundred-byte snippet comes back.
 

@@ -6,7 +6,7 @@
 import { dirname, join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
-import semver from 'semver'
+import { satisfies } from './range.mjs'
 import { cleanPath } from './paths.mjs'
 
 // Nearest-package.json lookup, cached per directory so the runtime hook stays
@@ -54,7 +54,7 @@ function entryMatches(entry, path) {
     if (isBuiltin(entry.module.name)) return false
     const pkg = nearestPackage(path)
     if (!pkg || pkg.name !== entry.module.name) return false
-    if (entry.module.versionRange && !semver.satisfies(pkg.version, entry.module.versionRange)) return false
+    if (entry.module.versionRange && !satisfies(pkg.version, entry.module.versionRange)) return false
     if (entry.module.files && !entry.module.files.some((f) => path.endsWith(`/${f}`) || path === f)) return false
     return true
   }
@@ -101,6 +101,6 @@ export function builtinPatchEntries(config) {
     if (entry.module.files) {
       throw new TypeError(`builtin patch entry '${entry.module.name}' cannot have 'files' — built-ins are one module`)
     }
-    return !entry.module.versionRange || semver.satisfies(process.versions.node, entry.module.versionRange)
+    return !entry.module.versionRange || satisfies(process.versions.node, entry.module.versionRange)
   })
 }
