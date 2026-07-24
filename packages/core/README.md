@@ -23,6 +23,7 @@ re-exported from [`src/index.mjs`](src/index.mjs):
 | [`src/format.mjs`](src/format.mjs)     | the CJS-or-ESM decision, reproducing Node's own format rules                              |
 | [`src/apply.mjs`](src/apply.mjs)       | entries -> instrumented source via the native oxc addon, plus the double-wrap sentinel    |
 | [`src/registry.mjs`](src/registry.mjs) | the runtime patch-function registry contract shared with the Rust emission                |
+| [`src/stars.mjs`](src/stars.mjs)       | the `export * from` graph walk resolving star-forwarded names at transform time           |
 
 ## Patch author contract
 
@@ -78,9 +79,19 @@ requested `bindings`:
     class/function exports this is indistinguishable, but if the source
     module reassigns its export after evaluation, importers of the patched
     module keep the snapshot (until the patch itself rebinds).
-  - Bare `export * from "m"` is the one shape that stays out of reach — its
-    names are not statically visible; a binding requested from it fails
-    loudly as not-found. Target the defining module.
+  - Bare `export * from "m"` — the forwarded names are not visible in the
+    module's own source, but they are knowable at transform time: the
+    transform walks the star sources (reading and parsing each file,
+    recursively — the same resolution Node's linker performs) to find which
+    one provides the requested name, then appends a shadow export
+    redirecting it through a rebindable local. An explicit named export
+    shadows `export *` for the same name, so the star statement itself is
+    untouched and the whole fix is append-only. Loud limits: a star with a
+    **bare specifier** (`export * from "pkg"`) is not walked (the transform
+    owns no module resolution — the error names the unresolved sources), a
+    name provided by **two** star sources is refused as ambiguous (importers
+    cannot link it either), and a star pointing at a **CJS** file has no
+    statically knowable names.
 - CJS getter-only exports (esbuild-bundled packages) make rebind assignment
   throw in strict-mode modules but **silently no-op in sloppy-mode ones** —
   the tap's CJS setter verifies the write took and throws if not; prototype

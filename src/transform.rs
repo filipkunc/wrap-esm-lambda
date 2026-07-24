@@ -610,6 +610,10 @@ struct ExportIndex {
   /// top-level `const` declarations (exported directly or not) by name →
   /// statement index, for demotion of list-exported consts
   top_const: std::collections::HashMap<String, usize>,
+  /// specifiers of bare `export * from "m"` statements — names these forward
+  /// are not statically visible from this module alone; the caller may walk
+  /// them (see `esm_module_exports`) and retry with star resolutions
+  star_sources: Vec<String>,
 }
 
 fn build_export_index(program: &Program) -> ExportIndex {
@@ -618,6 +622,7 @@ fn build_export_index(program: &Program) -> ExportIndex {
     default: None,
     import_locals: std::collections::HashSet::new(),
     top_const: std::collections::HashMap::new(),
+    star_sources: Vec::new(),
   };
   for (stmt_idx, stmt) in program.body.iter().enumerate() {
     match stmt {
@@ -711,8 +716,12 @@ fn build_export_index(program: &Program) -> ExportIndex {
         }
       }
       Statement::ExportAllDeclaration(export) => {
-        // `export * as ns from "m"` has a statically visible name; bare
-        // `export * from "m"` does not and stays unreachable by design.
+        // `export * as ns from "m"` has a statically visible name; a bare
+        // `export * from "m"` only records its source for the caller's
+        // star-graph walk.
+        if export.exported.is_none() {
+          index.star_sources.push(export.source.value.to_string());
+        }
         if let Some(exported) = &export.exported {
           let name = exported.name().to_string();
           index.named.push(NamedInfo {
@@ -898,10 +907,19 @@ fn resolve_binding(
   if index.default.is_some() {
     available.push("default");
   }
+  let star_hint = if index.star_sources.is_empty() {
+    String::new()
+  } else {
+    format!(
+      "; unresolved 'export *' sources: {}",
+      index.star_sources.join(", ")
+    )
+  };
   Err(format!(
-    "export '{}' not found in module (available: {})",
+    "export '{}' not found in module (available: {}{})",
     name,
-    available.join(", ")
+    available.join(", "),
+    star_hint
   ))
 }
 
@@ -1222,6 +1240,62 @@ fn apply_rewrites<'a>(
   Ok(())
 }
 
+/// A caller-provided resolution for a name forwarded by a bare
+/// `export * from`: the requested `binding` is (transitively) provided by
+/// the star source `source`. The caller learns this by walking the star
+/// graph with `esm_module_exports` over the source files — something only
+/// it can do, since it owns module resolution and file access.
+pub struct StarResolution {
+  pub binding: String,
+  pub source: String,
+}
+
+/// A name in `import { <name> as x }` / `export { x as <name> }` braces:
+/// plain identifiers stay bare, anything else becomes a string literal
+/// (`import { "a-b" as x }` is legal ESM).
+fn brace_name(name: &str) -> String {
+  if is_plain_property_name(name) {
+    name.to_string()
+  } else {
+    quote_js_string(name)
+  }
+}
+
+/// Append-only redirect for a star-forwarded name, exploiting that an
+/// explicit named export shadows a bare `export *` for the same name: the
+/// star statement stays untouched, and these three appended statements
+/// (imports and exports hoist) reroute `name` through a rebindable local.
+/// No rewrite, no codegen — the source and its maps stay intact.
+fn push_star_stub(stubs: &mut String, name: &str, source: &str, local: &str) {
+  stubs.push_str(
+    "
+import { ",
+  );
+  stubs.push_str(&brace_name(name));
+  stubs.push_str(" as ");
+  stubs.push_str(local);
+  stubs.push_str("_src } from ");
+  stubs.push_str(&quote_js_string(source));
+  stubs.push_str(
+    ";
+let ",
+  );
+  stubs.push_str(local);
+  stubs.push_str(" = ");
+  stubs.push_str(local);
+  stubs.push_str(
+    "_src;
+export { ",
+  );
+  stubs.push_str(local);
+  stubs.push_str(" as ");
+  stubs.push_str(&brace_name(name));
+  stubs.push_str(
+    " };
+",
+  );
+}
+
 /// Per-entry accessor snippet (the patch call), shared by both paths.
 fn build_snippet(
   accessors: &[(String, String, bool, bool)],
@@ -1296,6 +1370,7 @@ pub fn exports_tap(
   registry: bool,
   filename: Option<&str>,
   upstream_map_json: Option<&str>,
+  star_resolutions: &[StarResolution],
 ) -> Result<TapOutput, String> {
   if cjs {
     let mut snippets = String::new();
@@ -1339,6 +1414,13 @@ pub fn exports_tap(
   let mut ops = RewriteOps::default();
   let mut fresh = FreshNames::new(source_text);
 
+  let star_map: std::collections::HashMap<&str, &str> = star_resolutions
+    .iter()
+    .map(|resolution| (resolution.binding.as_str(), resolution.source.as_str()))
+    .collect();
+  let mut star_locals: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+  let mut star_stubs = String::new();
+
   // resolve every entry first: validation errors must fire before any
   // rewrite decision, and entries tapping the same binding share rewrites
   let mut entry_accessors: Vec<Vec<(String, String, bool, bool)>> =
@@ -1346,7 +1428,25 @@ pub fn exports_tap(
   for entry in entries {
     let mut accessors = Vec::with_capacity(entry.bindings.len());
     for name in &entry.bindings {
-      let local = resolve_binding(name, &index, &mut ops, &mut fresh)?;
+      let local = match resolve_binding(name, &index, &mut ops, &mut fresh) {
+        Ok(local) => local,
+        // a name the module's own exports don't have, but the caller's
+        // star-graph walk located in one of the `export * from` sources:
+        // reroute it through an append-only shadow export
+        Err(err) => match star_map.get(name.as_str()) {
+          Some(source) => {
+            if let Some(existing) = star_locals.get(name) {
+              existing.clone()
+            } else {
+              let local = fresh.numbered("__wel_l");
+              push_star_stub(&mut star_stubs, name, source, &local);
+              star_locals.insert(name.clone(), local.clone());
+              local
+            }
+          }
+          None => return Err(err),
+        },
+      };
       // ESM locals are strict-mode bindings; after resolution every local
       // is reassignable, so no set verification is needed.
       accessors.push((name.clone(), local, true, false));
@@ -1354,7 +1454,7 @@ pub fn exports_tap(
     entry_accessors.push(accessors);
   }
 
-  let mut snippets = String::new();
+  let mut snippets = star_stubs;
   for (entry, accessors) in entries.iter().zip(&entry_accessors) {
     snippets.push_str(&build_snippet(
       accessors,
@@ -1393,6 +1493,25 @@ pub fn exports_tap(
     code: Some(ret.code),
     map,
   })
+}
+
+/// The statically visible surface of an ESM module, for the caller's
+/// star-graph walk: every exported name (including `default` and
+/// `export * as ns` names) plus the specifiers of bare `export * from`
+/// statements, whose forwarded names require reading those sources.
+pub fn esm_module_exports(source_text: &str) -> (Vec<String>, Vec<String>) {
+  let allocator = Allocator::default();
+  let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
+  let index = build_export_index(&parsed.program);
+  let mut names: Vec<String> = index
+    .named
+    .iter()
+    .map(|info| info.exported.clone())
+    .collect();
+  if index.default.is_some() {
+    names.push("default".to_string());
+  }
+  (names, index.star_sources)
 }
 
 #[cfg(test)]
@@ -1447,6 +1566,7 @@ mod tests {
       registry,
       Some("mod.js"),
       None,
+      &[],
     )
   }
 
@@ -1628,12 +1748,72 @@ mod tests {
   }
 
   #[test]
-  fn test_exports_tap_bare_export_star_stays_unreachable() {
+  fn test_exports_tap_bare_export_star_unresolved_is_loud_with_hint() {
     let source = "export * from \"./m.js\";\nexport class Client {}\n";
     let err = tap1(source, &["Hidden"], false, true).unwrap_err();
     assert!(
       err.contains("export 'Hidden' not found"),
       "bare star names are not static: {err}"
+    );
+    assert!(
+      err.contains("unresolved 'export *' sources: ./m.js"),
+      "error names the stars: {err}"
+    );
+  }
+
+  #[test]
+  fn test_exports_tap_star_resolution_appends_shadow_export() {
+    let source = "export * from \"./m.js\";\n";
+    let out = exports_tap(
+      source,
+      &[TapEntry {
+        bindings: vec!["Hidden".to_string()],
+        patch_name: "patchIt".to_string(),
+        patch_from: "/abs/patch.ts".to_string(),
+        alias_index: 0,
+      }],
+      false,
+      true,
+      Some("mod.js"),
+      None,
+      &[StarResolution {
+        binding: "Hidden".to_string(),
+        source: "./m.js".to_string(),
+      }],
+    )
+    .unwrap();
+    println!("{}", out.snippets);
+    assert!(
+      out.code.is_none(),
+      "star shadowing is append-only — no rewrite"
+    );
+    assert!(
+      out
+        .snippets
+        .contains("import { Hidden as __wel_l0_src } from \"./m.js\";")
+    );
+    assert!(out.snippets.contains("let __wel_l0 = __wel_l0_src;"));
+    assert!(
+      out.snippets.contains("export { __wel_l0 as Hidden };"),
+      "explicit export shadows the star"
+    );
+    assert!(out.snippets.contains("set Hidden(v) { __wel_l0 = v; }"));
+  }
+
+  #[test]
+  fn test_esm_module_exports_surface() {
+    let source = "export const a = 1;\nexport * from \"./x.js\";\nexport * as ns from \"./y.js\";\nexport default 2;\n";
+    let (names, stars) = esm_module_exports(source);
+    assert!(names.contains(&"a".to_string()));
+    assert!(
+      names.contains(&"ns".to_string()),
+      "export * as ns is a name, not a bare star"
+    );
+    assert!(names.contains(&"default".to_string()));
+    assert_eq!(
+      stars,
+      vec!["./x.js".to_string()],
+      "only the bare star is a walk source"
     );
   }
 
@@ -1676,7 +1856,7 @@ mod tests {
         alias_index: 1,
       },
     ];
-    let out = exports_tap(source, &entries, false, false, Some("mod.js"), None).unwrap();
+    let out = exports_tap(source, &entries, false, false, Some("mod.js"), None, &[]).unwrap();
     let code = out.code.unwrap();
     assert_eq!(
       code.matches("let VERSION").count(),

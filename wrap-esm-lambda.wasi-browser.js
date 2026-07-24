@@ -56,6 +56,7 @@ const {
   },
 })
 export default __napiModule.exports
+export const esmModuleExports = __napiModule.exports.esmModuleExports
 export const exportsTap = __napiModule.exports.exportsTap
 export const exportsTapFromBuffer = __napiModule.exports.exportsTapFromBuffer
 export const transformLambda = __napiModule.exports.transformLambda

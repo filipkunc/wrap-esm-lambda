@@ -8,6 +8,7 @@ import dflt from '@fake/shapes/default.js'
 import { Inner } from '@fake/shapes/barrel.js'
 import { greet } from '@fake/shapes/destructured.js'
 import { inner } from '@fake/shapes/ns.js'
+import { Inner as StarInner } from '@fake/shapes/star.js'
 
 const parts = [
   await handler('x'),
@@ -16,5 +17,6 @@ const parts = [
   new Inner().greet(),
   greet(),
   new inner.Inner().greet(),
+  new StarInner().greet(),
 ]
 console.log(parts.join(' '))
