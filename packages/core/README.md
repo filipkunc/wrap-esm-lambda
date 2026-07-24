@@ -24,6 +24,7 @@ re-exported from [`src/index.mjs`](src/index.mjs):
 | [`src/apply.mjs`](src/apply.mjs)       | entries -> instrumented source via the native oxc addon, plus the double-wrap sentinel    |
 | [`src/registry.mjs`](src/registry.mjs) | the runtime patch-function registry contract shared with the Rust emission                |
 | [`src/stars.mjs`](src/stars.mjs)       | the `export * from` graph walk resolving star-forwarded names at transform time           |
+| [`src/range.mjs`](src/range.mjs)       | the semver-range matcher (replaces the `semver` package for cold start; loud on typos)    |
 
 ## Patch author contract
 

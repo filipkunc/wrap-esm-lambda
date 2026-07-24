@@ -131,6 +131,9 @@ importers:
       prettier:
         specifier: ^3.6.2
         version: 3.6.2
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
       source-map:
         specifier: ^0.7.6
         version: 0.7.6
@@ -158,9 +161,6 @@ importers:
 
   packages/core:
     dependencies:
-      semver:
-        specifier: ^7.8.5
-        version: 7.8.5
       wrap-esm-lambda:
         specifier: workspace:^
         version: link:../..
@@ -2525,11 +2525,6 @@ packages:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
     hasBin: true
 
-  semver@7.7.2:
-    resolution: {integrity: sha512-RF0Fw+rO5AMf9MAyaRXI4AV0Ulj5lMHqVxxdSgiVbixSCXoEmmX/jk0CuJw4+3SqroYO9VoUh+HcuJivvtJemA==}
-    engines: {node: '>=10'}
-    hasBin: true
-
   semver@7.8.5:
     resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
     engines: {node: '>=10'}
@@ -3454,7 +3449,7 @@ snapshots:
       find-up: 7.0.0
       js-yaml: 4.1.0
       lodash-es: 4.17.21
-      semver: 7.7.2
+      semver: 7.8.5
       typanion: 3.14.0
     optionalDependencies:
       '@emnapi/runtime': 1.4.5
@@ -4281,7 +4276,7 @@ snapshots:
       js-string-escape: 1.0.1
       lodash: 4.17.21
       md5-hex: 3.0.1
-      semver: 7.7.2
+      semver: 7.8.5
       well-known-symbols: 2.0.0
 
   consola@3.4.2: {}
@@ -5125,8 +5120,6 @@ snapshots:
   semifies@1.0.0: {}
 
   semver@6.3.1: {}
-
-  semver@7.7.2: {}
 
   semver@7.8.5: {}
 

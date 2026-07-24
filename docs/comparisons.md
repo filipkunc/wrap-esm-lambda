@@ -108,9 +108,15 @@ Node 24):
 | exports tap, runtime hook (.ts config)  |    ~105 ms | +43 ms more |
 | iitm off-thread (`module.register`)     |     ~96 ms |      +62 ms |
 
-Mechanism to mechanism the tap and sync-mode iitm are peers (most of our
-+7 ms delta is loading `semver` — trimmable), and both are ~3x cheaper than
-the off-thread loader that ships as the OTel default. The `.ts` config row
+Mechanism to mechanism the tap and sync-mode iitm are peers, and both are
+~3x cheaper than the off-thread loader that ships as the OTel default. (At
+the time of that table most of the tap's +7 ms delta over iitm was loading
+`semver`; core has since replaced it with an in-package range matcher —
+differential-tested against `semver` in
+[`__test__/range.spec.ts`](../__test__/range.spec.ts) — which cut the
+.mjs-config hook's measured overhead roughly in half, from ~57 ms to
+~29 ms on the container that re-measured it. Core now has no third-party
+JS dependencies at all.) The `.ts` config row
 is a convenience tax, not mechanism: Node's type-stripping toolchain
 (amaro/SWC-wasm) costs ~40+ ms to initialize in the child — use a `.mjs`
 config where cold start matters. What iitm cannot offer at any price: the
