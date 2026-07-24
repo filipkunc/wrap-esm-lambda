@@ -1,4 +1,5 @@
-import test from 'ava'
+import { describe, test } from 'node:test'
+import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
@@ -43,7 +44,7 @@ const PRAGMA_SOURCE = [
 ].join('\n')
 
 for (const [name, engine] of engines) {
-  test(`${name}: the rewrite path keeps every bundler-semantic comment`, (t) => {
+  test(`${name}: the rewrite path keeps every bundler-semantic comment`, () => {
     const out = engine.exportsTap(
       PRAGMA_SOURCE,
       [{ bindings: ['handler'], patchName: 'patchIt', patchFrom: '/p.ts', aliasIndex: 0 }],
@@ -51,11 +52,11 @@ for (const [name, engine] of engines) {
       true,
       'mod.js',
     )
-    t.truthy(out.code, 'the const export must force the rewrite path')
-    t.true(out.code!.includes('license header v1.2.3'), 'license comment survives')
-    t.true(out.code!.includes('@__PURE__'), 'pure annotation survives')
-    t.true(out.code!.includes('webpackIgnore: true'), 'webpack magic comment survives')
-    t.true(out.code!.includes('KEEP-LEGAL'), 'legal comment survives')
+    assert.ok(out.code, 'the const export must force the rewrite path')
+    assert.ok(out.code!.includes('license header v1.2.3'), 'license comment survives')
+    assert.ok(out.code!.includes('@__PURE__'), 'pure annotation survives')
+    assert.ok(out.code!.includes('webpackIgnore: true'), 'webpack magic comment survives')
+    assert.ok(out.code!.includes('KEEP-LEGAL'), 'legal comment survives')
   })
 }
 
@@ -91,57 +92,61 @@ const LEGAL_LOCATION: Record<string, 'bundle' | 'license-file' | 'dropped-by-bun
   webpack: 'license-file',
 }
 
-for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+describe('surviving pragmas across the bundler matrix', { concurrency: true }, () => {
+  for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+    for (const [engineName] of engines) {
+      test(`${bundler} + ${engineName} engine: surviving pragmas still steer the bundle`, async () => {
+        const outDir = await mkdtemp(join(tmpdir(), `wel-comments-${bundler}-${engineName}-`))
+        try {
+          const outfile = join(outDir, 'bundle.mjs')
+          await bundleFixture(bundler, engineName, 'app-comments.mjs', outfile)
+          const bundled = await readFile(outfile, 'utf8')
+
+          // the patch worked, so the module demonstrably took the rewrite path
+          const { stdout } = await execFileAsync(process.execPath, [outfile])
+          assert.strictEqual(stdout.trim(), 'wrapped:hi:x')
+
+          assert.ok(
+            !bundled.includes('PURE_DROPPED'),
+            'the @__PURE__ call was tree-shaken — the annotation survived the rewrite',
+          )
+          assert.ok(
+            bundled.includes('KEPT_MARKER'),
+            'control: the unannotated call is kept, so shaking was annotation-driven',
+          )
+          if (LEGAL_LOCATION[bundler] === 'bundle') {
+            assert.ok(bundled.includes('KEEP-LEGAL'), 'the legal comment reached the bundle')
+          } else if (LEGAL_LOCATION[bundler] === 'license-file') {
+            const license = await readFile(`${outfile}.LICENSE.txt`, 'utf8')
+            assert.ok(license.includes('KEEP-LEGAL'), 'terser extracted the surviving legal comment')
+          }
+        } finally {
+          await rm(outDir, { recursive: true, force: true })
+        }
+      })
+    }
+  }
+})
+
+describe('webpackIgnore survival', { concurrency: true }, () => {
   for (const [engineName] of engines) {
-    test(`${bundler} + ${engineName} engine: surviving pragmas still steer the bundle`, async (t) => {
-      const outDir = await mkdtemp(join(tmpdir(), `wel-comments-${bundler}-${engineName}-`))
+    test(`webpack + ${engineName} engine: a surviving webpackIgnore keeps the dynamic import at runtime`, async () => {
+      const outDir = await mkdtemp(join(tmpdir(), `wel-webpack-ignore-${engineName}-`))
       try {
         const outfile = join(outDir, 'bundle.mjs')
-        await bundleFixture(bundler, engineName, 'app-comments.mjs', outfile)
+        await bundleFixture('webpack', engineName, 'app-webpack.mjs', outfile)
         const bundled = await readFile(outfile, 'utf8')
 
-        // the patch worked, so the module demonstrably took the rewrite path
+        // the module took the rewrite path (const rebind) with the import intact
         const { stdout } = await execFileAsync(process.execPath, [outfile])
-        t.is(stdout.trim(), 'wrapped:hi:x')
+        assert.strictEqual(stdout.trim(), 'wrapped:lz:x function')
 
-        t.false(
-          bundled.includes('PURE_DROPPED'),
-          'the @__PURE__ call was tree-shaken — the annotation survived the rewrite',
-        )
-        t.true(
-          bundled.includes('KEPT_MARKER'),
-          'control: the unannotated call is kept, so shaking was annotation-driven',
-        )
-        if (LEGAL_LOCATION[bundler] === 'bundle') {
-          t.true(bundled.includes('KEEP-LEGAL'), 'the legal comment reached the bundle')
-        } else if (LEGAL_LOCATION[bundler] === 'license-file') {
-          const license = await readFile(`${outfile}.LICENSE.txt`, 'utf8')
-          t.true(license.includes('KEEP-LEGAL'), 'terser extracted the surviving legal comment')
-        }
+        assert.ok(bundled.includes('./lazy.js'), 'the ignored import keeps its runtime specifier')
+        const chunks = (await readdir(outDir)).filter((f) => f.endsWith('.mjs'))
+        assert.deepStrictEqual(chunks, ['bundle.mjs'], 'webpackIgnore survived — no chunk was split off for lazy.js')
       } finally {
         await rm(outDir, { recursive: true, force: true })
       }
     })
   }
-}
-
-for (const [engineName] of engines) {
-  test(`webpack + ${engineName} engine: a surviving webpackIgnore keeps the dynamic import at runtime`, async (t) => {
-    const outDir = await mkdtemp(join(tmpdir(), `wel-webpack-ignore-${engineName}-`))
-    try {
-      const outfile = join(outDir, 'bundle.mjs')
-      await bundleFixture('webpack', engineName, 'app-webpack.mjs', outfile)
-      const bundled = await readFile(outfile, 'utf8')
-
-      // the module took the rewrite path (const rebind) with the import intact
-      const { stdout } = await execFileAsync(process.execPath, [outfile])
-      t.is(stdout.trim(), 'wrapped:lz:x function')
-
-      t.true(bundled.includes('./lazy.js'), 'the ignored import keeps its runtime specifier')
-      const chunks = (await readdir(outDir)).filter((f) => f.endsWith('.mjs'))
-      t.deepEqual(chunks, ['bundle.mjs'], 'webpackIgnore survived — no chunk was split off for lazy.js')
-    } finally {
-      await rm(outDir, { recursive: true, force: true })
-    }
-  })
-}
+})

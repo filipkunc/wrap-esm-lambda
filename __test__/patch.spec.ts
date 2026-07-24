@@ -1,4 +1,6 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { captureThrows } from './helpers'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { readFileSync } from 'node:fs'
@@ -34,105 +36,108 @@ const tapEntry = (bindings: string[], aliasIndex = 0) => ({
   aliasIndex,
 })
 
-test('esm tap, fast path (import delivery): snippet only, source never round-trips', (t) => {
+test('esm tap, fast path (import delivery): snippet only, source never round-trips', () => {
   const source = 'export class Client {}\n'
   const out = exportsTap(source, [tapEntry(['Client'])], false, false)
-  t.is(out.code, undefined, 'a mutable binding stays on the append-only fast path')
-  t.false(out.snippets.includes('export class'), 'only the appended snippet is returned')
-  t.true(out.snippets.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'))
-  t.true(out.snippets.includes('get Client() { return Client; }'))
-  t.true(out.snippets.includes('set Client(v) { Client = v; }'))
+  assert.strictEqual(out.code, undefined, 'a mutable binding stays on the append-only fast path')
+  assert.ok(!out.snippets.includes('export class'), 'only the appended snippet is returned')
+  assert.ok(out.snippets.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'))
+  assert.ok(out.snippets.includes('get Client() { return Client; }'))
+  assert.ok(out.snippets.includes('set Client(v) { Client = v; }'))
 })
 
-test('esm tap, rewrite path: export const is demoted to let and gets a setter', (t) => {
+test('esm tap, rewrite path: export const is demoted to let and gets a setter', () => {
   const source = 'export class Client {}\nexport const VERSION = "1.0.0";\n'
   const out = exportsTap(source, [tapEntry(['Client', 'VERSION'])], false, false, 'mod.js')
-  t.truthy(out.code, 'a const binding takes the rewrite path')
-  t.true(out.code!.includes('export let VERSION'), 'const demoted to let')
-  t.truthy(out.map, 'the rewrite emits a source map')
-  t.true(out.snippets.includes('set VERSION(v) { VERSION = v; }'), 'demoted const is rebindable')
+  assert.ok(out.code, 'a const binding takes the rewrite path')
+  assert.ok(out.code!.includes('export let VERSION'), 'const demoted to let')
+  assert.ok(out.map, 'the rewrite emits a source map')
+  assert.ok(out.snippets.includes('set VERSION(v) { VERSION = v; }'), 'demoted const is rebindable')
 })
 
-test('cjs tap emission (registry delivery): module.exports accessors, no injected require', (t) => {
+test('cjs tap emission (registry delivery): module.exports accessors, no injected require', () => {
   // CJS needs no static validation, so not even the source crosses napi
   const out = exportsTap('', [tapEntry(['Client'])], true, true)
-  t.is(out.code, undefined, 'CJS never rewrites')
-  t.true(out.snippets.startsWith('\n'), 'append-ready snippet')
-  t.false(out.snippets.includes('require('), 'hook-overridden CJS cannot serve an injected require')
-  t.true(out.snippets.includes('Symbol.for("wrap-esm-lambda.patches")'))
-  t.true(out.snippets.includes('["/abs/patch.ts#patchIt"]'))
-  t.true(out.snippets.includes('get Client() { return module.exports.Client; }'))
+  assert.strictEqual(out.code, undefined, 'CJS never rewrites')
+  assert.ok(out.snippets.startsWith('\n'), 'append-ready snippet')
+  assert.ok(!out.snippets.includes('require('), 'hook-overridden CJS cannot serve an injected require')
+  assert.ok(out.snippets.includes('Symbol.for("wrap-esm-lambda.patches")'))
+  assert.ok(out.snippets.includes('["/abs/patch.ts#patchIt"]'))
+  assert.ok(out.snippets.includes('get Client() { return module.exports.Client; }'))
 })
 
-test('cjs tap emission (import delivery): a require() IIFE, never an ESM import', (t) => {
+test('cjs tap emission (import delivery): a require() IIFE, never an ESM import', () => {
   // Build-time delivery into a CJS module: an appended `import` statement
   // would flip the module's format under every bundler's syntax detection
   // and break its `module.exports`, so the patch arrives via require().
   const out = exportsTap('', [tapEntry(['json'])], true, false)
-  t.is(out.code, undefined, 'CJS never rewrites')
-  t.false(out.snippets.includes('import {'))
-  t.true(out.snippets.includes('const { patchIt: __wel_patch_0 } = require("/abs/patch.ts");'))
-  t.true(out.snippets.includes('get json() { return module.exports.json; }'))
+  assert.strictEqual(out.code, undefined, 'CJS never rewrites')
+  assert.ok(!out.snippets.includes('import {'))
+  assert.ok(out.snippets.includes('const { patchIt: __wel_patch_0 } = require("/abs/patch.ts");'))
+  assert.ok(out.snippets.includes('get json() { return module.exports.json; }'))
 })
 
-test('build-time format fallback: module syntax decides when no format or telling path exists', (t) => {
+test('build-time format fallback: module syntax decides when no format or telling path exists', () => {
   // The build shell passes no format and bundled packages rarely have a
   // telling extension — a pure-CJS `.js` (express's lib/express.js) and an
   // ESM `.js` with no package `"type"` (the AWS SDK's dist-es) must both
   // land on their real tap. `.js` all the way down, same path shape.
   const entries = [{ module: { name: 'fake' }, patch: { name: 'patchIt', from: '/abs/patch.ts' }, bindings: ['json'] }]
   const viaCjs = core.applyMatched('exports.json = function json() {};\n', entries, '/n/fake/lib/thing.js')
-  t.true(viaCjs.code.includes('require("/abs/patch.ts")'), 'CJS source gets the require-delivery CJS tap')
-  t.true(viaCjs.code.includes('module.exports.json'))
+  assert.ok(viaCjs.code.includes('require("/abs/patch.ts")'), 'CJS source gets the require-delivery CJS tap')
+  assert.ok(viaCjs.code.includes('module.exports.json'))
 
   const viaEsm = core.applyMatched('export function json() {}\n', entries, '/n/fake/lib/thing.js')
-  t.true(
+  assert.ok(
     viaEsm.code.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'),
     'ESM syntax gets the ESM tap',
   )
 })
 
-test('buffer-input tap emission: identical to the string variant', (t) => {
+test('buffer-input tap emission: identical to the string variant', () => {
   // The runtime-hook shape: source stays the UTF-8 Buffer nextLoad provided
   const source = 'export class Client {}\nexport const VERSION = "1.0.0";\n'
   const esm = exportsTapFromBuffer(Buffer.from(source), [tapEntry(['Client', 'VERSION'])], false, true, 'mod.js')
-  t.deepEqual(esm, exportsTap(source, [tapEntry(['Client', 'VERSION'])], false, true, 'mod.js'))
+  assert.deepStrictEqual(esm, exportsTap(source, [tapEntry(['Client', 'VERSION'])], false, true, 'mod.js'))
 
-  const err = t.throws(() => exportsTapFromBuffer(Buffer.from([0xff, 0xfe]), [tapEntry(['Client'])], false, true))
-  t.regex(err!.message, /not valid UTF-8/)
+  const err = captureThrows(() => exportsTapFromBuffer(Buffer.from([0xff, 0xfe]), [tapEntry(['Client'])], false, true))
+  assert.match(err.message, /not valid UTF-8/)
 })
 
-test('applyMatched buffer fast path: Buffer in, Buffer out, same bytes as the string path', (t) => {
+test('applyMatched buffer fast path: Buffer in, Buffer out, same bytes as the string path', () => {
   const clientPath = fixture('node_modules/@fake/smithy-client/dist-es/client.js')
   const entries = core.matchEntries(config, clientPath)
-  t.is(entries.length, 1)
+  assert.strictEqual(entries.length, 1)
   const source = readFileSync(clientPath)
 
   const viaBuffer = core.applyMatched(source, entries, clientPath, { format: 'module', delivery: 'registry' })
-  t.true(Buffer.isBuffer(viaBuffer.code), 'patch-only match stays in UTF-8 bytes')
-  t.is(viaBuffer.map, null)
+  assert.ok(Buffer.isBuffer(viaBuffer.code), 'patch-only match stays in UTF-8 bytes')
+  assert.strictEqual(viaBuffer.map, null)
 
   const viaString = core.applyMatched(source.toString('utf8'), entries, clientPath, {
     format: 'module',
     delivery: 'registry',
   })
-  t.deepEqual(viaBuffer.code.toString('utf8'), viaString.code, 'both paths emit identical modules')
+  assert.deepStrictEqual(viaBuffer.code.toString('utf8'), viaString.code, 'both paths emit identical modules')
 
   // the sentinel guard must work on bytes too
-  t.is(core.applyMatched(viaBuffer.code, entries, clientPath, { format: 'module', delivery: 'registry' }), null)
+  assert.strictEqual(
+    core.applyMatched(viaBuffer.code, entries, clientPath, { format: 'module', delivery: 'registry' }),
+    null,
+  )
 })
 
-test('requesting a missing export fails loudly at transform time', (t) => {
-  const err = t.throws(() => exportsTap('export class Client {}\n', [tapEntry(['Klient'])], false, false))
-  t.regex(err!.message, /export 'Klient' not found/)
-  t.regex(err!.message, /Client/, 'error lists what is available')
+test('requesting a missing export fails loudly at transform time', () => {
+  const err = captureThrows(() => exportsTap('export class Client {}\n', [tapEntry(['Klient'])], false, false))
+  assert.match(err.message, /export 'Klient' not found/)
+  assert.match(err.message, /Client/, 'error lists what is available')
 })
 
-test('package matcher: name, version range and files gate the entry', (t) => {
+test('package matcher: name, version range and files gate the entry', () => {
   const clientPath = fixture('node_modules/@fake/smithy-client/dist-es/client.js')
-  t.is(core.matchEntries(config, clientPath).length, 1)
-  t.is(core.matchEntries(config, pathToFileURL(clientPath).href).length, 1, 'file URLs match too')
-  t.is(
+  assert.strictEqual(core.matchEntries(config, clientPath).length, 1)
+  assert.strictEqual(core.matchEntries(config, pathToFileURL(clientPath).href).length, 1, 'file URLs match too')
+  assert.strictEqual(
     core.matchEntries(config, fixture('node_modules/@fake/smithy-client/dist-es/index.js')).length,
     0,
     'files list excludes the barrel',
@@ -141,34 +146,34 @@ test('package matcher: name, version range and files gate the entry', (t) => {
   const wrongVersion = {
     entries: [{ ...config.entries[0], module: { ...config.entries[0].module, versionRange: '>=9' } }],
   }
-  t.is(core.matchEntries(wrongVersion, clientPath).length, 0, 'version range excludes 4.2.0')
+  assert.strictEqual(core.matchEntries(wrongVersion, clientPath).length, 0, 'version range excludes 4.2.0')
 })
 
-test('builtin patch: node:os patched at preload, seen by named import, default import and require', async (t) => {
+test('builtin patch: node:os patched at preload, seen by named import, default import and require', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-builtin.mjs')],
     { env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.builtin.mjs') } },
   )
-  t.is(stdout.trim(), 'builtin:patched-all')
+  assert.strictEqual(stdout.trim(), 'builtin:patched-all')
 })
 
-test('builtin wrapper emission: guarded patch application over the real exports object', async (t) => {
+test('builtin wrapper emission: guarded patch application over the real exports object', async () => {
   const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
   const entry = builtinConfig.entries[0]
   const source = core.builtinWrapperSource('node:os', [entry])
-  t.true(source.includes('process.getBuiltinModule("node:os")'), 'no builtin import — nothing to race or alias')
-  t.true(source.includes(`import { patchOs as __wel_bp_0 } from ${JSON.stringify(entry.patch.from)};`))
-  t.true(source.includes(JSON.stringify(core.builtinGuardKey(entry))), 'hybrid guard key baked in')
-  t.true(source.includes('get hostname()'), 'requested binding handed over as accessors')
-  t.true(source.includes('export default __wel_target;'))
-  t.true(source.includes('as hostname'), 'named exports re-exported after patching')
+  assert.ok(source.includes('process.getBuiltinModule("node:os")'), 'no builtin import — nothing to race or alias')
+  assert.ok(source.includes(`import { patchOs as __wel_bp_0 } from ${JSON.stringify(entry.patch.from)};`))
+  assert.ok(source.includes(JSON.stringify(core.builtinGuardKey(entry))), 'hybrid guard key baked in')
+  assert.ok(source.includes('get hostname()'), 'requested binding handed over as accessors')
+  assert.ok(source.includes('export default __wel_target;'))
+  assert.ok(source.includes('as hostname'), 'named exports re-exported after patching')
 
-  const err = t.throws(() => core.builtinWrapperSource('node:os', [{ ...entry, bindings: ['notAnOsExport'] }]))
-  t.regex(err!.message, /'notAnOsExport' not found in node:os/, 'validation is loud at bundle time')
+  const err = captureThrows(() => core.builtinWrapperSource('node:os', [{ ...entry, bindings: ['notAnOsExport'] }]))
+  assert.match(err.message, /'notAnOsExport' not found in node:os/, 'validation is loud at bundle time')
 })
 
-test('hybrid builtin guard: a build-time wrapper and the runtime preload patch exactly once', async (t) => {
+test('hybrid builtin guard: a build-time wrapper and the runtime preload patch exactly once', async () => {
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-builtin-hybrid-'))
   try {
     const outfile = join(outDir, 'bundle.mjs')
@@ -183,69 +188,72 @@ test('hybrid builtin guard: a build-time wrapper and the runtime preload patch e
     })
     // bundle alone: patched once
     const alone = await execFileAsync(process.execPath, [outfile])
-    t.regex(alone.stdout.trim(), /^patched:/)
-    t.notRegex(alone.stdout.trim(), /^patched:patched:/)
+    assert.match(alone.stdout.trim(), /^patched:/)
+    assert.doesNotMatch(alone.stdout.trim(), /^patched:patched:/)
 
     // bundle under the runtime hook with the same config: the shared
     // globalThis guard must keep it patched exactly once, not twice
     const hybrid = await execFileAsync(process.execPath, ['--import', '@wrap-esm-lambda/hooks/register', outfile], {
       env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.builtin.mjs') },
     })
-    t.regex(hybrid.stdout.trim(), /^patched:/)
-    t.notRegex(hybrid.stdout.trim(), /^patched:patched:/)
+    assert.match(hybrid.stdout.trim(), /^patched:/)
+    assert.doesNotMatch(hybrid.stdout.trim(), /^patched:patched:/)
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
 })
 
-test('builtin patch: versionRange gates on the running Node', async (t) => {
+test('builtin patch: versionRange gates on the running Node', async () => {
   // Same entry but a range excluding the current Node: preload must skip the
   // patch (matcher semantics), leaving the builtin untouched.
   const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
   const gated = {
     entries: [{ ...builtinConfig.entries[0], module: { ...builtinConfig.entries[0].module, versionRange: '<20' } }],
   }
-  t.is(core.builtinPatchEntries(gated).length, 0)
-  t.is(core.builtinPatchEntries(builtinConfig).length, 1)
+  assert.strictEqual(core.builtinPatchEntries(gated).length, 0)
+  assert.strictEqual(core.builtinPatchEntries(builtinConfig).length, 1)
 })
 
-test('builtin patch: a missing binding fails loudly at preload', async (t) => {
+test('builtin patch: a missing binding fails loudly at preload', async () => {
   const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
   const hooks = await import('@wrap-esm-lambda/hooks')
   const broken = {
     entries: [{ ...builtinConfig.entries[0], bindings: ['definitelyNotAnOsExport'] }],
   }
   await hooks.preloadPatches(broken)
-  const err = t.throws(() => hooks.applyBuiltinPatches(broken))
-  t.regex(err!.message, /'definitelyNotAnOsExport' not found in node:os/)
-  t.regex(err!.message, /hostname/, 'error lists what is available')
+  const err = captureThrows(() => hooks.applyBuiltinPatches(broken))
+  assert.match(err.message, /'definitelyNotAnOsExport' not found in node:os/)
+  assert.match(err.message, /hostname/, 'error lists what is available')
 })
 
-test('builtin patch: never matches file paths, so the build-time shell cannot silently claim it', async (t) => {
+test('builtin patch: never matches file paths, so the build-time shell cannot silently claim it', async () => {
   const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
-  t.is(core.matchEntries(builtinConfig, fixture('node_modules/@fake/smithy-client/dist-es/client.js')).length, 0)
-  t.is(core.matchEntries(builtinConfig, '/anywhere/node_modules/os/index.js').length, 0)
+  assert.strictEqual(
+    core.matchEntries(builtinConfig, fixture('node_modules/@fake/smithy-client/dist-es/client.js')).length,
+    0,
+  )
+  assert.strictEqual(core.matchEntries(builtinConfig, '/anywhere/node_modules/os/index.js').length, 0)
 })
 
-test('runtime mode: ESM import gets patched via dist-es', async (t) => {
+test('runtime mode: ESM import gets patched via dist-es', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
     { env: hookEnv },
   )
-  t.is(stdout.trim(), 'patched:sent:hello')
+  assert.strictEqual(stdout.trim(), 'patched:sent:hello')
 })
 
-test('runtime mode: CJS require gets patched via dist-cjs getter-only exports', async (t) => {
+test('runtime mode: CJS require gets patched via dist-cjs getter-only exports', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.cjs')],
     { env: hookEnv },
   )
-  t.is(stdout.trim(), 'patched:sent:hello')
+  assert.strictEqual(stdout.trim(), 'patched:sent:hello')
 })
 
-test('build mode: esbuild bundles the patched dist-es', async (t) => {
+test('build mode: esbuild bundles the patched dist-es', async () => {
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-patch-'))
   try {
     const outfile = join(outDir, 'bundle.mjs')
@@ -261,17 +269,17 @@ test('build mode: esbuild bundles the patched dist-es', async (t) => {
       logLevel: 'silent',
     })
     const bundled = await readFile(outfile, 'utf8')
-    t.true(bundled.includes('patchSmithy'), 'user patch code is bundled in')
+    assert.ok(bundled.includes('patchSmithy'), 'user patch code is bundled in')
 
     // plain node, no hooks, no config — the patch is baked into the artifact
     const { stdout } = await execFileAsync(process.execPath, [outfile])
-    t.is(stdout.trim(), 'patched:sent:hello')
+    assert.strictEqual(stdout.trim(), 'patched:sent:hello')
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
 })
 
-test('double-patch guard: runtime hook passes through a patched bundle', async (t) => {
+test('double-patch guard: runtime hook passes through a patched bundle', async () => {
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-patch-'))
   try {
     // The bundle is placed (with a matching package.json) so the package
@@ -296,22 +304,22 @@ test('double-patch guard: runtime hook passes through a patched bundle', async (
     const { stdout } = await execFileAsync(process.execPath, ['--import', '@wrap-esm-lambda/hooks/register', outfile], {
       env: hookEnv,
     })
-    t.is(stdout.trim(), 'patched:sent:hello', 'must stay single-patched')
+    assert.strictEqual(stdout.trim(), 'patched:sent:hello', 'must stay single-patched')
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
 })
 
-test('patch dependencies: relative TS helper + bare npm specifier, runtime mode', async (t) => {
+test('patch dependencies: relative TS helper + bare npm specifier, runtime mode', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
     { env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.deps.ts') } },
   )
-  t.is(stdout.trim(), 'deps:sent:hello!', 'the patch module graph resolves at preload')
+  assert.strictEqual(stdout.trim(), 'deps:sent:hello!', 'the patch module graph resolves at preload')
 })
 
-test('patch dependencies: the same graph bundles in build mode', async (t) => {
+test('patch dependencies: the same graph bundles in build mode', async () => {
   const { default: depsConfig } = await import(pathToFileURL(fixture('wrap.config.deps.ts')).href)
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-deps-'))
   try {
@@ -327,16 +335,16 @@ test('patch dependencies: the same graph bundles in build mode', async (t) => {
       logLevel: 'silent',
     })
     const bundled = await readFile(outfile, 'utf8')
-    t.true(bundled.includes('exclaim'), 'the relative TS helper is bundled')
+    assert.ok(bundled.includes('exclaim'), 'the relative TS helper is bundled')
 
     const { stdout } = await execFileAsync(process.execPath, [outfile])
-    t.is(stdout.trim(), 'deps:sent:hello!', 'chalk and the helper ride along in the artifact')
+    assert.strictEqual(stdout.trim(), 'deps:sent:hello!', 'chalk and the helper ride along in the artifact')
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
 })
 
-test('DOCUMENTED FOOTGUN: a patch importing its own target diverges between modes', async (t) => {
+test('DOCUMENTED FOOTGUN: a patch importing its own target diverges between modes', async () => {
   // Runtime: preloading the patch pulls the target into the module cache
   // BEFORE hooks install — the app gets the cached, unpatched module and the
   // patch silently does nothing.
@@ -346,7 +354,7 @@ test('DOCUMENTED FOOTGUN: a patch importing its own target diverges between mode
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
     { env },
   )
-  t.is(runtime.stdout.trim(), 'sent:hello', 'runtime mode: silently UNPATCHED')
+  assert.strictEqual(runtime.stdout.trim(), 'sent:hello', 'runtime mode: silently UNPATCHED')
 
   // Build: the same patch works — the bundler resolves the cycle through
   // hoisted imports instead of a preload cache. This mode divergence is why
@@ -366,7 +374,7 @@ test('DOCUMENTED FOOTGUN: a patch importing its own target diverges between mode
       logLevel: 'silent',
     })
     const built = await execFileAsync(process.execPath, [outfile])
-    t.is(built.stdout.trim(), 'never:sent:hello', 'build mode: patched — the modes DISAGREE')
+    assert.strictEqual(built.stdout.trim(), 'never:sent:hello', 'build mode: patched — the modes DISAGREE')
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }

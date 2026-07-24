@@ -1,4 +1,6 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { captureRejects } from './helpers'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtemp, rm } from 'node:fs/promises'
@@ -17,25 +19,25 @@ const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/patch/${name}`, import.meta.url))
 const env = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.frameworks.mjs') }
 
-test('frameworks via import: express + fastify (CJS-over-ESM) and hono (real ESM build)', async (t) => {
+test('frameworks via import: express + fastify (CJS-over-ESM) and hono (real ESM build)', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-frameworks.mjs')],
     { env },
   )
-  t.is(stdout.trim(), 'express:ok fastify:ok hono:ok')
+  assert.strictEqual(stdout.trim(), 'express:ok fastify:ok hono:ok')
 })
 
-test('frameworks via require: pure CJS chain, fastify factory rebound via "module.exports"', async (t) => {
+test('frameworks via require: pure CJS chain, fastify factory rebound via "module.exports"', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-frameworks.cjs')],
     { env },
   )
-  t.is(stdout.trim(), 'express:ok fastify:ok hono:ok')
+  assert.strictEqual(stdout.trim(), 'express:ok fastify:ok hono:ok')
 })
 
-test('build mode: the same frameworks config lands through esbuild — pure-CJS express and fastify included', async (t) => {
+test('build mode: the same frameworks config lands through esbuild — pure-CJS express and fastify included', async () => {
   // The README quick-start claim, on the real packages: one config, both
   // shells. At build time express/fastify are classified CJS by syntax
   // detection and their patches arrive via require-delivery snippets; hono
@@ -62,25 +64,25 @@ test('build mode: the same frameworks config lands through esbuild — pure-CJS 
       logLevel: 'silent',
     })
     const { stdout } = await execFileAsync(process.execPath, [outfile])
-    t.is(stdout.trim(), 'express:ok fastify:ok hono:ok')
+    assert.strictEqual(stdout.trim(), 'express:ok fastify:ok hono:ok')
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
 })
 
-test('frameworks without the hook: nothing is patched (the ok signals are not ambient)', async (t) => {
+test('frameworks without the hook: nothing is patched (the ok signals are not ambient)', async () => {
   const { stdout } = await execFileAsync(process.execPath, [fixture('app-frameworks.mjs')])
-  t.regex(stdout.trim(), /express:MISS fastify:MISS hono:MISS/)
+  assert.match(stdout.trim(), /express:MISS fastify:MISS hono:MISS/)
 })
 
-test('rebinding a getter-only bundled-CJS export fails loudly, never silently', async (t) => {
+test('rebinding a getter-only bundled-CJS export fails loudly, never silently', async () => {
   // hono's dist/cjs is sloppy mode with non-configurable getter exports:
   // plain assignment would no-op silently. The tap's verified setter turns
   // that into a hard error at patch time.
-  const err = await t.throwsAsync(() =>
+  const err = await captureRejects(() =>
     execFileAsync(process.execPath, ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-frameworks.cjs')], {
       env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.hono-rebind-cjs.mjs') },
     }),
   )
-  t.regex((err as Error & { stderr: string }).stderr, /rebinding Hono had no effect \(getter-only CJS export\)/)
+  assert.match((err as Error & { stderr: string }).stderr, /rebinding Hono had no effect \(getter-only CJS export\)/)
 })

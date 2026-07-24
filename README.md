@@ -313,7 +313,9 @@ analysis: [docs/serverless.md](docs/serverless.md).
 
 1. `pnpm install` — install dependencies
 2. `pnpm build` — build the native addon (`napi build --release`)
-3. `pnpm test` — Node binding tests with [`ava`](https://github.com/avajs/ava)
+3. `pnpm test` — the test suite, on Node's built-in
+   [test runner](https://nodejs.org/api/test.html) (`node --test`; TypeScript
+   specs load through `@oxc-node/core`)
 4. `cargo fmt` and `cargo clippy` before committing
 5. `cargo test` — Rust tests
 

@@ -1,4 +1,5 @@
-import test from 'ava'
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -38,7 +39,7 @@ function orchestrionTransform(source: string, moduleName: string, version: strin
   return transformer.transform(source, 'esm').code
 }
 
-test('orchestrion instruments the same real @smithy/core client file', async (t) => {
+test('orchestrion instruments the same real @smithy/core client file', async () => {
   const source = await readFile(smithyClientPath, 'utf8')
   const out = orchestrionTransform(
     source,
@@ -46,18 +47,18 @@ test('orchestrion instruments the same real @smithy/core client file', async (t)
     smithyVersion,
     'dist-es/submodules/client/smithy-client/client.js',
   )
-  t.not(out, source, 'transform must have applied')
-  t.true(out.includes('diagnostics_channel'), 'orchestrion wires diagnostics_channel')
-  t.true(out.includes('smithy-send'), 'the configured channel name is in the output')
+  assert.notStrictEqual(out, source, 'transform must have applied')
+  assert.ok(out.includes('diagnostics_channel'), 'orchestrion wires diagnostics_channel')
+  assert.ok(out.includes('smithy-send'), 'the configured channel name is in the output')
 })
 
-test('behavior: orchestrion observes events; the exports tap wraps the method', async (t) => {
+test('behavior: orchestrion observes events; the exports tap wraps the method', async () => {
   const source = await readFile(fixtureClientPath, 'utf8')
 
   // --- orchestrion: load its transformed module, subscribe, call send ---
   const orchestrionOut = orchestrionTransform(source, '@fake/smithy-client', '4.2.0', 'dist-es/client.js')
   const channelNames = [...orchestrionOut.matchAll(/(?:tracingChannel|channel)\(["']([^"']+)["']\)/g)].map((m) => m[1])
-  t.true(channelNames.length > 0, 'transformed code names its channels')
+  assert.ok(channelNames.length > 0, 'transformed code names its channels')
 
   const events: string[] = []
   const kinds = ['start', 'end', 'asyncStart', 'asyncEnd', 'error'] as const
@@ -79,8 +80,8 @@ test('behavior: orchestrion observes events; the exports tap wraps the method', 
     await writeFile(orchestrionFile, orchestrionOut)
     const orchestrionMod = await import(pathToFileURL(orchestrionFile).href)
     const observed = await new orchestrionMod.Client().send('hello')
-    t.is(observed, 'sent:hello', 'orchestrion cannot change the result — observe-only')
-    t.true(events.includes('start'), `send() published events (saw: ${events.join(',') || 'none'})`)
+    assert.strictEqual(observed, 'sent:hello', 'orchestrion cannot change the result — observe-only')
+    assert.ok(events.includes('start'), `send() published events (saw: ${events.join(',') || 'none'})`)
 
     // --- exports tap: registry delivery, wrap and rewrite the result ---
     const tapEntries = [{ bindings: ['Client'], patchName: 'patchIt', patchFrom: '/test/patch.ts', aliasIndex: 0 }]
@@ -98,7 +99,11 @@ test('behavior: orchestrion observes events; the exports tap wraps the method', 
     const tappedFile = join(outDir, 'tapped-client.mjs')
     await writeFile(tappedFile, tapped)
     const tappedMod = await import(pathToFileURL(tappedFile).href)
-    t.is(await new tappedMod.Client().send('hello'), 'patched:sent:hello', 'the tap wraps — result rewritten')
+    assert.strictEqual(
+      await new tappedMod.Client().send('hello'),
+      'patched:sent:hello',
+      'the tap wraps — result rewritten',
+    )
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
