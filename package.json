@@ -139,13 +139,5 @@
   "homepage": "https://github.com/filipkunc/wrap-esm-lambda#readme",
   "bugs": {
     "url": "https://github.com/filipkunc/wrap-esm-lambda/issues"
-  },
-  "optionalDependencies": {
-    "wrap-esm-lambda-linux-x64-gnu": "0.1.3",
-    "wrap-esm-lambda-linux-arm64-gnu": "0.1.3",
-    "wrap-esm-lambda-linux-x64-musl": "0.1.3",
-    "wrap-esm-lambda-win32-x64-msvc": "0.1.3",
-    "wrap-esm-lambda-darwin-arm64": "0.1.3",
-    "wrap-esm-lambda-wasm32-wasi": "0.1.3"
   }
 }

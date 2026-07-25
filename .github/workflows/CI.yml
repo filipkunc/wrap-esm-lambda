@@ -495,6 +495,11 @@ jobs:
         # version.
         run: pnpm publish -r --dry-run --no-git-checks --filter './packages/*'
       - name: Prepublish the addon (dry run)
+        # Heads up: this MUTATES package.json even under --dry-run — it injects
+        # the per-platform packages as optionalDependencies, which is what a
+        # real publish needs and what must never be committed. Harmless in this
+        # throwaway checkout; do not add a `pnpm install` after it, and if you
+        # run it locally, discard the change.
         run: pnpm exec napi prepublish -t npm --dry-run
       - name: Publish
         # Two things must both be true to reach npm: a human dispatched this
