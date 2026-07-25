@@ -3,7 +3,10 @@
 Instrumentation **as one npm package**: before/after logging of function
 calls, with exception capture (logged, then rethrown). Everything an APM
 vendor would ship — the patch code, the declarative config, and a register
-entry — lives in this package; the app installs it and adds one flag.
+entry — lives in this package; the app installs it and adds one flag. The
+target ([example-quotes](../quotes)) is a dual package, and one entry covers
+both trees: an `import` consumer taps the ESM tree, a `require()` consumer
+the CJS tree.
 
 ```
 src/
@@ -30,17 +33,23 @@ config (`WRAP_ESM_LAMBDA_CONFIG` accepts package specifiers):
 WRAP_ESM_LAMBDA_CONFIG=example-function-logger/config node --import @wrap-esm-lambda/hooks/register app.mjs
 ```
 
-Run either from the repo root:
+Run either from the repo root (plus the `require()` consumer of the CJS
+tree):
 
 ```sh
 pnpm --filter example-function-logger-app start
+pnpm --filter example-function-logger-app start:cjs
 pnpm --filter example-function-logger-app start:env-config
 ```
 
 Expected output — note `fetchQuote` internally calls `getQuote`, and the
 rebound live binding intercepts even that intra-module call (something
 `Module._load` wrapping never could), and the app's own `catch` still runs
-after the logger rethrows:
+after the logger rethrows. The `start:cjs` run prints the same transcript
+minus the two nested `getQuote(2)` lines: in the CJS tree that internal call
+is a direct reference to the local function, which a
+`module.exports.getQuote` rebind cannot intercept — the one honest
+difference between the trees.
 
 ```
 [fn-log] -> getQuote(1)

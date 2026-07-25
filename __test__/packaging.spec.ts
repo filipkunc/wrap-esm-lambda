@@ -27,8 +27,9 @@ const driver = fileURLToPath(new URL('./fixtures/bundle-driver.mjs', import.meta
 
 // stdout of the example app under full instrumentation — one string, shared
 // by every delivery mode: vendor register, env-var package config, and the
-// pre-instrumented bundle. `fetchQuote` internally calls `getQuote`; the
-// rebind reaches even that intra-module call.
+// pre-instrumented bundle. In the ESM tree `fetchQuote` internally calls
+// `getQuote` and the live-binding rebind reaches even that intra-module
+// call.
 const EXPECTED = [
   '[fn-log] -> getQuote(1)',
   '[fn-log] <- getQuote returned "ship it"',
@@ -44,6 +45,17 @@ const EXPECTED = [
   '[fn-log] !! explode threw Error: quote machine broke: demo',
   'app caught: quote machine broke: demo',
 ].join('\n')
+
+// The CJS tree of the dual package: identical except the intra-module
+// `getQuote` call inside `fetchQuote` — a direct reference to the local
+// function, which a `module.exports.getQuote` rebind cannot intercept.
+const INTRA_MODULE_LINES = [
+  '[fn-log] -> getQuote(2)',
+  '[fn-log] <- getQuote returned "make it work, make it right, make it fast"',
+]
+const EXPECTED_CJS = EXPECTED.split('\n')
+  .filter((line) => !INTRA_MODULE_LINES.includes(line))
+  .join('\n')
 
 test('definePatches resolves relative from against the config module', () => {
   const base = import.meta.url
@@ -106,6 +118,16 @@ test('one installed package delivers the whole instrumentation: --import vendor/
   assert.strictEqual(stdout.trim(), EXPECTED)
 })
 
+test('the same installed package covers a require() consumer (the dual package CJS tree)', async () => {
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--import', 'example-function-logger/register', 'app.cjs'],
+    { cwd: appDir },
+  )
+  // module.exports rebinds land; only the intra-module call stays unwrapped
+  assert.strictEqual(stdout.trim(), EXPECTED_CJS)
+})
+
 test('WRAP_ESM_LAMBDA_CONFIG accepts a package specifier, resolved from the app', async () => {
   const { stdout } = await execFileAsync(process.execPath, ['--import', '@wrap-esm-lambda/hooks/register', 'app.mjs'], {
     cwd: appDir,
@@ -124,20 +146,44 @@ test('a config specifier that resolves nowhere fails loudly at startup', async (
   assert.match(err.stderr, /neither an existing file nor a package specifier resolvable from/)
 })
 
-test('the same packaged config serves build-time delivery: esbuild bundle, plain node', async () => {
-  const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-packaging-'))
+// Build-time delivery from the same packaged config, across the unplugin
+// adapter matrix; each leg bundles the app with no hooks and no register
+// entry — the instrumentation is baked in. The CJS-consumer leg (esbuild,
+// matching how the other specs scope esbuild coverage) drives the appended
+// require() delivery into the dual package's CJS tree.
+for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+  test(`the packaged config serves build-time delivery: ${bundler} bundle, plain node`, async () => {
+    const outDir = await mkdtemp(join(tmpdir(), `wrap-esm-lambda-packaging-${bundler}-`))
+    try {
+      const outfile = join(outDir, 'bundle.mjs')
+      await execFileAsync(process.execPath, [
+        driver,
+        bundler,
+        join(appDir, 'app.mjs'),
+        join(loggerDir, 'src', 'config.mjs'),
+        outfile,
+      ])
+      const { stdout } = await execFileAsync(process.execPath, [outfile])
+      assert.strictEqual(stdout.trim(), EXPECTED)
+    } finally {
+      await rm(outDir, { recursive: true, force: true })
+    }
+  })
+}
+
+test('build-time delivery for the CJS consumer: esbuild bundles app.cjs, CJS tree tapped', async () => {
+  const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-packaging-cjs-'))
   try {
     const outfile = join(outDir, 'bundle.mjs')
     await execFileAsync(process.execPath, [
       driver,
       'esbuild',
-      join(appDir, 'app.mjs'),
+      join(appDir, 'app.cjs'),
       join(loggerDir, 'src', 'config.mjs'),
       outfile,
     ])
-    // no hooks, no register entry — the instrumentation is baked in
     const { stdout } = await execFileAsync(process.execPath, [outfile])
-    assert.strictEqual(stdout.trim(), EXPECTED)
+    assert.strictEqual(stdout.trim(), EXPECTED_CJS)
   } finally {
     await rm(outDir, { recursive: true, force: true })
   }
