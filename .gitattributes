@@ -2,11 +2,22 @@
 *        text=auto
 
 
+# LF everywhere: the suite compares emitted source text (and source maps)
+# byte-for-byte between the two engines and between the two delivery modes, so
+# a CRLF checkout on Windows would be a whole class of false failures.
 *.ts    text eol=lf merge=union
+*.mts   text eol=lf merge=union
+*.cts   text eol=lf merge=union
 *.tsx   text eol=lf merge=union
 *.rs    text eol=lf merge=union
 *.js    text eol=lf merge=union
+*.mjs   text eol=lf merge=union
+*.cjs   text eol=lf merge=union
 *.json  text eol=lf merge=union
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.toml  text eol=lf
 *.debug text eol=lf merge=union
 
 # Generated codes

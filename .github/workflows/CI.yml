@@ -64,6 +64,15 @@ jobs:
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             build: pnpm build --target aarch64-unknown-linux-gnu --use-napi-cross
+          # Windows and macOS build natively on their own hosts — no
+          # napi-cross, no zig. Both are tested below, so `napi.targets`
+          # claims only platforms this workflow actually exercises.
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+            build: pnpm build --target x86_64-pc-windows-msvc
+          - host: macos-latest
+            target: aarch64-apple-darwin
+            build: pnpm build --target aarch64-apple-darwin
           - host: ubuntu-latest
             target: wasm32-wasip1-threads
             build: pnpm build --target wasm32-wasip1-threads
@@ -131,6 +140,11 @@ jobs:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
+          # arm64 was built and published but never run: Lambda's Graviton
+          # runtimes are a headline target for this project, and a napi addon
+          # is exactly the kind of thing that can be arch-specific. The
+          # aarch64 runner is native, so no QEMU is involved.
+          - aarch64-unknown-linux-gnu
         node:
           - '22'
           - '24'
@@ -164,8 +178,10 @@ jobs:
               console.log('IMAGE=node:${{ matrix.node }}-slim')
             }
           " >> $GITHUB_OUTPUT
-      # For a cross-arch test matrix (aarch64/armv7), set supportedArchitectures
-      # in pnpm-workspace.yaml so platform-specific optional deps get fetched.
+      # Each arch installs on its own runner (aarch64 included), so pnpm
+      # fetches the right platform-specific optional deps natively and
+      # supportedArchitectures stays unnecessary. That changes only if a lane
+      # ever tests an arch it did not install on (armv7 under QEMU would).
       - name: Install dependencies
         run: pnpm install
       # on the host, where pnpm exists: the container runs plain node against
@@ -204,6 +220,70 @@ jobs:
           run: |
             WRAP_ESM_LAMBDA_ENGINE=oxc OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
             WRAP_ESM_LAMBDA_ENGINE=acorn OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+  test-native-platform:
+    name: Test ${{ matrix.settings.target }} - node@${{ matrix.node }}
+    needs:
+      - build
+    # Windows and macOS, on the runner itself rather than in a container.
+    # Neither had ever run the suite, and both exercise code the Linux lanes
+    # cannot: the acorn engine reimplements module resolution over
+    # node:path (drive letters, backslashes, junction-linked pnpm stores),
+    # matching compares '/'-normalized suffixes, and every spec that shells
+    # out spawns a real child process. The acorn run matters most here for
+    # exactly that reason, so both engines run on both platforms.
+    strategy:
+      fail-fast: false
+      matrix:
+        settings:
+          - host: windows-latest
+            target: x86_64-pc-windows-msvc
+          - host: macos-latest
+            target: aarch64-apple-darwin
+        node:
+          - '22'
+          - '24'
+          - '26'
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      # --ignore-scripts: the benchmark chart tooling pulls in `canvas`, which
+      # has no prebuild for every Node/platform pair here and would fall back
+      # to compiling against GTK/cairo — a dependency of chart generation, not
+      # of the suite, failing the install before a single test runs. Nothing
+      # the tests need has an install script: the bundler binaries (esbuild,
+      # swc, rspack) all arrive as platform-specific optional packages, which
+      # is verified by running this whole suite off such an install.
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+      - name: Build packages
+        run: pnpm build:packages
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.settings.target }}
+          path: .
+      - name: List packages
+        run: ls -R .
+        shell: bash
+      # env: rather than an inline assignment — the default shell here is pwsh
+      # on Windows, where `VAR=value cmd` is not a thing
+      - name: Test bindings (native engine)
+        run: node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+        env:
+          WRAP_ESM_LAMBDA_ENGINE: oxc
+          OXC_TSCONFIG_PATH: ./__test__/tsconfig.json
+      - name: Test bindings (acorn engine)
+        run: node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+        env:
+          WRAP_ESM_LAMBDA_ENGINE: acorn
+          OXC_TSCONFIG_PATH: ./__test__/tsconfig.json
   test-wasi:
     name: Test WASI target - node@${{ matrix.node }}
     needs:
@@ -294,6 +374,7 @@ jobs:
     needs:
       - lint
       - test-linux-binding
+      - test-native-platform
       - test-wasi
       - test-js-only
     steps:
