@@ -2,7 +2,8 @@
 // selected transform engine (native oxc by default, pure-JS acorn via
 // WRAP_ESM_LAMBDA_ENGINE — see engine.mjs). Both shells call `applyMatched`,
 // so the instrumented output is byte-identical whichever mode produced it.
-import { basename } from 'node:path'
+import { basename, isAbsolute } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { transformLambdaWithMapObject, exportsTap, exportsTapFromBuffer } from './engine.mjs'
 import { cleanPath } from './paths.mjs'
 import { moduleKindFor } from './format.mjs'
@@ -42,6 +43,26 @@ export const SENTINEL_TEXT = '@wrap-esm-lambda instrumented'
 export const SENTINEL = `/*! ${SENTINEL_TEXT} */`
 
 /**
+ * The wrapper import specifier, in the form whatever resolves the emitted code
+ * will accept. The two consumers disagree about absolute paths:
+ *
+ * - **Node's ESM loader** (runtime delivery) parses a specifier as a URL, so a
+ *   Windows absolute path — `D:\\app\\wrap.mjs` — reads as scheme `d:` and
+ *   throws ERR_UNSUPPORTED_ESM_URL_SCHEME. It has to be a `file://` URL.
+ * - **Bundlers** (build delivery) are the mirror image: they resolve absolute
+ *   paths, drive letters included, and do not resolve `file://` specifiers at
+ *   all — so build-time emission keeps the path exactly as configured, which
+ *   is also what makes a Lambda-layer path like `/opt/nodejs/wrap.mjs`
+ *   survive a build that never sees that directory.
+ *
+ * Hence the conversion is keyed to delivery, not to the platform: one rule,
+ * and each consumer gets the form it can actually resolve.
+ */
+function wrapperSpecifier(from: string, registry: boolean): string {
+  return registry && isAbsolute(from) ? pathToFileURL(from).href : from
+}
+
+/**
  * The original wrap transform: rebind an exported const through the wrapper
  * via the engine's wrap transform, append the wrapper import (ESM imports are
  * hoisted, so appending keeps every existing line — and therefore the source
@@ -53,6 +74,7 @@ export function transformMatched(
   source: string,
   entry: WrapEntry,
   idOrUrl: string,
+  options: { delivery?: Delivery } = {},
 ): { code: string; map: string | null } | null {
   if (source.includes(SENTINEL_TEXT)) {
     return null
@@ -61,7 +83,8 @@ export function transformMatched(
   const { code, map } = transformLambdaWithMapObject(source, entry.handler, entry.wrapper.name, filename)
   let finalCode = code
   if (entry.wrapper.from) {
-    finalCode += `\nimport { ${entry.wrapper.name} } from ${JSON.stringify(entry.wrapper.from)};`
+    const specifier = wrapperSpecifier(entry.wrapper.from, options.delivery === 'registry')
+    finalCode += `\nimport { ${entry.wrapper.name} } from ${JSON.stringify(specifier)};`
   }
   finalCode += `\n${SENTINEL}\n`
   return { code: finalCode, map: map ?? null }
@@ -183,7 +206,7 @@ export function applyMatched(
     const wrapped = transformLambdaWithMapObject(code, entry.handler, entry.wrapper.name, filename)
     code = wrapped.code
     if (entry.wrapper.from) {
-      code += `\nimport { ${entry.wrapper.name} } from ${JSON.stringify(entry.wrapper.from)};`
+      code += `\nimport { ${entry.wrapper.name} } from ${JSON.stringify(wrapperSpecifier(entry.wrapper.from, registry))};`
     }
     map = wrapped.map ?? null
   }

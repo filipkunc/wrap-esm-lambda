@@ -75,6 +75,34 @@ test('both modes produce identical instrumented code for the same module', async
   assert.ok(first!.code.includes(core.SENTINEL))
 })
 
+test('wrap delivery: Node gets a file:// URL, a bundler gets the path as configured', async () => {
+  // The one thing the two deliveries must NOT emit identically. Node's ESM
+  // loader parses an import specifier as a URL, so an absolute Windows path
+  // ('D:\\app\\wrap.mjs') reads as scheme 'd:' and throws
+  // ERR_UNSUPPORTED_ESM_URL_SCHEME — the runtime shell has to emit a file://
+  // URL. Bundlers are the mirror image: they resolve absolute paths and not
+  // file:// specifiers, which is also what lets a Lambda-layer path like
+  // /opt/nodejs/wrap.mjs survive a build that never sees that directory.
+  const source = await readFile(fixture('handler.mjs'), 'utf8')
+  const entry = core.createMatcher(config)(fixture('handler.mjs'))
+  assert.ok(entry?.wrapper?.from)
+
+  const runtime = core.applyMatched(source, [entry], fixture('handler.mjs'), {
+    format: 'module',
+    delivery: 'registry',
+  })
+  assert.ok(
+    runtime.code.includes(`from ${JSON.stringify(pathToFileURL(entry.wrapper.from).href)}`),
+    `runtime delivery must import a file:// URL, got: ${runtime.code}`,
+  )
+
+  const build = core.applyMatched(source, [entry], fixture('handler.mjs'), { format: 'module' })
+  assert.ok(
+    build.code.includes(`from ${JSON.stringify(entry.wrapper.from)}`),
+    `build delivery must keep the configured path, got: ${build.code}`,
+  )
+})
+
 test('double-wrap guard: transformMatched skips instrumented sources', async () => {
   const source = await readFile(fixture('handler.mjs'), 'utf8')
   const entry = core.createMatcher(config)(fixture('handler.mjs'))
