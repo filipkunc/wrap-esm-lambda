@@ -63,14 +63,14 @@ test('definePatches resolves relative from against the config module', () => {
     [{ module: { name: 'x' }, patch: { name: 'p', from: './fixtures/patch/patches/http-route.mjs' }, bindings: ['a'] }],
     base,
   )
-  assert.strictEqual(entries[0].patch.from, fileURLToPath(new URL('./fixtures/patch/patches/http-route.mjs', base)))
-  assert.ok(isAbsolute(entries[0].patch.from))
+  assert.strictEqual(entries[0]!.patch.from, fileURLToPath(new URL('./fixtures/patch/patches/http-route.mjs', base)))
+  assert.ok(isAbsolute(entries[0]!.patch.from))
 })
 
 test('definePatches resolves a file:// URL (import.meta.resolve output) to a path', () => {
   const url = new URL('./helpers.ts', import.meta.url)
   const { entries } = definePatches([{ module: { name: 'x' }, patch: { name: 'p', from: url.href }, bindings: ['a'] }])
-  assert.strictEqual(entries[0].patch.from, fileURLToPath(url))
+  assert.strictEqual(entries[0]!.patch.from, fileURLToPath(url))
 })
 
 test('definePatches resolves a bare package specifier from the config module', () => {
@@ -79,8 +79,8 @@ test('definePatches resolves a bare package specifier from the config module', (
     [{ module: { name: 'x' }, patch: { name: 'p', from: 'example-function-logger/config' }, bindings: ['a'] }],
     base,
   )
-  assert.ok(isAbsolute(entries[0].patch.from))
-  assert.ok(entries[0].patch.from.endsWith(join('src', 'config.mjs')))
+  assert.ok(isAbsolute(entries[0]!.patch.from))
+  assert.ok(entries[0]!.patch.from.endsWith(join('src', 'config.mjs')))
 })
 
 test('an unresolvable bare specifier with a base throws at definition time', () => {
@@ -98,7 +98,7 @@ test('without a base, non-absolute specifiers pass through unchanged (legacy)', 
   const { entries } = definePatches([
     { module: { name: 'x' }, patch: { name: 'p', from: 'some-pkg/patches' }, bindings: ['a'] },
   ])
-  assert.strictEqual(entries[0].patch.from, 'some-pkg/patches')
+  assert.strictEqual(entries[0]!.patch.from, 'some-pkg/patches')
 })
 
 test('defineConfig resolves wrapper.from the same way', () => {
@@ -106,7 +106,9 @@ test('defineConfig resolves wrapper.from the same way', () => {
     { entries: [{ match: 'handler.mjs', handler: 'handler', wrapper: { name: 'W', from: './hooks/wrap.mjs' } }] },
     pathToFileURL(join(loggerDir, 'src', 'config.mjs')).href,
   )
-  assert.strictEqual(entries[0].wrapper.from, join(loggerDir, 'src', 'hooks', 'wrap.mjs'))
+  const wrap = entries[0]
+  assert.ok(wrap && wrap.patch === undefined, 'expected the wrap entry back')
+  assert.strictEqual(wrap.wrapper.from, join(loggerDir, 'src', 'hooks', 'wrap.mjs'))
 })
 
 test('one installed package delivers the whole instrumentation: --import vendor/register', async () => {

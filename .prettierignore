@@ -1,6 +1,10 @@
 target
 .yarn
 index.js
+# napi-generated alongside index.js, and rewritten by every `napi build`
+index.d.ts
+# pnpm writes this in its own canonical style; formatting it only creates churn
+pnpm-lock.yaml
 package-template.wasi-browser.js
 package-template.wasi.cjs
 wasi-worker-browser.mjs

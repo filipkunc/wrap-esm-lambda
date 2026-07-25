@@ -9,6 +9,16 @@ allowBuilds:
   canvas: true
   esbuild: true
 
+# The musl test lane installs on the glibc host and then runs the suite inside
+# an Alpine container against the same node_modules, so the platform-specific
+# binaries every bundler ships (esbuild, swc, rspack, rollup) must be present
+# in BOTH flavours. Without this pnpm fetches only the host's, and the Alpine
+# container finds no usable binary.
+supportedArchitectures:
+  libc:
+    - current
+    - musl
+
 minimumReleaseAgeExclude:
   - webpack@5.109.0
 
