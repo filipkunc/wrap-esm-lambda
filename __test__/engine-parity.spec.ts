@@ -114,6 +114,16 @@ test('resolveModule: both engines resolve import-style, byte-identical paths', (
   }
 })
 
+test('both engines report the transform contract version core expects', async () => {
+  // The number core checks at bind time. Emitted snippet shapes and the tap
+  // surfaces are what it stands for, so it belongs with the tests that diff
+  // those two things — and it must be bumped in three places at once or this
+  // fails, which is the point.
+  const core = await import('@wrap-esm-lambda/core')
+  assert.strictEqual(oxc.tapContractVersion(), core.TAP_CONTRACT_VERSION, 'native addon')
+  assert.strictEqual((acorn as Engine).tapContractVersion(), core.TAP_CONTRACT_VERSION, 'acorn engine')
+})
+
 test('hasModuleSyntax: both engines answer the CJS-or-ESM syntax question identically', () => {
   const cases: [string, boolean][] = [
     ['export const x = 1;\n', true],

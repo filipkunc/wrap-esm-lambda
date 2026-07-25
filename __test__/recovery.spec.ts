@@ -158,18 +158,16 @@ test('build-time delivery contains a throwing patch too', async () => {
   }
 })
 
-test('the engines report the same transform contract version core expects', async () => {
+test('an engine that reports the wrong transform contract is refused', async () => {
   // Core's package range cannot police this: the addon is an optional
-  // dependency resolved on the consumer's machine, so a mismatch is possible
-  // and worse than a missing addon — code that looks right and patches
-  // nothing. Both engines answer, and core refuses an engine that disagrees.
-  const oxc = await import('../index.js')
-  const acorn = await import('@wrap-esm-lambda/engine-acorn')
-  assert.strictEqual(oxc.tapContractVersion(), core.TAP_CONTRACT_VERSION)
-  assert.strictEqual(acorn.tapContractVersion(), core.TAP_CONTRACT_VERSION)
-
-  // an engine that loads but reports the wrong contract is rejected like one
-  // that will not load at all — for the default engine, that means degrading
+  // dependency resolved on the consumer's machine, so a core installed beside
+  // one version can be loaded beside another. A mismatch is worse than a
+  // missing addon — code that looks right and patches nothing — so it takes
+  // the same route, which for the default engine means degrading.
+  //
+  // That the two real engines agree on the number is asserted in
+  // engine-parity.spec.ts, where the native addon is a given; this lane
+  // deliberately runs without one.
   const wrongContract = {
     oxc: () => Promise.resolve({ tapContractVersion: () => 999 }),
     acorn: () => Promise.resolve({ tapContractVersion: () => core.TAP_CONTRACT_VERSION }),
