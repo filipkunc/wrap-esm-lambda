@@ -7,9 +7,59 @@
 // append statements), so untouched lines keep their exact source text and
 // the emitted map stays sparse.
 import MagicString from 'magic-string'
+import type { AnyNode } from 'acorn'
 import { NamedKind, buildExportIndex, parseModule } from './exports-index.mjs'
+import type { ExportIndex, ExportStatement, NamedExport } from './exports-index.mjs'
 import { braceName, buildSnippet, quoteJsString, starStub } from './snippets.mjs'
+import type { Accessor } from './snippets.mjs'
 import { chainMaps } from './sourcemaps.mjs'
+
+/** One patch entry's inputs, mirroring the native `TapEntryInput`. */
+export interface TapEntryInput {
+  bindings: string[]
+  patchName: string
+  patchFrom: string
+  aliasIndex: number
+}
+
+/** A star-forwarded name resolved to the source that provides it. */
+export interface TapStarResolution {
+  binding: string
+  source: string
+}
+
+/** The tap's result, mirroring the native `TapResult`. */
+export interface TapOutcome {
+  snippets: string
+  code: string | null
+  map: string | null
+}
+
+/** An export specifier split out into a rebindable local. */
+interface Split {
+  stmt: ExportStatement
+  specIdx: number
+  exported: string
+  imported: string
+  source: string | null
+  localIdent: string
+}
+
+/** An `export * as ns from "m"` replaced by a namespace import plus a local. */
+interface NamespaceSplit {
+  stmt: ExportStatement
+  exported: string
+  source: string
+  localIdent: string
+}
+
+/** Every restructuring the resolver accumulated for one module. */
+interface Ops {
+  demote: Set<AnyNode>
+  defaultAnon: { stmt: AnyNode; ident: string } | null
+  splits: Split[]
+  nsSplits: NamespaceSplit[]
+}
 
 /**
  * Deterministic fresh identifiers: `__wel_l0`, `__wel_l1`, ... skipping any
@@ -18,13 +68,16 @@ import { chainMaps } from './sourcemaps.mjs'
  * delivery must emit byte-identical modules.
  */
 class FreshNames {
-  constructor(source) {
+  readonly source: string
+  counter: number
+
+  constructor(source: string) {
     this.source = source
     this.counter = 0
   }
 
   /** Numbered from zero: `__wel_l0`, `__wel_l1`, ... — for the split locals. */
-  numbered(prefix) {
+  numbered(prefix: string): string {
     for (;;) {
       const candidate = `${prefix}${this.counter}`
       this.counter += 1
@@ -33,7 +86,7 @@ class FreshNames {
   }
 
   /** The bare hint when free (`__wel_default`), numbered otherwise. */
-  named(hint) {
+  named(hint: string): string {
     if (!this.source.includes(hint)) return hint
     for (let n = 0; ; n += 1) {
       const candidate = `${hint}${n}`
@@ -42,8 +95,7 @@ class FreshNames {
   }
 }
 
-/** @returns {{ exported: string, local: string, reassignable: boolean, verifySet: boolean }} */
-function accessor(exported, local, verifySet = false) {
+function accessor(exported: string, local: string, verifySet = false): Accessor {
   return { exported, local, reassignable: true, verifySet }
 }
 
@@ -52,20 +104,18 @@ function accessor(exported, local, verifySet = false) {
  * source text. All ops are deduplicated — several entries tapping the same
  * binding converge on identical rewrites.
  */
-function emptyOps() {
+function emptyOps(): Ops {
   return {
-    /** @type {Set<object>} VariableDeclaration nodes demoted `const` -> `let` */
+    // VariableDeclaration nodes demoted `const` -> `let`
     demote: new Set(),
-    /** @type {{ stmt: object, ident: string } | null} the anonymous `export default` */
+    // the anonymous `export default`, named into a local
     defaultAnon: null,
-    /** @type {{ stmt: object, specIdx: number, exported: string, imported: string, source: string | null, localIdent: string }[]} */
     splits: [],
-    /** @type {{ stmt: object, exported: string, source: string, localIdent: string }[]} */
     nsSplits: [],
   }
 }
 
-function opsAreEmpty(ops) {
+function opsAreEmpty(ops: Ops): boolean {
   return ops.demote.size === 0 && ops.defaultAnon === null && ops.splits.length === 0 && ops.nsSplits.length === 0
 }
 
@@ -74,7 +124,7 @@ function opsAreEmpty(ops) {
  * local, keyed on the specifier's position so several entries converge on
  * one split.
  */
-function splitLocal(ops, fresh, info) {
+function splitLocal(ops: Ops, fresh: FreshNames, info: NamedExport): string {
   const existing = ops.splits.find((s) => s.stmt === info.stmt && s.specIdx === info.specIdx)
   if (existing) return existing.localIdent
   const localIdent = fresh.numbered('__wel_l')
@@ -96,14 +146,14 @@ function splitLocal(ops, fresh, info) {
  * path; the only refusal left is a name that does not exist (thrown with the
  * same message the native engine produces — callers match on it).
  */
-function resolveBinding(name, index, ops, fresh) {
+function resolveBinding(name: string, index: ExportIndex, ops: Ops, fresh: FreshNames): string {
   const info = index.named.find((entry) => entry.exported === name)
   if (info) {
     switch (info.kind) {
       case NamedKind.DeclMutable:
         return info.local
       case NamedKind.DeclConst:
-        ops.demote.add(info.declNode)
+        if (info.declNode !== null) ops.demote.add(info.declNode)
         return info.local
       case NamedKind.ListLocal: {
         if (index.importLocals.has(info.local)) {
@@ -120,7 +170,8 @@ function resolveBinding(name, index, ops, fresh) {
         const existing = ops.nsSplits.find((s) => s.stmt === info.stmt)
         if (existing) return existing.localIdent
         const localIdent = fresh.numbered('__wel_l')
-        ops.nsSplits.push({ stmt: info.stmt, exported: info.exported, source: info.source, localIdent })
+        // a `export * as ns from "m"` always carries a source
+        ops.nsSplits.push({ stmt: info.stmt, exported: info.exported, source: info.source!, localIdent })
         return localIdent
       }
       default:
@@ -128,7 +179,7 @@ function resolveBinding(name, index, ops, fresh) {
     }
   }
   if (name === 'default' && index.default !== null) {
-    if ('local' in index.default) return index.default.local
+    if (index.default.local !== undefined) return index.default.local
     if (ops.defaultAnon !== null) return ops.defaultAnon.ident
     const ident = fresh.named('__wel_default')
     ops.defaultAnon = { stmt: index.default.anonStmt, ident }
@@ -142,7 +193,7 @@ function resolveBinding(name, index, ops, fresh) {
 }
 
 /** `export { a, b as c } from "m";` regenerated for the specifiers that remain. */
-function exportStatementText(specs, source) {
+function exportStatementText(specs: { local: string; exported: string }[], source: string | null): string {
   const list = specs
     .map(({ local, exported }) =>
       local === exported ? braceName(local) : `${braceName(local)} as ${braceName(exported)}`,
@@ -166,16 +217,18 @@ function exportStatementText(specs, source) {
  *   exported };`. The snapshot evaluates at end-of-module, after every
  *   declaration it can reference.
  */
-function applyRewrites(ms, input, ops, index) {
+function applyRewrites(ms: MagicString, input: string, ops: Ops, index: ExportIndex): void {
   for (const decl of ops.demote) {
     ms.overwrite(decl.start, decl.start + 'const'.length, 'let')
   }
 
-  const appended = []
+  const appended: string[] = []
 
   if (ops.defaultAnon !== null) {
     const { stmt, ident } = ops.defaultAnon
-    ms.overwrite(stmt.start, stmt.declaration.start, `let ${ident} = `)
+    // the index only ever records an ExportDefaultDeclaration here
+    const declaration = (stmt as { declaration: AnyNode }).declaration
+    ms.overwrite(stmt.start, declaration.start, `let ${ident} = `)
     // terminate the statement we created even when the source relied on ASI:
     // bundlers that delete an adjacent statement (webpack's production
     // generator does) would otherwise fuse `let x = \`tpl\`` with whatever
@@ -185,7 +238,7 @@ function applyRewrites(ms, input, ops, index) {
   }
 
   // group split specifier removals per statement, then rebuild each list
-  const byStmt = new Map()
+  const byStmt = new Map<ExportStatement, Split[]>()
   for (const split of ops.splits) {
     const group = byStmt.get(split.stmt) ?? []
     group.push(split)
@@ -196,11 +249,11 @@ function applyRewrites(ms, input, ops, index) {
     const remaining = index.named
       .filter((info) => info.stmt === stmt && !removed.has(info.specIdx))
       .map(({ local, exported }) => ({ local, exported }))
-    const source = splits[0].source
+    const source = splits[0]!.source
     ms.overwrite(stmt.start, stmt.end, exportStatementText(remaining, source))
   }
   for (const split of ops.splits) {
-    let sourceLocal
+    let sourceLocal: string
     if (split.source !== null) {
       sourceLocal = `${split.localIdent}_src`
       appended.push(`import { ${braceName(split.imported)} as ${sourceLocal} } from ${quoteJsString(split.source)};`)
@@ -230,7 +283,7 @@ function applyRewrites(ms, input, ops, index) {
 }
 
 /** The CJS tap: accessors through `module.exports`, no validation, no rewrite. */
-function cjsTap(entries, registry) {
+function cjsTap(entries: TapEntryInput[], registry: boolean): TapOutcome {
   let snippets = ''
   for (const entry of entries) {
     const accessors = entry.bindings.map((name) =>
@@ -258,13 +311,16 @@ function cjsTap(entries, registry) {
  *
  * A missing export throws with the native engine's exact message — the
  * version-drift alarm, and what the star-retry in core matches on.
- *
- * @param {string} input
- * @param {{ bindings: string[], patchName: string, patchFrom: string, aliasIndex: number }[]} entries
- * @param {{ binding: string, source: string }[] | undefined} [starResolutions]
- * @returns {{ snippets: string, code: string | null, map: string | null }}
  */
-export function exportsTap(input, entries, cjs, registry, filename, upstreamMap, starResolutions) {
+export function exportsTap(
+  input: string,
+  entries: TapEntryInput[],
+  cjs: boolean,
+  registry: boolean,
+  filename?: string | undefined | null,
+  upstreamMap?: string | undefined | null,
+  starResolutions?: TapStarResolution[] | undefined | null,
+): TapOutcome {
   if (cjs) {
     return cjsTap(entries, registry)
   }
@@ -275,14 +331,14 @@ export function exportsTap(input, entries, cjs, registry, filename, upstreamMap,
   const fresh = new FreshNames(input)
 
   const starMap = new Map((starResolutions ?? []).map(({ binding, source }) => [binding, source]))
-  const starLocals = new Map()
+  const starLocals = new Map<string, string>()
   let starStubs = ''
 
   // resolve every entry first: validation errors must fire before any
   // rewrite decision, and entries tapping the same binding share rewrites
   const entryAccessors = entries.map((entry) =>
     entry.bindings.map((name) => {
-      let local
+      let local: string
       try {
         local = resolveBinding(name, index, ops, fresh)
       } catch (err) {
@@ -291,8 +347,10 @@ export function exportsTap(input, entries, cjs, registry, filename, upstreamMap,
         // reroute it through an append-only shadow export
         const source = starMap.get(name)
         if (source === undefined) throw err
-        local = starLocals.get(name)
-        if (local === undefined) {
+        const known = starLocals.get(name)
+        if (known !== undefined) {
+          local = known
+        } else {
           local = fresh.numbered('__wel_l')
           starStubs += starStub(name, source, local)
           starLocals.set(name, local)
@@ -306,7 +364,7 @@ export function exportsTap(input, entries, cjs, registry, filename, upstreamMap,
 
   let snippets = starStubs
   entries.forEach((entry, i) => {
-    snippets += buildSnippet(entryAccessors[i], entry.patchName, entry.patchFrom, registry, entry.aliasIndex, false)
+    snippets += buildSnippet(entryAccessors[i]!, entry.patchName, entry.patchFrom, registry, entry.aliasIndex, false)
   })
 
   if (opsAreEmpty(ops)) {
@@ -315,7 +373,7 @@ export function exportsTap(input, entries, cjs, registry, filename, upstreamMap,
 
   const ms = new MagicString(input)
   applyRewrites(ms, input, ops, index)
-  let map = null
+  let map: string | null = null
   if (filename != null) {
     const rewriteMap = ms.generateMap({ source: filename, hires: 'boundary', includeContent: true })
     map = upstreamMap != null ? chainMaps(rewriteMap, upstreamMap) : rewriteMap.toString()
@@ -329,7 +387,15 @@ export function exportsTap(input, entries, cjs, registry, filename, upstreamMap,
  * so this is a plain decode — the honest cost of the JS-only setup, and
  * exactly what the JS-vs-Rust benchmark measures.
  */
-export function exportsTapFromBuffer(input, entries, cjs, registry, filename, upstreamMap, starResolutions) {
+export function exportsTapFromBuffer(
+  input: Buffer,
+  entries: TapEntryInput[],
+  cjs: boolean,
+  registry: boolean,
+  filename?: string | undefined | null,
+  upstreamMap?: string | undefined | null,
+  starResolutions?: TapStarResolution[] | undefined | null,
+): TapOutcome {
   const source = cjs ? '' : input.toString('utf8')
   return exportsTap(source, entries, cjs, registry, filename, upstreamMap, starResolutions)
 }

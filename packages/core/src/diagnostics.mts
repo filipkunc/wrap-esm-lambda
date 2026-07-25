@@ -27,18 +27,18 @@
 //                              rewrites) to stderr.
 
 /** `1`, `true`, any non-empty value except `0`/`false`. Unset is off. */
-function envFlag(name) {
+function envFlag(name: string): boolean {
   const value = process.env[name]
   return value !== undefined && value !== '' && value !== '0' && value !== 'false'
 }
 
 /** Kill switch: the shells skip registration entirely. Read at call time. */
-export function isDisabled() {
+export function isDisabled(): boolean {
   return envFlag('WRAP_ESM_LAMBDA_DISABLE')
 }
 
 /** Strict mode: `recover` rethrows instead of warning. Read at call time. */
-export function isStrict() {
+export function isStrict(): boolean {
   return envFlag('WRAP_ESM_LAMBDA_STRICT')
 }
 
@@ -49,12 +49,18 @@ export function isStrict() {
  */
 export const DEBUG = envFlag('WRAP_ESM_LAMBDA_DEBUG')
 
-const warned = new Set()
-const failures = []
+/** A failure the shells recovered from, in the order they happened. */
+export interface RecoveredFailure {
+  what: string
+  error: unknown
+}
+
+const warned = new Set<string>()
+const failures: RecoveredFailure[] = []
 const FAILURE_LOG_LIMIT = 50
 let failureCount = 0
 
-function write(message) {
+function write(message: string): void {
   // stderr directly, not console: a patched console is exactly the kind of
   // thing instrumentation does, and a report about instrumentation failing
   // should not travel through it
@@ -62,12 +68,12 @@ function write(message) {
 }
 
 /** Trace a decision when WRAP_ESM_LAMBDA_DEBUG is set. */
-export function debug(message) {
+export function debug(message: string): void {
   if (DEBUG) write(message)
 }
 
 /** Warn about `key` once per process, however many times it recurs. */
-export function warnOnce(key, message) {
+export function warnOnce(key: string, message: string): void {
   if (warned.has(key)) return
   warned.add(key)
   write(message)
@@ -82,10 +88,10 @@ export function warnOnce(key, message) {
  * load reports once. Every recovered failure is also recorded for
  * `instrumentationFailures()`.
  *
- * @param {string} what human-readable scope, e.g. `instrumenting <url>`
- * @param {unknown} err the failure to recover from
+ * @param what human-readable scope, e.g. `instrumenting <url>`
+ * @param err the failure to recover from
  */
-export function recover(what, err) {
+export function recover(what: string, err: unknown): void {
   if (isStrict()) throw err
   failureCount += 1
   if (failures.length < FAILURE_LOG_LIMIT) {
@@ -100,9 +106,7 @@ export function recover(what, err) {
  * question "is this process fully instrumented?". An APM shipping a config
  * can report this after startup instead of guessing. Capped at the first 50
  * entries; `total` counts them all.
- *
- * @returns {{ total: number, entries: { what: string, error: unknown }[] }}
  */
-export function instrumentationFailures() {
+export function instrumentationFailures(): { total: number; entries: RecoveredFailure[] } {
   return { total: failureCount, entries: failures.slice() }
 }

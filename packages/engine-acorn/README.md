@@ -10,7 +10,7 @@ map) and [`@jridgewell/remapping`](https://github.com/jridgewell/sourcemaps)
 code anywhere in the graph.
 
 Core binds to one engine per process via `WRAP_ESM_LAMBDA_ENGINE`
-(see [`packages/core/src/engine.mjs`](../core/src/engine.mjs)):
+(see [`packages/core/src/engine.mts`](../core/src/engine.mts)):
 
 ```sh
 WRAP_ESM_LAMBDA_ENGINE=acorn \
@@ -46,7 +46,7 @@ pins, against the native engine:
   every rewrite shape (const demotion, anonymous default naming, re-export
   and namespace splits, import-backed list exports);
 - **identical error messages** for missing exports — core's star-graph
-  retry ([`stars.mjs`](../core/src/stars.mjs)) matches on that text;
+  retry ([`stars.mts`](../core/src/stars.mts)) matches on that text;
 - **identical `esmModuleExports` surfaces** — the star walk behaves the same
   on either engine.
 
@@ -81,8 +81,8 @@ The module layout mirrors the native side ([`src/transform.rs`](../../src/transf
 
 | module                                           | responsibility                                             |
 | ------------------------------------------------ | ---------------------------------------------------------- |
-| [`src/exports-index.mjs`](src/exports-index.mjs) | one-pass export surface index (`build_export_index` twin)  |
-| [`src/snippets.mjs`](src/snippets.mjs)           | emitted-text builders, byte-identical to the Rust emission |
-| [`src/tap.mjs`](src/tap.mjs)                     | the exports tap: fast path + magic-string rewrites         |
-| [`src/wrap.mjs`](src/wrap.mjs)                   | the original handler-wrap transform                        |
-| [`src/sourcemaps.mjs`](src/sourcemaps.mjs)       | map chaining (`remapping`) and data-URL inlining           |
+| [`src/exports-index.mts`](src/exports-index.mts) | one-pass export surface index (`build_export_index` twin)  |
+| [`src/snippets.mts`](src/snippets.mts)           | emitted-text builders, byte-identical to the Rust emission |
+| [`src/tap.mts`](src/tap.mts)                     | the exports tap: fast path + magic-string rewrites         |
+| [`src/wrap.mts`](src/wrap.mts)                   | the original handler-wrap transform                        |
+| [`src/sourcemaps.mts`](src/sourcemaps.mts)       | map chaining (`remapping`) and data-URL inlining           |

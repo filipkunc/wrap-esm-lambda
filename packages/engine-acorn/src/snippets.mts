@@ -4,7 +4,7 @@
 // contract, and the engine-parity tests diff the two emissions directly.
 
 /** Minimal JS string literal escaping for generated specifiers. */
-export function quoteJsString(value) {
+export function quoteJsString(value: string): string {
   let out = '"'
   for (const ch of value) {
     switch (ch) {
@@ -28,7 +28,7 @@ export function quoteJsString(value) {
 }
 
 /** True when `name` can appear bare as an object-literal property name. */
-export function isPlainPropertyName(name) {
+export function isPlainPropertyName(name: string): boolean {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
 }
 
@@ -37,8 +37,20 @@ export function isPlainPropertyName(name) {
  * plain identifiers stay bare, anything else becomes a string literal
  * (`import { "a-b" as x }` is legal ESM).
  */
-export function braceName(name) {
+export function braceName(name: string): string {
   return isPlainPropertyName(name) ? name : quoteJsString(name)
+}
+
+/**
+ * One tapped binding as the emitted snippet sees it: `local` is how the module
+ * reaches the value, and the two flags record what the resolver worked out
+ * about writing to it.
+ */
+export interface Accessor {
+  exported: string
+  local: string
+  reassignable: boolean
+  verifySet: boolean
 }
 
 /**
@@ -48,10 +60,8 @@ export function braceName(name) {
  * has: bundled sloppy-mode CJS with getter-only exports no-ops the write, so
  * the setter re-reads the property and throws if the rebind did not take.
  *
- * @param {Accessor[]} accessors
- * @typedef {{ exported: string, local: string, reassignable: boolean, verifySet: boolean }} Accessor
  */
-function accessorProperties(accessors) {
+function accessorProperties(accessors: Accessor[]): string {
   let out = ''
   for (const { exported, local, reassignable, verifySet } of accessors) {
     const name = isPlainPropertyName(exported) ? exported : quoteJsString(exported)
@@ -75,9 +85,15 @@ function accessorProperties(accessors) {
  * appended to CJS source would flip the module's format under every
  * bundler's syntax detection and break its `module.exports`.
  *
- * @param {Accessor[]} accessors
  */
-export function buildSnippet(accessors, patchName, patchFrom, registry, aliasIndex, cjs) {
+export function buildSnippet(
+  accessors: Accessor[],
+  patchName: string,
+  patchFrom: string,
+  registry: boolean,
+  aliasIndex: number,
+  cjs: boolean,
+): string {
   const props = accessorProperties(accessors)
   if (registry) {
     const key = quoteJsString(`${patchFrom}#${patchName}`)
@@ -103,7 +119,7 @@ export function buildSnippet(accessors, patchName, patchFrom, registry, aliasInd
  * statement stays untouched, and these three appended statements (imports and
  * exports hoist) reroute `name` through a rebindable local.
  */
-export function starStub(name, source, local) {
+export function starStub(name: string, source: string, local: string): string {
   const braced = braceName(name)
   return `\nimport { ${braced} as ${local}_src } from ${quoteJsString(source)};\nlet ${local} = ${local}_src;\nexport { ${local} as ${braced} };\n`
 }

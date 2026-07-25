@@ -33,7 +33,6 @@ test('runtime mode: const, anonymous default and barrel re-export all rebind', a
 })
 
 test('build mode: the same rewrites land through esbuild', async () => {
-  // @ts-expect-error untyped workspace package
   const { unplugin } = await import('@wrap-esm-lambda/unplugin')
   const { default: config } = await import(pathToFileURL(fixture('wrap.config.shapes.mjs')).href)
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-shapes-'))
@@ -75,7 +74,6 @@ test('runtime mode: bare-specifier export * resolves through package resolution'
 })
 
 test('build mode: bare-specifier export * lands through esbuild', async () => {
-  // @ts-expect-error untyped workspace package
   const { unplugin } = await import('@wrap-esm-lambda/unplugin')
   const { default: config } = await import(pathToFileURL(fixture('wrap.config.star-bare.mjs')).href)
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-star-bare-'))
@@ -100,7 +98,6 @@ test('build mode: bare-specifier export * lands through esbuild', async () => {
 test('bare-specifier export *: the shadow export imports from the specifier as written', async () => {
   // Resolution informs the walk only — the emitted stub must keep the bare
   // specifier so Node or the bundler still performs its own resolution.
-  // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const barePath = fixture('node_modules/@fake/shapes/star-bare.js')
   const { readFileSync } = await import('node:fs')
@@ -122,7 +119,6 @@ test('bare-specifier export *: the shadow export imports from the specifier as w
 })
 
 test('bare-specifier export *: an uninstalled package keeps the loud not-found error', async () => {
-  // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const barePath = fixture('node_modules/@fake/shapes/star-bare.js')
   const source = 'export * from "@fake/not-installed";\n'
@@ -144,7 +140,6 @@ test('the Lambda handler shape: a wrap-style patch entry needs no wrap entry any
   // The original problem statement of this repo — wrap `export const
   // handler` — expressed as a plain patch entry rebinding the handler.
   // Before the rewrite path this threw "Cannot set property handler".
-  // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const source = 'export const handler = async (event) => `hi from ${event}`\n'
   const entries = [
@@ -171,7 +166,6 @@ test('the Lambda handler shape: a wrap-style patch entry needs no wrap entry any
 })
 
 test('bare export *: the star-source walk resolves names through a transitive chain', async () => {
-  // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const starPath = fixture('node_modules/@fake/shapes/star.js')
   const { readFileSync } = await import('node:fs')
@@ -193,7 +187,6 @@ test('bare export *: the star-source walk resolves names through a transitive ch
 })
 
 test('bare export *: an ambiguous name (two star providers) fails loudly', async () => {
-  // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const ambPath = fixture('node_modules/@fake/shapes/amb.js')
   const { readFileSync } = await import('node:fs')
@@ -212,7 +205,6 @@ test('bare export *: an ambiguous name (two star providers) fails loudly', async
 })
 
 test('bare export *: a name no star source provides keeps the loud not-found error', async () => {
-  // @ts-expect-error untyped workspace package
   const core = await import('@wrap-esm-lambda/core')
   const starPath = fixture('node_modules/@fake/shapes/star.js')
   const { readFileSync } = await import('node:fs')

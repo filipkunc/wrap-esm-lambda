@@ -5,6 +5,7 @@
 // place, so every untouched byte (and therefore any existing source map
 // line) survives verbatim.
 import MagicString from 'magic-string'
+import type { Program, VariableDeclarator } from 'acorn'
 import { parseModule, specifierName } from './exports-index.mjs'
 import { quoteJsString } from './snippets.mjs'
 import { chainMaps, mapToDataUrl } from './sourcemaps.mjs'
@@ -13,7 +14,7 @@ import { chainMaps, mapToDataUrl } from './sourcemaps.mjs'
  * `export { local as handler }` re-targets the transform at the local name —
  * the same first pass the native engine runs before touching declarations.
  */
-function localHandlerName(program, handler) {
+function localHandlerName(program: Program, handler: string): string {
   for (const stmt of program.body) {
     if (stmt.type !== 'ExportNamedDeclaration') continue
     for (const spec of stmt.specifiers) {
@@ -23,9 +24,14 @@ function localHandlerName(program, handler) {
   return handler
 }
 
-function wrapDeclaratorInit(ms, declarations, handler, wrapper) {
+function wrapDeclaratorInit(
+  ms: MagicString,
+  declarations: VariableDeclarator[],
+  handler: string,
+  wrapper: string,
+): boolean {
   const found = declarations.find((decl) => decl.id.type === 'Identifier' && decl.id.name === handler)
-  if (!found || found.init === null) return false
+  if (!found || found.init == null) return false
   ms.appendLeft(found.init.start, `${wrapper}(`)
   ms.appendRight(found.init.end, ')')
   return true
@@ -36,7 +42,7 @@ function wrapDeclaratorInit(ms, declarations, handler, wrapper) {
  * null when no handler-shaped statement matched — the input passes through
  * untouched, mirroring the native engine's no-op).
  */
-function transformToMagicString(source, handlerName, wrapper) {
+function transformToMagicString(source: string, handlerName: string, wrapper: string): MagicString | null {
   const program = parseModule(source)
   const handler = localHandlerName(program, handlerName)
   const ms = new MagicString(source) // edited only when a statement matches
@@ -61,7 +67,7 @@ function transformToMagicString(source, handlerName, wrapper) {
       ms.appendRight(decl.end, ');')
       return ms
     }
-    if (decl === null && stmt.source !== null) {
+    if (decl == null && stmt.source != null) {
       // `export { handler } from "m"` -> import the original, export it wrapped
       const spec = stmt.specifiers.find((s) => specifierName(s.exported) === handler)
       if (!spec) continue
@@ -74,7 +80,7 @@ function transformToMagicString(source, handlerName, wrapper) {
           const exported = specifierName(s.exported)
           return local === exported ? local : `${local} as ${exported}`
         })
-      const lines = []
+      const lines: string[] = []
       if (remaining.length > 0) lines.push(`export { ${remaining.join(', ')} } from ${from};`)
       lines.push(`import { ${specifierName(spec.local)} as ${orig} } from ${from};`)
       lines.push(`export const ${handler} = ${wrapper}(${orig});`)
@@ -85,13 +91,13 @@ function transformToMagicString(source, handlerName, wrapper) {
   return null
 }
 
-export function transformLambda(input, handler, wrapper) {
+export function transformLambda(input: string, handler: string, wrapper: string): string {
   const ms = transformToMagicString(input, handler, wrapper)
   return ms === null ? input : ms.toString()
 }
 
 /** Buffer-input twin, mirroring the native API (a plain decode in JS). */
-export function transformLambdaFromBuffer(input, handler, wrapper) {
+export function transformLambdaFromBuffer(input: Buffer, handler: string, wrapper: string): string {
   return transformLambda(input.toString('utf8'), handler, wrapper)
 }
 
@@ -99,10 +105,13 @@ export function transformLambdaFromBuffer(input, handler, wrapper) {
  * Returns the transformed code and the raw v3 source map JSON separately, so
  * a caller can compose the map with an upstream `.ts` -> `.js` map before
  * attaching it.
- *
- * @returns {{ code: string, map: string | null }}
  */
-export function transformLambdaWithMapObject(input, handler, wrapper, filename) {
+export function transformLambdaWithMapObject(
+  input: string,
+  handler: string,
+  wrapper: string,
+  filename: string,
+): { code: string; map: string } {
   const ms = transformToMagicString(input, handler, wrapper)
   if (ms === null) {
     // even a no-op emits an (identity) map, like the native codegen does
@@ -119,7 +128,7 @@ export function transformLambdaWithMapObject(input, handler, wrapper, filename) 
 }
 
 /** Like `transformLambdaWithMapObject`, but with the map inlined as a data URL. */
-export function transformLambdaWithMap(input, handler, wrapper, filename) {
+export function transformLambdaWithMap(input: string, handler: string, wrapper: string, filename: string): string {
   const { code, map } = transformLambdaWithMapObject(input, handler, wrapper, filename)
   return `${code}\n//# sourceMappingURL=${mapToDataUrl(map)}\n`
 }
@@ -129,15 +138,26 @@ export function transformLambdaWithMap(input, handler, wrapper, filename) {
  * `upstreamMap` (the `filename -> original` map, e.g. tsc's `handler.js ->
  * handler.ts` map), so the returned map already reaches the original source.
  *
- * @returns {{ code: string, map: string | null }}
  */
-export function transformLambdaWithChainedMapObject(input, handler, wrapper, filename, upstreamMap) {
+export function transformLambdaWithChainedMapObject(
+  input: string,
+  handler: string,
+  wrapper: string,
+  filename: string,
+  upstreamMap: string,
+): { code: string; map: string } {
   const { code, map } = transformLambdaWithMapObject(input, handler, wrapper, filename)
   return { code, map: chainMaps(map, upstreamMap) }
 }
 
 /** Like `transformLambdaWithChainedMapObject`, with the chained map inlined. */
-export function transformLambdaWithChainedMap(input, handler, wrapper, filename, upstreamMap) {
+export function transformLambdaWithChainedMap(
+  input: string,
+  handler: string,
+  wrapper: string,
+  filename: string,
+  upstreamMap: string,
+): string {
   const { code, map } = transformLambdaWithChainedMapObject(input, handler, wrapper, filename, upstreamMap)
   return `${code}\n//# sourceMappingURL=${mapToDataUrl(map)}\n`
 }

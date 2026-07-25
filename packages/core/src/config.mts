@@ -6,45 +6,76 @@
 //   Module._load-monkey-patching ergonomics, delivered by source transform.
 //   The user's patch function receives the module's live bindings as get/set
 //   accessors and does ordinary imperative patching against real objects.
+//
+// The two entry shapes carry `never`-typed markers for each other's
+// discriminating fields (`patch?: undefined` on a wrap entry), so the
+// `entry.patch ? ... : ...` narrowing the shells already did in JavaScript is
+// what the type checker now follows too.
 import { createRequire } from 'node:module'
 import { isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-/**
- * @typedef {Object} WrapperSpec
- * @property {string} name - identifier the wrapped export is called through, e.g. 'WrapAwsLambda'
- * @property {string} [from] - module specifier to import `name` from; omit if the
- *   identifier is provided some other way (e.g. a preloaded global)
- *
- * @typedef {Object} WrapEntry
- * @property {string | RegExp} match - matched against the module's absolute file path
- * @property {string} handler - the exported binding to wrap
- * @property {WrapperSpec} wrapper
- *
- * @typedef {Object} ModuleMatch
- * @property {string} name - package name, from the nearest package.json — or a
- *   Node builtin (`node:http`, `os`): no source to transform, so the runtime
- *   shell patches its exports object eagerly at preload, and the build shell
- *   aliases the specifier to a generated wrapper module (see builtins.mjs)
- * @property {string} [versionRange] - semver range the package version must
- *   satisfy; for a builtin entry, checked against `process.versions.node`
- * @property {string[]} [files] - path suffixes within the package (e.g. 'dist-es/client.js');
- *   omit to match every file of the package; rejected for builtin entries
- *
- * @typedef {Object} PatchSpec
- * @property {string} name - exported patch function in `from`
- * @property {string} from - module specifier of the user's patch code
- *
- * @typedef {Object} PatchEntry
- * @property {ModuleMatch} module
- * @property {PatchSpec} patch
- * @property {string[]} bindings - exported names handed to the patch function
- *
- * @typedef {WrapEntry | PatchEntry} InstrumentEntry
- *
- * @typedef {Object} InstrumentConfig
- * @property {InstrumentEntry[]} entries
- */
+export interface WrapperSpec {
+  /** identifier the wrapped export is called through, e.g. 'WrapAwsLambda' */
+  name: string
+  /**
+   * module specifier to import `name` from; omit if the identifier is provided
+   * some other way (e.g. a preloaded global)
+   */
+  from?: string
+}
+
+export interface WrapEntry {
+  /** matched against the module's absolute file path */
+  match: string | RegExp
+  /** the exported binding to wrap */
+  handler: string
+  wrapper: WrapperSpec
+  patch?: undefined
+  module?: undefined
+}
+
+export interface ModuleMatch {
+  /**
+   * package name, from the nearest package.json — or a Node builtin
+   * (`node:http`, `os`): no source to transform, so the runtime shell patches
+   * its exports object eagerly at preload, and the build shell aliases the
+   * specifier to a generated wrapper module (see builtins.mts)
+   */
+  name: string
+  /**
+   * semver range the package version must satisfy; for a builtin entry,
+   * checked against `process.versions.node`
+   */
+  versionRange?: string
+  /**
+   * path suffixes within the package (e.g. 'dist-es/client.js'); omit to match
+   * every file of the package; rejected for builtin entries
+   */
+  files?: string[]
+}
+
+export interface PatchSpec {
+  /** exported patch function in `from` */
+  name: string
+  /** module specifier of the user's patch code */
+  from: string
+}
+
+export interface PatchEntry {
+  module: ModuleMatch
+  patch: PatchSpec
+  /** exported names handed to the patch function */
+  bindings: string[]
+  match?: undefined
+  wrapper?: undefined
+}
+
+export type InstrumentEntry = WrapEntry | PatchEntry
+
+export interface InstrumentConfig {
+  entries: InstrumentEntry[]
+}
 
 /**
  * Resolve a `from` specifier to the absolute path both shells need: the
@@ -69,7 +100,7 @@ import { fileURLToPath } from 'node:url'
  * Without `base` a non-absolute specifier passes through unchanged (the
  * legacy, documented-fragile behavior).
  */
-function resolveFrom(from, base, what) {
+function resolveFrom(from: string, base: string | undefined, what: string): string {
   if (from.startsWith('file://')) {
     return fileURLToPath(from)
   }
@@ -89,8 +120,7 @@ function resolveFrom(from, base, what) {
   }
 }
 
-/** @param {InstrumentEntry} entry */
-function resolveEntry(entry, base) {
+function resolveEntry(entry: InstrumentEntry, base: string | undefined): InstrumentEntry {
   if (entry.patch) {
     return { ...entry, patch: { ...entry.patch, from: resolveFrom(entry.patch.from, base, 'patch.from') } }
   }
@@ -105,18 +135,18 @@ function resolveEntry(entry, base) {
  * `import.meta.url` as `base` to write `patch.from` / `wrapper.from` as
  * specifiers relative to the config file (or bare package specifiers) —
  * they are resolved to absolute paths here, at definition time.
- * @param {InstrumentConfig} config
- * @param {string} [base] - the config module's `import.meta.url`
+ *
+ * @param base the config module's `import.meta.url`
  */
-export function defineConfig(config, base) {
+export function defineConfig(config: InstrumentConfig, base?: string): InstrumentConfig {
   return { ...config, entries: config.entries.map((entry) => resolveEntry(entry, base)) }
 }
 
 /**
  * Sugar for a patches-only config.
- * @param {PatchEntry[]} entries
- * @param {string} [base] - the config module's `import.meta.url`
+ *
+ * @param base the config module's `import.meta.url`
  */
-export function definePatches(entries, base) {
+export function definePatches(entries: PatchEntry[], base?: string): InstrumentConfig {
   return { entries: entries.map((entry) => resolveEntry(entry, base)) }
 }

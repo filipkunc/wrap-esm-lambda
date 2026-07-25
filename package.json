@@ -38,6 +38,7 @@
     "bench:patch": "node --import @oxc-node/core/register benchmark/patch-bench.ts",
     "matrix": "node hooks/interplay-matrix/run.mjs",
     "bench:chart": "node --import @oxc-node/core/register benchmark/make-transform-chart.ts",
+    "build:packages": "tsc -b packages/core packages/hooks packages/unplugin",
     "build": "napi build --platform --release",
     "build:debug": "napi build --platform",
     "format": "run-p format:prettier format:rs format:toml",
@@ -46,7 +47,7 @@
     "format:rs": "cargo fmt",
     "lint": "oxlint .",
     "prepublishOnly": "napi prepublish -t npm",
-    "test": "OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test \"__test__/*.spec.ts\"",
+    "test": "pnpm build:packages && OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test \"__test__/*.spec.ts\"",
     "version": "napi version",
     "prepare": "husky",
     "compile:bench": "tsc --project benchmark/tsconfig.json"
@@ -106,10 +107,10 @@
     "webpack": "^5.109.0"
   },
   "lint-staged": {
-    "*.@(js|ts|tsx)": [
+    "*.@(js|mjs|cjs|ts|mts|cts|tsx)": [
       "oxlint --fix"
     ],
-    "*.@(js|ts|tsx|yml|yaml|md|json)": [
+    "*.@(js|mjs|cjs|ts|mts|cts|tsx|yml|yaml|md|json)": [
       "prettier --write"
     ],
     "*.toml": [

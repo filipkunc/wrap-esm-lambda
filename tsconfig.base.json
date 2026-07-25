@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Shared compiler settings for the workspace packages. Each package sets its
+  // own `outDir`/`rootDir`: paths in an extended config resolve relative to the
+  // file that declares them, so putting them here would point every package at
+  // the repo root.
+  //
+  // Sources are `.mts` and emit `.mjs` + `.d.mts`. That keeps every relative
+  // import specifier exactly as it was when these packages were plain ESM
+  // JavaScript (`./config.mjs` resolves to `config.mts` at build time, to the
+  // emitted `config.mjs` at runtime), and leaves the module system
+  // unambiguous no matter what a consumer's package.json says.
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "verbatimModuleSyntax": true,
+
+    // composite + project references: `tsc -b packages/*` builds them in
+    // dependency order and rebuilds only what changed
+    "composite": true,
+    "declaration": true,
+    // declaration + source maps point at the shipped `src`, so a stack trace
+    // or a go-to-definition from a consumer lands on the real `.mts` line
+    "declarationMap": true,
+    "sourceMap": true,
+    "skipLibCheck": true
+  }
+}

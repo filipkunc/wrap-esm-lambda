@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { captureThrows } from './helpers'
 
 import * as oxc from '../index.js'
-// @ts-expect-error untyped workspace package
 import * as acorn from '@wrap-esm-lambda/engine-acorn'
 
 // The two transform engines side by side: the native oxc addon (JS + Rust)

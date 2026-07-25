@@ -3,20 +3,37 @@
 // Rust `build_export_index`. Nodes are kept by reference (not index): the
 // rewrite step edits the source text through the nodes' spans.
 import { parse } from 'acorn'
+import type {
+  AnyNode,
+  ClassDeclaration,
+  ExportAllDeclaration,
+  ExportNamedDeclaration,
+  FunctionDeclaration,
+  Identifier,
+  Literal,
+  Pattern,
+  Program,
+  VariableDeclaration,
+} from 'acorn'
 
 /** Parse a module the way oxc's `SourceType::mjs()` does. */
-export function parseModule(source) {
+export function parseModule(source: string): Program {
   return parse(source, { ecmaVersion: 'latest', sourceType: 'module' })
 }
 
-/** `import.meta` anywhere in the tree (a `MetaProperty` whose meta is `import`). */
-function containsImportMeta(node) {
+/**
+ * `import.meta` anywhere in the tree (a `MetaProperty` whose meta is
+ * `import`). The walk is structural rather than typed — it visits every own
+ * key of every node — so it takes `unknown` and narrows as it goes.
+ */
+function containsImportMeta(node: unknown): boolean {
   if (node === null || typeof node !== 'object') return false
   if (Array.isArray(node)) return node.some(containsImportMeta)
-  if (node.type === 'MetaProperty') return node.meta.name === 'import'
-  for (const key in node) {
+  const record = node as Record<string, unknown>
+  if (record.type === 'MetaProperty') return (record.meta as Identifier).name === 'import'
+  for (const key in record) {
     if (key === 'loc' || key === 'start' || key === 'end') continue
-    if (containsImportMeta(node[key])) return true
+    if (containsImportMeta(record[key])) return true
   }
   return false
 }
@@ -30,8 +47,8 @@ function containsImportMeta(node) {
  * it. (A dynamic `import()` alone is valid CJS and does not count — matching
  * the native engine's oxc `has_module_syntax` semantics exactly.)
  */
-export function hasModuleSyntax(input) {
-  let program
+export function hasModuleSyntax(input: string): boolean {
+  let program: Program
   try {
     program = parseModule(input)
   } catch {
@@ -65,8 +82,46 @@ export const NamedKind = Object.freeze({
   ReExportAll: 're-export-all',
 })
 
+/** One of NamedKind's values. */
+export type NamedKindValue = (typeof NamedKind)[keyof typeof NamedKind]
+
+/** The statement a named export was found on. */
+export type ExportStatement = ExportNamedDeclaration | ExportAllDeclaration
+
+/** One named export, with the nodes the rewrite step edits through. */
+export interface NamedExport {
+  exported: string
+  local: string
+  kind: NamedKindValue
+  stmt: ExportStatement
+  specIdx: number
+  declNode: VariableDeclaration | FunctionDeclaration | ClassDeclaration | null
+  source: string | null
+}
+
+/** `export default someLocal` — a live alias of a mutable local binding. */
+export interface DefaultLocal {
+  local: string
+  anonStmt?: undefined
+}
+
+/** `export default <expression>` — needs the rewrite that names it. */
+export interface DefaultAnonymous {
+  anonStmt: AnyNode
+  local?: undefined
+}
+
+/** Everything the binding resolver needs to know about a module's exports. */
+export interface ExportIndex {
+  named: NamedExport[]
+  default: DefaultLocal | DefaultAnonymous | null
+  importLocals: Set<string>
+  topConst: Map<string, VariableDeclaration>
+  starSources: string[]
+}
+
 /** The name of an import/export specifier position (`Identifier` or string `Literal`). */
-export function specifierName(node) {
+export function specifierName(node: Identifier | Literal): string {
   return node.type === 'Identifier' ? node.name : String(node.value)
 }
 
@@ -75,7 +130,7 @@ export function specifierName(node) {
  * destructuring (including defaults and rest), recursively —
  * `export const { a, b: [c], ...rest } = obj` exports `a`, `c` and `rest`.
  */
-export function collectBoundNames(pattern, out) {
+export function collectBoundNames(pattern: Pattern, out: string[]): void {
   switch (pattern.type) {
     case 'Identifier':
       out.push(pattern.name)
@@ -101,23 +156,9 @@ export function collectBoundNames(pattern, out) {
   }
 }
 
-/**
- * Everything the resolver needs to know about a module's exports.
- *
- * @param {import('acorn').Program} program
- * @returns {{
- *   named: {
- *     exported: string, local: string, kind: string,
- *     stmt: object, specIdx: number, declNode: object | null, source: string | null,
- *   }[],
- *   default: { local: string } | { anonStmt: object } | null,
- *   importLocals: Set<string>,
- *   topConst: Map<string, object>,
- *   starSources: string[],
- * }}
- */
-export function buildExportIndex(program) {
-  const index = {
+/** Everything the resolver needs to know about a module's exports. */
+export function buildExportIndex(program: Program): ExportIndex {
+  const index: ExportIndex = {
     named: [],
     default: null,
     importLocals: new Set(),
@@ -137,7 +178,7 @@ export function buildExportIndex(program) {
         break
       case 'VariableDeclaration':
         if (stmt.kind === 'const') {
-          const names = []
+          const names: string[] = []
           for (const decl of stmt.declarations) collectBoundNames(decl.id, names)
           for (const name of names) index.topConst.set(name, stmt)
         }
@@ -163,7 +204,9 @@ export function buildExportIndex(program) {
       case 'ExportAllDeclaration':
         // `export * as ns from "m"` has a statically visible name; a bare
         // `export * from "m"` only records its source for the star-graph walk
-        if (stmt.exported === null) {
+        // (`== null`: acorn types the absent case as null, older typings as
+        // undefined — both mean "bare star")
+        if (stmt.exported == null) {
           index.starSources.push(String(stmt.source.value))
         } else {
           const name = specifierName(stmt.exported)
@@ -180,10 +223,12 @@ export function buildExportIndex(program) {
         break
       case 'ExportDefaultDeclaration': {
         const decl = stmt.declaration
-        const named = (decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') && decl.id !== null
         // a named default declaration is a live alias of its mutable local
         // binding; anything else needs the rewrite that names it
-        index.default = named ? { local: decl.id.name } : { anonStmt: stmt }
+        index.default =
+          (decl.type === 'FunctionDeclaration' || decl.type === 'ClassDeclaration') && decl.id !== null
+            ? { local: decl.id.name }
+            : { anonStmt: stmt }
         break
       }
       default:
@@ -193,12 +238,13 @@ export function buildExportIndex(program) {
   return index
 }
 
-function indexDeclarationExport(index, stmt) {
+function indexDeclarationExport(index: ExportIndex, stmt: ExportNamedDeclaration): void {
   const decl = stmt.declaration
+  if (decl === null || decl === undefined) return
   switch (decl.type) {
     case 'VariableDeclaration': {
       const constant = decl.kind === 'const'
-      const names = []
+      const names: string[] = []
       for (const declarator of decl.declarations) collectBoundNames(declarator.id, names)
       for (const name of names) {
         if (constant) index.topConst.set(name, decl)
@@ -239,7 +285,7 @@ function indexDeclarationExport(index, stmt) {
  * bare `export * from` statements — the building block of the caller's
  * star-graph walk. Mirrors the native `esmModuleExports`.
  */
-export function esmModuleExports(input) {
+export function esmModuleExports(input: string): { names: string[]; starSources: string[] } {
   const index = buildExportIndex(parseModule(input))
   const names = index.named.map((info) => info.exported)
   if (index.default !== null) names.push('default')

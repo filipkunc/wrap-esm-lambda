@@ -7,6 +7,26 @@ import { transformLambdaWithMapObject, exportsTap, exportsTapFromBuffer } from '
 import { cleanPath } from './paths.mjs'
 import { moduleKindFor } from './format.mjs'
 import { tapWithStarRetry } from './stars.mjs'
+import type { TapEntryInput } from './engine.mjs'
+import type { InstrumentEntry, PatchEntry, WrapEntry } from './config.mjs'
+
+/** What both shells hand to the transform: text, or the loader's raw bytes. */
+export type Source = string | Buffer | ArrayBuffer | NodeJS.TypedArray
+
+/** How the emitted tap reaches the user's patch function. */
+export type Delivery = 'import' | 'registry'
+
+export interface ApplyOptions {
+  /** 'commonjs' | 'module' when the caller knows (the runtime hook always does) */
+  format?: string
+  delivery?: Delivery
+}
+
+/** Instrumented output: `code` stays a Buffer on the byte-in fast path. */
+export interface Applied {
+  code: string | Buffer
+  map: string | null
+}
 
 /**
  * Marker appended to every transformed module. Both shells skip sources that
@@ -27,10 +47,13 @@ export const SENTINEL = `/*! ${SENTINEL_TEXT} */`
  * hoisted, so appending keeps every existing line — and therefore the source
  * map — intact) and the double-wrap sentinel.
  *
- * @returns {{ code: string, map: string | null } | null} null when the source
- *   is already instrumented
+ * @returns null when the source is already instrumented
  */
-export function transformMatched(source, entry, idOrUrl) {
+export function transformMatched(
+  source: string,
+  entry: WrapEntry,
+  idOrUrl: string,
+): { code: string; map: string | null } | null {
   if (source.includes(SENTINEL_TEXT)) {
     return null
   }
@@ -45,7 +68,7 @@ export function transformMatched(source, entry, idOrUrl) {
 }
 
 /** The tap inputs for the native call, one element per patch entry. */
-function tapEntries(patches) {
+function tapEntries(patches: PatchEntry[]): TapEntryInput[] {
   return patches.map((entry, aliasIndex) => ({
     bindings: entry.bindings,
     patchName: entry.patch.name,
@@ -83,41 +106,58 @@ function tapEntries(patches) {
  * regenerated module comes back as a string (that O(n) is the price of the
  * shapes that need it, paid only by modules that need it).
  *
- * @param {string | Buffer | ArrayBuffer | NodeJS.TypedArray} source
- * @param {import('./config.mjs').InstrumentEntry[]} entries
- * @param {string} idOrUrl
- * @param {{ format?: string, delivery?: 'import' | 'registry' }} [options]
- * @returns {{ code: string | Buffer, map: string | null } | null} null when
- *   nothing applies or the source is already instrumented
+ * @returns null when nothing applies or the source is already instrumented
  */
-export function applyMatched(source, entries, idOrUrl, options = {}) {
-  if (typeof source !== 'string' && !Buffer.isBuffer(source)) {
+// Text in, text out: the build shell hands bundlers a string and they accept
+// nothing else, so the Buffer half of the return type must not reach them.
+export function applyMatched(
+  source: string,
+  entries: InstrumentEntry[],
+  idOrUrl: string,
+  options?: ApplyOptions,
+): { code: string; map: string | null } | null
+export function applyMatched(
+  source: Source,
+  entries: InstrumentEntry[],
+  idOrUrl: string,
+  options?: ApplyOptions,
+): Applied | null
+export function applyMatched(
+  source: Source,
+  entries: InstrumentEntry[],
+  idOrUrl: string,
+  options: ApplyOptions = {},
+): Applied | null {
+  let input: string | Buffer
+  if (typeof source === 'string' || Buffer.isBuffer(source)) {
+    input = source
+  } else if (ArrayBuffer.isView(source)) {
     // zero-copy views, not copies: Buffer.from(ArrayBuffer) aliases the memory
-    source = ArrayBuffer.isView(source)
-      ? Buffer.from(source.buffer, source.byteOffset, source.byteLength)
-      : Buffer.from(source)
+    input = Buffer.from(source.buffer, source.byteOffset, source.byteLength)
+  } else {
+    input = Buffer.from(source)
   }
   // works on both: Buffer#includes(string) is a UTF-8 byte search
-  if (entries.length === 0 || source.includes(SENTINEL_TEXT)) {
+  if (entries.length === 0 || input.includes(SENTINEL_TEXT)) {
     return null
   }
   // With no explicit format (the build shell — bundlers decide a module's
   // format after transforms run), fall back to the same syntax detection
   // they use. The thunk never fires on the runtime path: the hook always
   // passes a format, so the buffer fast path stays zero-copy.
-  const src = source
+  const src = input
   const kind = moduleKindFor(idOrUrl, options.format, () => (typeof src === 'string' ? src : src.toString('utf8')))
   const cjs = kind === 'cjs'
   const registry = options.delivery === 'registry'
   const filename = basename(cleanPath(idOrUrl))
-  const wraps = entries.filter((entry) => !entry.patch)
-  const patches = entries.filter((entry) => entry.patch)
+  const wraps = entries.filter((entry): entry is WrapEntry => !entry.patch)
+  const patches = entries.filter((entry): entry is PatchEntry => Boolean(entry.patch))
 
-  if (Buffer.isBuffer(source)) {
+  if (Buffer.isBuffer(input)) {
     if (wraps.length === 0) {
       // patch-only buffer fast path: the source crosses napi zero-copy; only
       // when the tap must rewrite does it come back as a (string) module
-      const buf = source
+      const buf = input
       const tap = tapWithStarRetry(
         (entriesInput, ...rest) => exportsTapFromBuffer(cjs ? EMPTY_BUFFER : buf, entriesInput, ...rest),
         () => buf.toString('utf8'),
@@ -130,15 +170,15 @@ export function applyMatched(source, entries, idOrUrl, options = {}) {
       )
       const trailer = `${tap.snippets}\n${SENTINEL}\n`
       if (tap.code == null) {
-        return { code: Buffer.concat([source, Buffer.from(trailer)]), map: null }
+        return { code: Buffer.concat([buf, Buffer.from(trailer)]), map: null }
       }
       return { code: tap.code + trailer, map: tap.map ?? null }
     }
-    source = source.toString('utf8')
+    input = input.toString('utf8')
   }
 
-  let code = source
-  let map = null
+  let code: string = input
+  let map: string | null = null
   for (const entry of wraps) {
     const wrapped = transformLambdaWithMapObject(code, entry.handler, entry.wrapper.name, filename)
     code = wrapped.code
@@ -174,7 +214,7 @@ export function applyMatched(source, entries, idOrUrl, options = {}) {
 const EMPTY_BUFFER = Buffer.alloc(0)
 
 /** Inline a v3 map JSON as a trailing `//# sourceMappingURL=` data URL. */
-export function inlineMap(code, mapJson) {
+export function inlineMap(code: string | Buffer, mapJson: string): string {
   const base64 = Buffer.from(mapJson, 'utf8').toString('base64')
   return `${code}//# sourceMappingURL=data:application/json;charset=utf-8;base64,${base64}\n`
 }

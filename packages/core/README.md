@@ -17,22 +17,24 @@ whichever mode produced it:
 carry it, so enabling both modes at once never double-wraps.
 
 The source layout mirrors the pipeline a patch travels — every symbol is
-re-exported from [`src/index.mjs`](src/index.mjs):
+re-exported from [`src/index.mts`](src/index.mts):
 
-| module                                 | responsibility                                                                            |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- |
-| [`src/config.mjs`](src/config.mjs)     | the entry shapes users write (`defineConfig` / `definePatches`, typedefs)                 |
-| [`src/match.mjs`](src/match.mjs)       | which entries apply to which module: package identity, semver range, files, builtin split |
-| [`src/format.mjs`](src/format.mjs)     | the CJS-or-ESM decision, reproducing Node's own format rules                              |
-| [`src/engine.mjs`](src/engine.mjs)     | the transform engine binding: native oxc addon (default) or the pure-JS acorn engine      |
-| [`src/apply.mjs`](src/apply.mjs)       | entries -> instrumented source via the selected engine, plus the double-wrap sentinel     |
-| [`src/registry.mjs`](src/registry.mjs) | the runtime patch-function registry contract shared with the Rust emission                |
-| [`src/stars.mjs`](src/stars.mjs)       | the `export * from` graph walk resolving star-forwarded names at transform time           |
-| [`src/range.mjs`](src/range.mjs)       | the semver-range matcher (replaces the `semver` package for cold start; loud on typos)    |
+| module                                           | responsibility                                                                                      |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| [`src/config.mts`](src/config.mts)               | the entry shapes users write (`defineConfig` / `definePatches`, and the exported types)             |
+| [`src/match.mts`](src/match.mts)                 | which entries apply to which module: package identity, semver range, files, builtin split           |
+| [`src/format.mts`](src/format.mts)               | the CJS-or-ESM decision, reproducing Node's own format rules                                        |
+| [`src/engine.mts`](src/engine.mts)               | the transform engine binding: native oxc addon (default) or the pure-JS acorn engine                |
+| [`src/apply.mts`](src/apply.mts)                 | entries -> instrumented source via the selected engine, plus the double-wrap sentinel               |
+| [`src/registry.mts`](src/registry.mts)           | the runtime patch-function registry contract shared with the Rust emission                          |
+| [`src/stars.mts`](src/stars.mts)                 | the `export * from` graph walk resolving star-forwarded names at transform time                     |
+| [`src/range.mts`](src/range.mts)                 | the semver-range matcher (replaces the `semver` package for cold start; loud on typos)              |
+| [`src/diagnostics.mts`](src/diagnostics.mts)     | the failure policy the shells apply: kill switch, strict mode, debug tracing, recovered-failure log |
+| [`src/engine-select.mts`](src/engine-select.mts) | which engine binds, and the fallback when the native addon cannot be loaded                         |
 
 ## Choosing the engine
 
-Every transform call goes through [`src/engine.mjs`](src/engine.mjs), which
+Every transform call goes through [`src/engine.mts`](src/engine.mts), which
 binds once, at load time, to one of two implementations of the same surface:
 
 - `oxc` (default) — the native `wrap-esm-lambda` addon: oxc parse/codegen in
@@ -69,7 +71,10 @@ prototype gaps, marked as such.
 - It runs once _per file instance_: two copies or versions of a package in
   the dependency graph each get patched, each with their own class objects —
   that is correct, not double-patching.
-- If it throws, the patched module's load fails, in both modes.
+- If it throws at **build** time the build fails. At **runtime** the throw is
+  contained: the failure is reported once on stderr, the patched module still
+  loads (unpatched), and `WRAP_ESM_LAMBDA_STRICT=1` restores the hard failure —
+  see the [failure policy](../../README.md#failure-policy-what-happens-when-instrumentation-cannot-do-its-job).
 
 ### What it receives
 

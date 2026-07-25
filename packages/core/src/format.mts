@@ -10,21 +10,23 @@ import { hasModuleSyntax } from './engine.mjs'
 // decides, named or not — dual packages mark their CJS tree with a nameless
 // `{"type":"commonjs"}` (hono does exactly this), which the named-package
 // walk in match.mjs would skip.
-const typeCache = new Map()
+const typeCache = new Map<string, ModuleType>()
 
-function nearestPackageType(filePath) {
+type ModuleType = 'commonjs' | 'module'
+
+function nearestPackageType(filePath: string): ModuleType {
   let dir = dirname(filePath)
-  const visited = []
+  const visited: string[] = []
   while (true) {
     if (typeCache.has(dir)) {
-      const hit = typeCache.get(dir)
+      const hit = typeCache.get(dir)!
       for (const d of visited) typeCache.set(d, hit)
       return hit
     }
     visited.push(dir)
     try {
-      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
-      const type = pkg.type === 'module' ? 'module' : 'commonjs'
+      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { type?: string }
+      const type: ModuleType = pkg.type === 'module' ? 'module' : 'commonjs'
       for (const d of visited) typeCache.set(d, type)
       return type
     } catch {
@@ -45,9 +47,8 @@ function nearestPackageType(filePath) {
  * uses this when `nextLoad` returns no format (require()d `.js` files), so a
  * pure-CJS package like express is never mis-parsed as ESM and a dual
  * package like hono resolves each dist tree to its real format.
- * @returns {'commonjs' | 'module'}
  */
-export function runtimeFormatFor(idOrUrl) {
+export function runtimeFormatFor(idOrUrl: string): ModuleType {
   const path = cleanPath(idOrUrl)
   if (path.endsWith('.cjs')) return 'commonjs'
   if (path.endsWith('.mjs')) return 'module'
@@ -64,12 +65,11 @@ export function runtimeFormatFor(idOrUrl) {
  * packages whose `"module"`-field trees carry no `"type"` (the AWS SDK's
  * `dist-es`) and a path heuristic misread pure-CJS `.js` files (express).
  *
- * @param {string} idOrUrl
- * @param {string} [format] explicit 'commonjs' | 'module' when known
- * @param {() => string} [sourceText] lazy source accessor for the syntax
- *   fallback; without it the historic bundler default (ESM) stands
+ * @param format explicit 'commonjs' | 'module' when known
+ * @param sourceText lazy source accessor for the syntax fallback; without it
+ *   the historic bundler default (ESM) stands
  */
-export function moduleKindFor(idOrUrl, format, sourceText) {
+export function moduleKindFor(idOrUrl: string, format?: string, sourceText?: () => string): 'cjs' | 'esm' {
   if (format === 'commonjs') return 'cjs'
   if (format === 'module') return 'esm'
   const path = cleanPath(idOrUrl)

@@ -21,9 +21,7 @@ import { exportsTap, exportsTapFromBuffer } from '../index'
 const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/patch/${name}`, import.meta.url))
 
-// @ts-expect-error untyped workspace package
 const core = await import('@wrap-esm-lambda/core')
-// @ts-expect-error untyped workspace package
 const { unplugin } = await import('@wrap-esm-lambda/unplugin')
 const { default: config } = await import(pathToFileURL(fixture('wrap.config.ts')).href)
 

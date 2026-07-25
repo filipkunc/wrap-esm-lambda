@@ -5,6 +5,7 @@
 // compose. Tokens the upstream map has no mapping for are dropped by both,
 // so the two engines agree on chained-map semantics.
 import remapping from '@jridgewell/remapping'
+import type { EncodedSourceMap } from '@jridgewell/remapping'
 
 /**
  * Compose `mapJson` (`transformed -> intermediate`, fresh from this engine)
@@ -12,20 +13,18 @@ import remapping from '@jridgewell/remapping'
  * handler.ts` map) so the result maps the transformed code straight to the
  * original sources.
  *
- * @param {string | object} mapJson
- * @param {string} upstreamJson
- * @returns {string} the chained v3 map as JSON
+ * @returns the chained v3 map as JSON
  */
-export function chainMaps(mapJson, upstreamJson) {
+export function chainMaps(mapJson: string | object, upstreamJson: string): string {
   const chained = remapping([normalize(mapJson), normalize(upstreamJson)], () => null)
   return JSON.stringify(chained)
 }
 
-function normalize(map) {
-  return typeof map === 'string' ? JSON.parse(map) : JSON.parse(JSON.stringify(map))
+function normalize(map: string | object): EncodedSourceMap {
+  return (typeof map === 'string' ? JSON.parse(map) : JSON.parse(JSON.stringify(map))) as EncodedSourceMap
 }
 
 /** Inline a v3 map JSON as the data URL the native engine's `to_data_url` emits. */
-export function mapToDataUrl(mapJson) {
+export function mapToDataUrl(mapJson: string): string {
   return `data:application/json;charset=utf-8;base64,${Buffer.from(mapJson, 'utf8').toString('base64')}`
 }

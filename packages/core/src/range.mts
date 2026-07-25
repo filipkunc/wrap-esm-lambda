@@ -24,15 +24,36 @@ const PARTIAL_RE =
   /^v?(\d+|[xX*])(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z.-]+)?$/
 const NUMERIC_RE = /^\d+$/
 
-/** @returns {{ major: number, minor: number, patch: number, prerelease: string[] } | null} */
-export function parseVersion(text) {
+/** A parsed semantic version; `prerelease` is empty for a release. */
+export interface SemVer {
+  major: number
+  minor: number
+  patch: number
+  prerelease: string[]
+}
+
+/** The same, with wildcards (`1.x`, `*`) left as null. */
+interface PartialVersion {
+  major: number | null
+  minor: number | null
+  patch: number | null
+  prerelease: string[]
+}
+
+/** One comparator: an operator plus the version it compares against. */
+interface Comparator {
+  op: string
+  ver: SemVer
+}
+
+export function parseVersion(text: string): SemVer | null {
   const m = VERSION_RE.exec(String(text).trim())
   if (!m) return null
-  return { major: +m[1], minor: +m[2], patch: +m[3], prerelease: m[4] ? m[4].split('.') : [] }
+  return { major: +m[1]!, minor: +m[2]!, patch: +m[3]!, prerelease: m[4] ? m[4].split('.') : [] }
 }
 
 /** Semver precedence for prerelease identifier lists; [] means a release. */
-function comparePrerelease(a, b) {
+function comparePrerelease(a: string[], b: string[]): number {
   if (a.length === 0 && b.length === 0) return 0
   if (a.length === 0) return 1 // a release outranks any prerelease
   if (b.length === 0) return -1
@@ -40,8 +61,8 @@ function comparePrerelease(a, b) {
     if (i >= a.length && i >= b.length) return 0
     if (i >= a.length) return -1 // shorter prefix is smaller
     if (i >= b.length) return 1
-    const idA = a[i]
-    const idB = b[i]
+    const idA = a[i]!
+    const idB = b[i]!
     if (idA === idB) continue
     const numA = NUMERIC_RE.test(idA)
     const numB = NUMERIC_RE.test(idB)
@@ -52,29 +73,35 @@ function comparePrerelease(a, b) {
   }
 }
 
-function compareVersions(a, b) {
+function compareVersions(a: SemVer, b: SemVer): number {
   return a.major - b.major || a.minor - b.minor || a.patch - b.patch || comparePrerelease(a.prerelease, b.prerelease)
 }
 
-const version = (major, minor, patch, prerelease = []) => ({ major, minor, patch, prerelease })
-const cmp = (op, ver) => ({ op, ver })
+const version = (major: number, minor: number, patch: number, prerelease: string[] = []): SemVer => ({
+  major,
+  minor,
+  patch,
+  prerelease,
+})
+const cmp = (op: string, ver: SemVer): Comparator => ({ op, ver })
 
-function invalid(range) {
+function invalid(range: string): never {
   throw new TypeError(
     `invalid version range '${range}' — supported: comparators (>=, >, <=, <, =), ^, ~, x-ranges, '||' and hyphen ranges`,
   )
 }
 
 /** A partial like `1`, `1.2`, `1.2.3-rc.1`, `1.x`, `*` — wildcards become null. */
-function parsePartial(text, range) {
+function parsePartial(text: string, range: string): PartialVersion {
   const m = PARTIAL_RE.exec(text)
   if (!m) invalid(range)
-  const part = (raw) => (raw === undefined || raw === 'x' || raw === 'X' || raw === '*' ? null : +raw)
+  const part = (raw: string | undefined) =>
+    raw === undefined || raw === 'x' || raw === 'X' || raw === '*' ? null : +raw
   return { major: part(m[1]), minor: part(m[2]), patch: part(m[3]), prerelease: m[4] ? m[4].split('.') : [] }
 }
 
 /** Comparators for one caret token, mirroring node-semver's rules. */
-function caretComparators(p) {
+function caretComparators(p: PartialVersion): Comparator[] {
   if (p.major === null) return []
   if (p.minor === null) return [cmp('>=', version(p.major, 0, 0)), cmp('<', version(p.major + 1, 0, 0))]
   if (p.patch === null) {
@@ -89,7 +116,7 @@ function caretComparators(p) {
 }
 
 /** Comparators for one tilde token. */
-function tildeComparators(p) {
+function tildeComparators(p: PartialVersion): Comparator[] {
   if (p.major === null) return []
   if (p.minor === null) return [cmp('>=', version(p.major, 0, 0)), cmp('<', version(p.major + 1, 0, 0))]
   const patch = p.patch ?? 0
@@ -97,7 +124,7 @@ function tildeComparators(p) {
 }
 
 /** Comparators for `[op]partial`; bare partials are x-ranges/exact pins. */
-function operatorComparators(op, p, range) {
+function operatorComparators(op: string, p: PartialVersion, range: string): Comparator[] {
   if (op === '' || op === '=') {
     if (p.major === null) return []
     if (p.minor === null) return [cmp('>=', version(p.major, 0, 0)), cmp('<', version(p.major + 1, 0, 0))]
@@ -130,13 +157,13 @@ function operatorComparators(op, p, range) {
 }
 
 /** One `||` alternative -> its AND-ed comparator list. */
-function parseComparatorSet(set, range) {
-  const comparators = []
+function parseComparatorSet(set: string, range: string): Comparator[] {
+  const comparators: Comparator[] = []
   const hyphen = set.split(/\s+-\s+/)
   if (hyphen.length > 2) invalid(range)
   if (hyphen.length === 2) {
-    const lo = parsePartial(hyphen[0], range)
-    const hi = parsePartial(hyphen[1], range)
+    const lo = parsePartial(hyphen[0]!, range)
+    const hi = parsePartial(hyphen[1]!, range)
     if (lo.major !== null) comparators.push(cmp('>=', version(lo.major, lo.minor ?? 0, lo.patch ?? 0, lo.prerelease)))
     if (hi.major !== null) {
       if (hi.minor === null) comparators.push(cmp('<', version(hi.major + 1, 0, 0)))
@@ -148,13 +175,13 @@ function parseComparatorSet(set, range) {
   // tokens: an operator may be separated from its version by spaces (">= 1.2")
   const tokens = set.split(/\s+/).filter(Boolean)
   for (let i = 0; i < tokens.length; i += 1) {
-    let token = tokens[i]
+    let token = tokens[i]!
     let op = ''
     const m = /^(>=|<=|>|<|=|\^|~)/.exec(token)
     if (m) {
-      op = m[1]
+      op = m[1]!
       token = token.slice(op.length)
-      if (token === '' && i + 1 < tokens.length) token = tokens[(i += 1)]
+      if (token === '' && i + 1 < tokens.length) token = tokens[(i += 1)]!
       if (token === '') invalid(range)
     }
     const partial = parsePartial(token, range)
@@ -166,9 +193,9 @@ function parseComparatorSet(set, range) {
 }
 
 /** range string -> comparator sets (one per `||` alternative), memoized. */
-const rangeCache = new Map()
+const rangeCache = new Map<string, Comparator[][]>()
 
-function parseRange(range) {
+function parseRange(range: string): Comparator[][] {
   let sets = rangeCache.get(range)
   if (sets === undefined) {
     sets = String(range)
@@ -179,7 +206,7 @@ function parseRange(range) {
   return sets
 }
 
-function testComparator(v, { op, ver }) {
+function testComparator(v: SemVer, { op, ver }: Comparator): boolean {
   const order = compareVersions(v, ver)
   if (op === '>') return order > 0
   if (op === '>=') return order >= 0
@@ -188,7 +215,7 @@ function testComparator(v, { op, ver }) {
   return order === 0
 }
 
-function testSet(v, comparators) {
+function testSet(v: SemVer, comparators: Comparator[]): boolean {
   if (!comparators.every((comparator) => testComparator(v, comparator))) return false
   if (v.prerelease.length > 0) {
     // npm's gating rule: a prerelease version only satisfies a set that
@@ -204,7 +231,7 @@ function testSet(v, comparators) {
  * Does `versionText` satisfy `range`? The drop-in for `semver.satisfies`,
  * except an invalid range throws instead of silently matching nothing.
  */
-export function satisfies(versionText, range) {
+export function satisfies(versionText: string, range: string): boolean {
   const v = parseVersion(versionText)
   if (v === null) return false
   return parseRange(range).some((set) => testSet(v, set))
