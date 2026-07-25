@@ -45,16 +45,18 @@ export function patchExpressRoute({ application }) {
 
 ```js
 // wrap.config.mjs
-import { fileURLToPath } from 'node:url'
 import { definePatches } from '@wrap-esm-lambda/core'
 
-export default definePatches([
-  {
-    module: { name: 'express', versionRange: '>=5 <6', files: ['lib/express.js'] },
-    patch: { name: 'patchExpressRoute', from: fileURLToPath(new URL('./patches/http-route.mjs', import.meta.url)) },
-    bindings: ['application'],
-  },
-])
+export default definePatches(
+  [
+    {
+      module: { name: 'express', versionRange: '>=5 <6', files: ['lib/express.js'] },
+      patch: { name: 'patchExpressRoute', from: './patches/http-route.mjs' },
+      bindings: ['application'],
+    },
+  ],
+  import.meta.url, // `from` specifiers resolve relative to this file
+)
 ```
 
 **3. Deliver it** — either at **runtime** (zero build changes, Node >= 22.15):
@@ -205,9 +207,13 @@ A config is a list of entries; two kinds exist and mix freely.
 }
 ```
 
-- `patch.from` should be an **absolute path** (compute it via
-  `import.meta.url`). TypeScript patch files ride on Node's type stripping at
-  runtime and on the bundler at build time.
+- `patch.from` may be relative to the config file, a bare package specifier,
+  a `file://` URL or an absolute path — pass `import.meta.url` as the second
+  argument of `defineConfig`/`definePatches` and everything is resolved to an
+  absolute path at definition time (resolution rules in the
+  [patch author contract](packages/core/README.md#patch-author-contract)).
+  TypeScript patch files ride on Node's type stripping at runtime and on the
+  bundler at build time.
 - **Builtin targets** (`node:http`, `os`, ...) have no source to transform,
   so each shell reaches them through what it owns. The runtime shell patches
   their exports object **eagerly at preload**, before any user code loads.
@@ -238,6 +244,45 @@ This rewrites `export const handler = ...` into
 maps that keep stack traces pointing at the original lines (see
 [docs/source-maps.md](docs/source-maps.md)).
 
+## Shipping instrumentation as a package
+
+A config is code, and `from` specifiers resolve against the config file — so
+patch code, config and activation ship together as **one ordinary npm
+package**, the way an APM vendor distributes instrumentation:
+
+```
+your-apm/
+  package.json          exports: { "./register": ..., "./config": ... }
+  src/patches/*.mjs     the patch functions (no dependency on this toolkit)
+  src/config.mjs        definePatches([...], import.meta.url)
+  src/register.mjs      import { registerConfig } from '@wrap-esm-lambda/hooks'
+                        import config from './config.mjs'
+                        await registerConfig(config)
+```
+
+The app installs the package and the whole runtime integration is one flag —
+no config file, no env var:
+
+```sh
+node --import your-apm/register app.mjs
+```
+
+Alternatively `WRAP_ESM_LAMBDA_CONFIG` accepts a package specifier (resolved
+from the app, like any dependency):
+
+```sh
+WRAP_ESM_LAMBDA_CONFIG=your-apm/config node --import @wrap-esm-lambda/hooks/register app.mjs
+```
+
+…and the same installed config drives build-time delivery through the
+unplugin adapters. Because entries are plain data, an app composes several
+instrumentation packages by concatenating their entries. The runnable version
+of this pattern is [examples/function-logger](examples/function-logger) — a
+before/after call logger with exception capture (logged and rethrown),
+consumed by [examples/function-logger-app](examples/function-logger-app) and
+verified end-to-end (both runtime activations plus the bundled build) by
+[`__test__/packaging.spec.ts`](__test__/packaging.spec.ts).
+
 ## Worked examples
 
 The test suite doubles as a recipe book — each spec runs the real package:
@@ -252,6 +297,7 @@ The test suite doubles as a recipe book — each spec runs the real package:
 | **builtins** (`node:os`)           | eager preload patching at runtime, a resolution-aliased wrapper module at build time — require, default import and named import all observe it either way, single-patched when combined                                                             | [`patch.spec.ts`](__test__/patch.spec.ts)           |
 | **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — relative and bare package specifiers alike — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](__test__/tap-shapes.spec.ts) |
 | **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                                                             | [`hybrid.spec.ts`](__test__/hybrid.spec.ts)         |
+| **packaging**                      | instrumentation as one installed npm package (patches + config + register entry): `--import your-apm/register`, package-specifier configs, and the same packaged config bundled at build time                                                       | [`packaging.spec.ts`](__test__/packaging.spec.ts)   |
 | **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                                                                      | [`patch.spec.ts`](__test__/patch.spec.ts)           |
 
 For observe-only needs on core modules, Node's own
