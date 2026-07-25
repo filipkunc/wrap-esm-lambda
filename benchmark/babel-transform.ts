@@ -1,5 +1,5 @@
-import * as babel from '@babel/core';
-import { types as t } from '@babel/core';
+import * as babel from '@babel/core'
+import { types as t } from '@babel/core'
 
 export function transformLambda(input: string, handler: string, wrapper: string): string {
   const result = babel.transformSync(input, {
@@ -9,22 +9,26 @@ export function transformLambda(input: string, handler: string, wrapper: string)
           visitor: {
             ExportNamedDeclaration(path) {
               if (t.isVariableDeclaration(path.node.declaration)) {
-                const varDecl = path.node.declaration.declarations[0];
+                const varDecl = path.node.declaration.declarations[0]
                 if (t.isIdentifier(varDecl.id) && varDecl.id.name === handler) {
-                  path.replaceWith(t.exportNamedDeclaration(
-                    t.variableDeclaration("const", [
-                      t.variableDeclarator(t.identifier(handler),
-                        t.callExpression(t.identifier(wrapper),
-                          [varDecl.init!]))]
-                    )));
-                  path.skip();
+                  path.replaceWith(
+                    t.exportNamedDeclaration(
+                      t.variableDeclaration('const', [
+                        t.variableDeclarator(
+                          t.identifier(handler),
+                          t.callExpression(t.identifier(wrapper), [varDecl.init!]),
+                        ),
+                      ]),
+                    ),
+                  )
+                  path.skip()
                 }
               }
-            }
-          }
-        };
+            },
+          },
+        }
       },
     ],
-  });
-  return result?.code ?? "";
+  })
+  return result?.code ?? ''
 }

@@ -1,18 +1,18 @@
-import { registerHooks } from "node:module";
-import { transformLambda } from "../benchmark/lib/babel-transform.js";
+import { registerHooks } from 'node:module'
+import { transformLambda } from '../benchmark/lib/babel-transform.js'
 
-let patched = false;
+let patched = false
 registerHooks({
   load(url, context, nextLoad) {
-    const result = nextLoad(url, context);
-    if (!patched && url.endsWith("/handler.mjs")) {
-      patched = true;
+    const result = nextLoad(url, context)
+    if (!patched && url.endsWith('/handler.mjs')) {
+      patched = true
       return {
-        format: "module",
+        format: 'module',
         shortCircuit: true,
-        source: transformLambda(result.source.toString(), "handler", "WrapAwsLambda")
-      };
+        source: transformLambda(result.source.toString(), 'handler', 'WrapAwsLambda'),
+      }
     }
-    return result;
+    return result
   },
-});
+})

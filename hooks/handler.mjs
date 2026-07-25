@@ -1,3 +1,3 @@
 export const handler = async () => {
-  return "Hi from AWS Lambda";
-};
+  return 'Hi from AWS Lambda'
+}

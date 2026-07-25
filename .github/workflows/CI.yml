@@ -53,10 +53,18 @@ jobs:
         run: pnpm exec tsc --noEmit -p __test__/tsconfig.json
       - name: Cargo fmt
         run: cargo fmt -- --check
+      # A gate, not a report: without -D warnings this job passed with warnings
+      # nobody read. `-A deprecated` is a named, temporary carve-out — the oxc
+      # crates deprecated ~30 AstBuilder calls this code uses
+      # (oxc-project/oxc#23043) and that migration is its own piece of work;
+      # every OTHER warning, including any new one, fails here.
       - name: Clippy
-        run: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings -A deprecated
       - name: Test
         run: cargo test
+      # formatting is checked, not fixed, in CI: `pnpm format` is the local fix
+      - name: Prettier
+        run: pnpm exec prettier --check .
   build:
     strategy:
       fail-fast: false
@@ -382,6 +390,37 @@ jobs:
           echo "$SPECS"
           OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test $SPECS
         shell: bash
+  benchmark:
+    name: Benchmark
+    # Not in publish's `needs`, and not in the publish job any more: a release
+    # should not hinge on an apt install of hyperfine succeeding, and numbers
+    # measured on whichever shared runner happened to pick up the job were
+    # never worth gating on. The committed hooks/benchTable.md — refreshed
+    # deliberately with `pnpm bench` and update-bench-table.mjs — is what the
+    # release body carries; this job is the regression signal, on main only.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build addon
+        run: pnpm build
+      - name: Install hyperfine
+        run: sudo apt update && sudo apt install -y hyperfine
+      - name: Benchmark
+        run: |
+          cd hooks && ./bench_hooks.sh && cd ..
+          cat hooks/benchTable.md >> $GITHUB_STEP_SUMMARY
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -423,12 +462,6 @@ jobs:
       - name: List packages
         run: ls -R ./npm
         shell: bash
-      - name: Install hyperfine
-        run: sudo apt update && sudo apt install -y hyperfine
-      - name: Benchmark
-        run: |
-          cd hooks && ./bench_hooks.sh && cd ..
-          cat hooks/benchTable.md
       - name: Publish
         # Release detection looks at the commit SUBJECT only (%s). Grepping the
         # full body (%B) once matched an incidental line starting with a

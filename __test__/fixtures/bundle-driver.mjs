@@ -55,8 +55,7 @@ switch (bundler) {
     // preservation earns its keep (pure-annotation shaking, license
     // extraction), and where fragile transforms break. rspack mirrors
     // webpack's API and options, so the two share one case.
-    const compile =
-      bundler === 'webpack' ? (await import('webpack')).default : (await import('@rspack/core')).rspack
+    const compile = bundler === 'webpack' ? (await import('webpack')).default : (await import('@rspack/core')).rspack
     const compiler = compile({
       entry,
       mode: 'production',

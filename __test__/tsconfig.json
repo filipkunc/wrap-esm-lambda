@@ -7,10 +7,6 @@
     "rootDir": ".",
     "skipLibCheck": true
   },
-  "include": [
-    "*.ts"
-  ],
-  "exclude": [
-    "lib"
-  ]
+  "include": ["*.ts"],
+  "exclude": ["lib"]
 }
