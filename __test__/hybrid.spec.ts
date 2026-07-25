@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
+import type { InstrumentConfig, InstrumentEntry, WrapEntry } from '@wrap-esm-lambda/core'
 
 // The hybrid setup end-to-end: the same fixture (handler + wrapper + config)
 // instrumented once at runtime through @wrap-esm-lambda/hooks and once at
@@ -22,11 +23,17 @@ const testRuntime = hasRegisterHooks ? test : test.skip
 const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/hybrid/${name}`, import.meta.url))
 
-// @ts-expect-error untyped workspace scaffold package
 const core = await import('@wrap-esm-lambda/core')
-// @ts-expect-error untyped workspace scaffold package
 const { unplugin } = await import('@wrap-esm-lambda/unplugin')
-const { default: config } = await import(pathToFileURL(fixture('wrap.config.mjs')).href)
+const { default: config } = (await import(pathToFileURL(fixture('wrap.config.mjs')).href)) as {
+  default: InstrumentConfig
+}
+
+/** The fixture config's single entry, narrowed to the wrap entry it is. */
+const wrapEntry = (entry: InstrumentEntry | undefined): WrapEntry => {
+  assert.ok(entry && entry.patch === undefined, 'expected a wrap entry')
+  return entry
+}
 
 testRuntime('runtime mode: loader hook wraps the handler at load time', async () => {
   const { stdout } = await execFileAsync(
@@ -63,8 +70,7 @@ test('build mode: unplugin wraps the handler at bundle time', async () => {
 
 test('both modes produce identical instrumented code for the same module', async () => {
   const source = await readFile(fixture('handler.mjs'), 'utf8')
-  const entry = core.createMatcher(config)(fixture('handler.mjs'))
-  assert.ok(entry)
+  const entry = wrapEntry(core.createMatcher(config)(fixture('handler.mjs')))
 
   // Both shells delegate to this one call — assert the invariant it provides.
   const first = core.transformMatched(source, entry, fixture('handler.mjs'))
@@ -84,31 +90,32 @@ test('wrap delivery: Node gets a file:// URL, a bundler gets the path as configu
   // file:// specifiers, which is also what lets a Lambda-layer path like
   // /opt/nodejs/wrap.mjs survive a build that never sees that directory.
   const source = await readFile(fixture('handler.mjs'), 'utf8')
-  const entry = core.createMatcher(config)(fixture('handler.mjs'))
-  assert.ok(entry?.wrapper?.from)
+  const entry = wrapEntry(core.createMatcher(config)(fixture('handler.mjs')))
+  const wrapperFrom = entry.wrapper.from
+  assert.ok(wrapperFrom)
 
   const runtime = core.applyMatched(source, [entry], fixture('handler.mjs'), {
     format: 'module',
     delivery: 'registry',
   })
   assert.ok(
-    runtime.code.includes(`from ${JSON.stringify(pathToFileURL(entry.wrapper.from).href)}`),
-    `runtime delivery must import a file:// URL, got: ${runtime.code}`,
+    runtime!.code.includes(`from ${JSON.stringify(pathToFileURL(wrapperFrom).href)}`),
+    `runtime delivery must import a file:// URL, got: ${runtime!.code}`,
   )
 
-  const build = core.applyMatched(source, [entry], fixture('handler.mjs'), { format: 'module' })
+  const built = core.applyMatched(source, [entry], fixture('handler.mjs'), { format: 'module' })
   assert.ok(
-    build.code.includes(`from ${JSON.stringify(entry.wrapper.from)}`),
-    `build delivery must keep the configured path, got: ${build.code}`,
+    built!.code.includes(`from ${JSON.stringify(wrapperFrom)}`),
+    `build delivery must keep the configured path, got: ${built!.code}`,
   )
 })
 
 test('double-wrap guard: transformMatched skips instrumented sources', async () => {
   const source = await readFile(fixture('handler.mjs'), 'utf8')
-  const entry = core.createMatcher(config)(fixture('handler.mjs'))
+  const entry = wrapEntry(core.createMatcher(config)(fixture('handler.mjs')))
   const once = core.transformMatched(source, entry, fixture('handler.mjs'))
   assert.ok(once)
-  assert.strictEqual(core.transformMatched(once!.code, entry, fixture('handler.mjs')), null)
+  assert.strictEqual(core.transformMatched(once.code, entry, fixture('handler.mjs')), null)
 })
 
 testRuntime('double-wrap guard: runtime hook passes through a build-time instrumented bundle', async () => {

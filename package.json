@@ -22,6 +22,7 @@
     "targets": [
       "x86_64-unknown-linux-gnu",
       "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl",
       "x86_64-pc-windows-msvc",
       "aarch64-apple-darwin",
       "wasm32-wasip1-threads"
@@ -52,7 +53,8 @@
     "test": "pnpm build:packages && cross-env OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test \"__test__/*.spec.ts\"",
     "version": "napi version",
     "prepare": "husky",
-    "compile:bench": "tsc --project benchmark/tsconfig.json"
+    "compile:bench": "tsc --project benchmark/tsconfig.json",
+    "typecheck": "pnpm build:packages && tsc --noEmit -p __test__/tsconfig.json"
   },
   "devDependencies": {
     "@apm-js-collab/code-transformer": "^0.18.0",
@@ -77,6 +79,7 @@
     "@types/estraverse": "^5",
     "@types/estree": "^1.0.9",
     "@types/node": "^24.2.0",
+    "@types/semver": "^7.7.0",
     "@wrap-esm-lambda/core": "workspace:^",
     "@wrap-esm-lambda/engine-acorn": "workspace:^",
     "@wrap-esm-lambda/hooks": "workspace:^",

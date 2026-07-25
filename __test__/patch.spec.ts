@@ -82,12 +82,12 @@ test('build-time format fallback: module syntax decides when no format or tellin
   // land on their real tap. `.js` all the way down, same path shape.
   const entries = [{ module: { name: 'fake' }, patch: { name: 'patchIt', from: '/abs/patch.ts' }, bindings: ['json'] }]
   const viaCjs = core.applyMatched('exports.json = function json() {};\n', entries, '/n/fake/lib/thing.js')
-  assert.ok(viaCjs.code.includes('require("/abs/patch.ts")'), 'CJS source gets the require-delivery CJS tap')
-  assert.ok(viaCjs.code.includes('module.exports.json'))
+  assert.ok(viaCjs!.code.includes('require("/abs/patch.ts")'), 'CJS source gets the require-delivery CJS tap')
+  assert.ok(viaCjs!.code.includes('module.exports.json'))
 
   const viaEsm = core.applyMatched('export function json() {}\n', entries, '/n/fake/lib/thing.js')
   assert.ok(
-    viaEsm.code.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'),
+    viaEsm!.code.includes('import { patchIt as __wel_patch_0 } from "/abs/patch.ts";'),
     'ESM syntax gets the ESM tap',
   )
 })
@@ -109,18 +109,18 @@ test('applyMatched buffer fast path: Buffer in, Buffer out, same bytes as the st
   const source = readFileSync(clientPath)
 
   const viaBuffer = core.applyMatched(source, entries, clientPath, { format: 'module', delivery: 'registry' })
-  assert.ok(Buffer.isBuffer(viaBuffer.code), 'patch-only match stays in UTF-8 bytes')
-  assert.strictEqual(viaBuffer.map, null)
+  assert.ok(Buffer.isBuffer(viaBuffer!.code), 'patch-only match stays in UTF-8 bytes')
+  assert.strictEqual(viaBuffer!.map, null)
 
   const viaString = core.applyMatched(source.toString('utf8'), entries, clientPath, {
     format: 'module',
     delivery: 'registry',
   })
-  assert.deepStrictEqual(viaBuffer.code.toString('utf8'), viaString.code, 'both paths emit identical modules')
+  assert.deepStrictEqual(viaBuffer!.code.toString('utf8'), viaString!.code, 'both paths emit identical modules')
 
   // the sentinel guard must work on bytes too
   assert.strictEqual(
-    core.applyMatched(viaBuffer.code, entries, clientPath, { format: 'module', delivery: 'registry' }),
+    core.applyMatched(viaBuffer!.code, entries, clientPath, { format: 'module', delivery: 'registry' }),
     null,
   )
 })

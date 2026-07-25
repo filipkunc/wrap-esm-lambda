@@ -162,7 +162,7 @@ test('the Lambda handler shape: a wrap-style patch entry needs no wrap entry any
     format: 'module',
     delivery: 'registry',
   })
-  assert.strictEqual(viaBuffer.code.toString(), applied.code, 'buffer and string paths emit identical modules')
+  assert.strictEqual(viaBuffer!.code.toString(), applied.code, 'buffer and string paths emit identical modules')
 })
 
 test('bare export *: the star-source walk resolves names through a transitive chain', async () => {

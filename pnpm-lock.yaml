@@ -76,6 +76,9 @@ importers:
       '@types/node':
         specifier: ^24.2.0
         version: 24.2.0
+      '@types/semver':
+        specifier: ^7.7.0
+        version: 7.7.1
       '@wrap-esm-lambda/core':
         specifier: workspace:^
         version: link:packages/core
@@ -1786,6 +1789,9 @@ packages:
 
   '@types/resolve@1.20.2':
     resolution: {integrity: sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q==}
+
+  '@types/semver@7.7.1':
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@webassemblyjs/ast@1.14.1':
     resolution: {integrity: sha512-nuBEDgQfm1ccRp/8bCQrx1frohyufl4JlbMMZ4P1wpeOfDhF6FQkxZJ1b/e+PLwr6X1Nhw6OLme5usuBWYBvuQ==}
@@ -4481,6 +4487,8 @@ snapshots:
       undici-types: 7.10.0
 
   '@types/resolve@1.20.2': {}
+
+  '@types/semver@7.7.1': {}
 
   '@webassemblyjs/ast@1.14.1':
     dependencies:

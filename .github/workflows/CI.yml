@@ -47,6 +47,10 @@ jobs:
       # fails here before any test job pays for a broken build
       - name: Build packages
         run: pnpm build:packages
+      # the specs are TypeScript too, and nothing else checks them: the runner
+      # they execute under strips types without looking at them
+      - name: Typecheck specs
+        run: pnpm exec tsc --noEmit -p __test__/tsconfig.json
       - name: Cargo fmt
         run: cargo fmt -- --check
       - name: Clippy
@@ -64,6 +68,12 @@ jobs:
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             build: pnpm build --target aarch64-unknown-linux-gnu --use-napi-cross
+          # musl: Alpine-based container images, where a glibc build simply
+          # will not load. Cross-compiled with zig (the conditional zig and
+          # cargo-zigbuild steps below fire on this target).
+          - host: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            build: pnpm build --target x86_64-unknown-linux-musl -x
           # Windows and macOS build natively on their own hosts — no
           # napi-cross, no zig. Both are tested below, so `napi.targets`
           # claims only platforms this workflow actually exercises.
@@ -145,6 +155,11 @@ jobs:
           # is exactly the kind of thing that can be arch-specific. The
           # aarch64 runner is native, so no QEMU is involved.
           - aarch64-unknown-linux-gnu
+          # musl is a different libc, not a different arch: same amd64 runner,
+          # an Alpine image (the docker params step picks it from the target
+          # name), and the addon's own musl detection deciding which binary to
+          # load.
+          - x86_64-unknown-linux-musl
         node:
           - '22'
           - '24'
@@ -178,10 +193,12 @@ jobs:
               console.log('IMAGE=node:${{ matrix.node }}-slim')
             }
           " >> $GITHUB_OUTPUT
-      # Each arch installs on its own runner (aarch64 included), so pnpm
-      # fetches the right platform-specific optional deps natively and
-      # supportedArchitectures stays unnecessary. That changes only if a lane
-      # ever tests an arch it did not install on (armv7 under QEMU would).
+      # Each ARCH installs on its own runner (aarch64 included), so pnpm
+      # fetches those platform-specific optional deps natively. LIBC is the
+      # exception: the musl lane installs on this glibc host and runs the suite
+      # inside Alpine, which is why pnpm-workspace.yaml asks for both libc
+      # flavours. An arch tested without installing on it (armv7 under QEMU)
+      # would need the same treatment.
       - name: Install dependencies
         run: pnpm install
       # on the host, where pnpm exists: the container runs plain node against
