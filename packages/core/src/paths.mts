@@ -4,11 +4,11 @@
 // clean, forward-slash absolute path.
 import { fileURLToPath } from 'node:url'
 
-export function toPath(idOrUrl) {
+export function toPath(idOrUrl: string): string {
   return idOrUrl.startsWith('file:') ? fileURLToPath(idOrUrl) : idOrUrl
 }
 
-export function cleanPath(idOrUrl) {
+export function cleanPath(idOrUrl: string): string {
   return toPath(idOrUrl)
     .replace(/[?#].*$/, '')
     .replaceAll('\\', '/')

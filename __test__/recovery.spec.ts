@@ -16,7 +16,6 @@ import { captureRejects } from './helpers'
 const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/patch/${name}`, import.meta.url))
 
-// @ts-expect-error untyped workspace package
 const core = await import('@wrap-esm-lambda/core')
 
 // the fake package has no "exports" field, so `main` (dist-cjs) is the tree

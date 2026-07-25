@@ -16,6 +16,7 @@
 // combination single-patched.
 import { isBuiltin } from 'node:module'
 import { createUnplugin } from 'unplugin'
+import type { InstrumentConfig } from '@wrap-esm-lambda/core'
 import {
   matchEntries,
   applyMatched,
@@ -32,13 +33,43 @@ import {
 const BUILTIN_PREFIX = 'wrap-esm-lambda-builtin_'
 
 /**
+ * The slice of a webpack/rspack compiler this plugin touches. Both bundlers
+ * are optional peers of unplugin — typing them structurally keeps their real
+ * types (and their versions) out of this package's dependency graph.
+ */
+interface WebpackLikeCompiler {
+  hooks: {
+    normalModuleFactory: {
+      tap(name: string, fn: (nmf: NormalModuleFactoryLike) => void): void
+    }
+  }
+  options: {
+    externalsPresets: { node?: boolean }
+    externals?: unknown
+  }
+}
+
+interface NormalModuleFactoryLike {
+  hooks: {
+    beforeResolve: {
+      tap(name: string, fn: (data: ResolveDataLike) => void): void
+    }
+  }
+}
+
+interface ResolveDataLike {
+  request: string
+  dependencies?: { request: string }[]
+}
+
+/**
  * webpack/rspack route builtin requests to their node-externals preset at
  * `factorize`, before any resolver (and so before unplugin's resolveId)
  * runs. `beforeResolve` fires earlier: rewriting the request there makes it
  * an ordinary module request that flows into unplugin's resolver + virtual
  * module machinery like on every other bundler.
  */
-function interceptBuiltinRequests(compiler, aliases) {
+function interceptBuiltinRequests(compiler: WebpackLikeCompiler, aliases: Map<string, string>): void {
   compiler.hooks.normalModuleFactory.tap('wrap-esm-lambda', (nmf) => {
     nmf.hooks.beforeResolve.tap('wrap-esm-lambda', (resolveData) => {
       const name = aliases.get(resolveData.request)
@@ -58,29 +89,29 @@ function interceptBuiltinRequests(compiler, aliases) {
   })
 }
 
-/** @param {import('@wrap-esm-lambda/core').InstrumentConfig} config */
-export const unplugin = createUnplugin((config) => {
+export const unplugin = createUnplugin((config: InstrumentConfig) => {
   const aliases = builtinAliases(config)
   return {
     name: 'wrap-esm-lambda',
     enforce: 'pre',
     webpack(compiler) {
-      if (aliases.size > 0) interceptBuiltinRequests(compiler, aliases)
+      if (aliases.size > 0) interceptBuiltinRequests(compiler as unknown as WebpackLikeCompiler, aliases)
     },
     rspack(compiler) {
       if (aliases.size > 0) {
-        interceptBuiltinRequests(compiler, aliases)
+        const rspackCompiler = compiler as unknown as WebpackLikeCompiler
+        interceptBuiltinRequests(rspackCompiler, aliases)
         // rspack decides externals in Rust, before the beforeResolve rewrite
         // is read back — the node preset externalizes the original builtin id
         // and the virtual module never happens. Carve the configured builtins
         // out of the preset and reproduce its behavior for every other
         // builtin with an externals function (which rspack does consult
         // before its preset would have run).
-        compiler.options.externalsPresets.node = false
-        const existing = compiler.options.externals
-        compiler.options.externals = [
+        rspackCompiler.options.externalsPresets.node = false
+        const existing = rspackCompiler.options.externals
+        rspackCompiler.options.externals = [
           ...(existing === undefined ? [] : Array.isArray(existing) ? existing : [existing]),
-          ({ request }, callback) => {
+          ({ request }: { request: string }, callback: (err?: Error | null, result?: string) => void) => {
             if (!aliases.has(request) && isBuiltin(request)) {
               return callback(null, `node-commonjs ${request}`)
             }
@@ -89,7 +120,7 @@ export const unplugin = createUnplugin((config) => {
         ]
       }
     },
-    resolveId(id) {
+    resolveId(id: string) {
       // identity for the virtual id itself: webpack re-resolves the
       // rewritten request through unplugin's resolver plugin, which needs a
       // non-null answer to register it as a virtual module
@@ -97,20 +128,20 @@ export const unplugin = createUnplugin((config) => {
       const name = aliases.get(id)
       return name === undefined ? null : BUILTIN_PREFIX + name
     },
-    loadInclude(id) {
+    loadInclude(id: string) {
       return id.startsWith(BUILTIN_PREFIX)
     },
-    load(id) {
+    load(id: string) {
       const name = id.slice(BUILTIN_PREFIX.length)
       // builtinPatchEntries applies the versionRange gate (the building
       // Node answers for the bundle), same as the runtime shell at preload
       const entries = builtinPatchEntries(config).filter((entry) => entry.module.name === name)
       return builtinWrapperSource(name, entries)
     },
-    transformInclude(id) {
+    transformInclude(id: string) {
       return matchEntries(config, id).length > 0
     },
-    transform(code, id) {
+    transform(code: string, id: string) {
       const entries = matchEntries(config, id)
       if (entries.length === 0) {
         return null

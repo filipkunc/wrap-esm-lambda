@@ -18,15 +18,28 @@
 // - diagnostics.mjs — the failure policy the shells apply (kill switch,
 //                  strict mode, debug tracing, recovered-failure log)
 
-/**
- * @typedef {import('./config.mjs').WrapperSpec} WrapperSpec
- * @typedef {import('./config.mjs').WrapEntry} WrapEntry
- * @typedef {import('./config.mjs').ModuleMatch} ModuleMatch
- * @typedef {import('./config.mjs').PatchSpec} PatchSpec
- * @typedef {import('./config.mjs').PatchEntry} PatchEntry
- * @typedef {import('./config.mjs').InstrumentEntry} InstrumentEntry
- * @typedef {import('./config.mjs').InstrumentConfig} InstrumentConfig
- */
+export type {
+  WrapperSpec,
+  WrapEntry,
+  ModuleMatch,
+  PatchSpec,
+  PatchEntry,
+  InstrumentEntry,
+  InstrumentConfig,
+} from './config.mjs'
+export type { Applied, ApplyOptions, Delivery, Source } from './apply.mjs'
+export type { PackageInfo } from './match.mjs'
+export type { PatchFunction, PatchRegistry } from './registry.mjs'
+export type { RecoveredFailure } from './diagnostics.mjs'
+export type { SelectEngineOptions } from './engine-select.mjs'
+export type {
+  EsmExportsInfo,
+  TapEntryInput,
+  TapResult,
+  TapStarResolution,
+  TransformEngine,
+  TransformResult,
+} from './engine.mjs'
 
 export { defineConfig, definePatches } from './config.mjs'
 export { engineName } from './engine.mjs'

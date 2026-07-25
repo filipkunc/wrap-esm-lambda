@@ -17,7 +17,6 @@ import { build } from 'esbuild'
 const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/aws/${name}`, import.meta.url))
 
-// @ts-expect-error untyped workspace package
 const { unplugin } = await import('@wrap-esm-lambda/unplugin')
 const { default: config } = await import(pathToFileURL(fixture('aws.config.ts')).href)
 

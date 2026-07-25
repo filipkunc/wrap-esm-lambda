@@ -8,7 +8,6 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import * as oxc from '../index.js'
-// @ts-expect-error untyped workspace package
 import * as acorn from '@wrap-esm-lambda/engine-acorn'
 
 // Comments are load-bearing in bundled code: /* @__PURE__ */ annotations

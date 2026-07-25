@@ -17,8 +17,10 @@
 // WRAP_ESM_LAMBDA_DISABLE=1.
 import * as nodeModule from 'node:module'
 import { createRequire } from 'node:module'
+import type { LoadFnOutput, LoadHookSync } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { isAbsolute } from 'node:path'
+import type { InstrumentConfig, PatchFunction, PatchRegistry } from '@wrap-esm-lambda/core'
 import {
   matchEntries,
   applyMatched,
@@ -43,6 +45,13 @@ import {
 const PATCH_FAILED = Symbol('wrap-esm-lambda.patchFailed')
 
 /**
+ * `globalThis` as the two process-global slots this shell uses see it: the
+ * patch registry the emitted taps read, and the per-entry builtin guards
+ * shared with the build shell's generated wrapper.
+ */
+const globalSlots = globalThis as unknown as Record<symbol, unknown>
+
+/**
  * Wrap a user patch function so a throw inside it cannot break the evaluation
  * of the module being patched. The emitted tap calls the registry entry
  * directly from the patched module's own body, so without this an exception in
@@ -50,8 +59,8 @@ const PATCH_FAILED = Symbol('wrap-esm-lambda.patchFailed')
  * silently no-ops on getter-only bundled CJS — propagates as a module load
  * failure and the app never starts.
  */
-function guardPatch(key, fn) {
-  return function guardedPatch(accessors) {
+function guardPatch(key: string, fn: PatchFunction): PatchFunction {
+  return function guardedPatch(accessors: Record<string, unknown>) {
     try {
       fn(accessors)
       return undefined
@@ -68,11 +77,11 @@ function guardPatch(key, fn) {
  * `preloadPatches` to have populated the global registry first.
  * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
  */
-export function createLoadHook(config) {
+export function createLoadHook(config: InstrumentConfig): LoadHookSync {
   // Modules whose instrumentation already failed once: a repeated load (worker
   // threads, vm contexts, a watch-mode reload) must not re-pay the failed
   // transform, and one broken dependency must not flood stderr.
-  const failed = new Set()
+  const failed = new Set<string>()
   return function load(url, context, nextLoad) {
     const result = nextLoad(url, context)
     if (failed.has(url)) {
@@ -81,6 +90,13 @@ export function createLoadHook(config) {
     try {
       const entries = matchEntries(config, url)
       if (entries.length === 0) {
+        return result
+      }
+      if (result.source == null) {
+        // nothing to transform: `nextLoad` omits the source for what Node
+        // loads without one (a builtin, a native addon), and for a CJS module
+        // whose evaluation Node handles itself
+        debug(`skip (no source): ${url}`)
         return result
       }
       // `nextLoad` delivers the source as a UTF-8 Buffer; hand it over as-is.
@@ -111,7 +127,7 @@ export function createLoadHook(config) {
       // newer Node) would mislabel CommonJS as ESM and crash its require calls;
       // with no format Node detects it from the returned source, and every line
       // the tap appends is format-neutral.
-      const out = { shortCircuit: true, source }
+      const out: LoadFnOutput = { shortCircuit: true, source, format: undefined }
       if (result.format != null) {
         out.format = result.format
       }
@@ -145,9 +161,9 @@ export function createLoadHook(config) {
  * @returns {Promise<import('@wrap-esm-lambda/core').InstrumentConfig>} the
  *   config restricted to entries whose patch function is now registered
  */
-export async function preloadPatches(config) {
-  const registry = (globalThis[PATCH_REGISTRY] ??= Object.create(null))
-  const entries = []
+export async function preloadPatches(config: InstrumentConfig): Promise<InstrumentConfig> {
+  const registry = (globalSlots[PATCH_REGISTRY] ??= Object.create(null) as PatchRegistry) as PatchRegistry
+  const entries: InstrumentConfig['entries'] = []
   for (const entry of config.entries) {
     if (!entry.patch) {
       entries.push(entry)
@@ -156,12 +172,12 @@ export async function preloadPatches(config) {
     const key = patchKey(entry)
     try {
       const spec = isAbsolute(entry.patch.from) ? pathToFileURL(entry.patch.from).href : entry.patch.from
-      const mod = await import(spec)
+      const mod = (await import(spec)) as Record<string, unknown>
       const fn = mod[entry.patch.name]
       if (typeof fn !== 'function') {
         throw new TypeError(`patch '${entry.patch.name}' is not exported by ${entry.patch.from}`)
       }
-      registry[key] = guardPatch(key, fn)
+      registry[key] = guardPatch(key, fn as PatchFunction)
       entries.push(entry)
     } catch (err) {
       recover(`loading patch '${key}'`, err)
@@ -189,15 +205,15 @@ const requireBuiltin = createRequire(import.meta.url)
  * rather than the process.
  * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
  */
-export function applyBuiltinPatches(config) {
-  const registry = globalThis[PATCH_REGISTRY] ?? Object.create(null)
+export function applyBuiltinPatches(config: InstrumentConfig): void {
+  const registry = (globalSlots[PATCH_REGISTRY] ?? Object.create(null)) as PatchRegistry
   for (const entry of builtinPatchEntries(config)) {
     // hybrid guard, shared with the build shell's generated wrapper: when a
     // bundle already carries this entry's builtin patch, skip it here — the
     // builtin's exports object is process-global, so applying twice would
     // wrap its methods twice
     const guard = Symbol.for(builtinGuardKey(entry))
-    if (globalThis[guard]) continue
+    if (globalSlots[guard]) continue
     const key = patchKey(entry)
     const patch = registry[key]
     if (patch === undefined) {
@@ -206,8 +222,8 @@ export function applyBuiltinPatches(config) {
       continue
     }
     try {
-      const target = requireBuiltin(entry.module.name)
-      const accessors = {}
+      const target = requireBuiltin(entry.module.name) as Record<string, unknown>
+      const accessors: Record<string, unknown> = {}
       for (const name of entry.bindings) {
         if (!(name in target)) {
           const available = Object.keys(target).slice(0, 20).join(', ')
@@ -225,7 +241,7 @@ export function applyBuiltinPatches(config) {
       // it up front would make a failed patch look done to the build shell's
       // generated wrapper as well, leaving the builtin with no patch at all.
       if (patch(accessors) !== PATCH_FAILED) {
-        globalThis[guard] = true
+        globalSlots[guard] = true
         debug(`patched builtin ${entry.module.name}`)
       }
     } catch (err) {
@@ -245,7 +261,7 @@ export function applyBuiltinPatches(config) {
  * dying on an import of something that isn't there.
  * @param {import('@wrap-esm-lambda/core').InstrumentConfig} config
  */
-export async function registerConfig(config) {
+export async function registerConfig(config: InstrumentConfig): Promise<void> {
   if (isDisabled()) {
     debug('disabled by WRAP_ESM_LAMBDA_DISABLE — no patches, no hooks')
     return

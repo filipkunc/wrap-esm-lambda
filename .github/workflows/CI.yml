@@ -43,6 +43,10 @@ jobs:
         run: pnpm install
       - name: Oxlint
         run: pnpm lint
+      # the packages are TypeScript: building them is the typecheck, and it
+      # fails here before any test job pays for a broken build
+      - name: Build packages
+        run: pnpm build:packages
       - name: Cargo fmt
         run: cargo fmt -- --check
       - name: Clippy
@@ -164,6 +168,11 @@ jobs:
       # in pnpm-workspace.yaml so platform-specific optional deps get fetched.
       - name: Install dependencies
         run: pnpm install
+      # on the host, where pnpm exists: the container runs plain node against
+      # the volume-mounted workspace, so the packages' dist/ must already be
+      # there
+      - name: Build packages
+        run: pnpm build:packages
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -265,6 +274,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install
+      - name: Build packages
+        run: pnpm build:packages
       - name: Test with no native binding present
         # The excluded specs are the ones that reach for the addon directly
         # (`../index`) or pin WRAP_ESM_LAMBDA_ENGINE=oxc in a child process —

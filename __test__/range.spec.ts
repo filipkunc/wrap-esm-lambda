@@ -8,7 +8,6 @@ import semver from 'semver'
 // semver in @wrap-esm-lambda/core because the package's module graph
 // dominated the runtime shell's cold start.
 
-// @ts-expect-error untyped workspace module
 const { satisfies, parseVersion } = await import('@wrap-esm-lambda/core/range')
 
 const VERSIONS = [

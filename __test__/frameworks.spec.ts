@@ -42,7 +42,6 @@ test('build mode: the same frameworks config lands through esbuild — pure-CJS 
   // shells. At build time express/fastify are classified CJS by syntax
   // detection and their patches arrive via require-delivery snippets; hono
   // rides the ESM path. Plain `node bundle.mjs` then proves the behavior.
-  // @ts-expect-error untyped workspace package
   const { unplugin } = await import('@wrap-esm-lambda/unplugin')
   const { default: config } = await import(pathToFileURL(fixture('wrap.config.frameworks.mjs')).href)
   const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-frameworks-'))

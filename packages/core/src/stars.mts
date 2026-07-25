@@ -23,8 +23,9 @@
 import { readFileSync } from 'node:fs'
 import { dirname, resolve as resolvePath } from 'node:path'
 import { esmModuleExports, resolveModule } from './engine.mjs'
+import type { EsmExportsInfo, TapEntryInput, TapResult, TapStarResolution } from './engine.mjs'
 
-function isRelative(specifier) {
+function isRelative(specifier: string): boolean {
   return specifier.startsWith('./') || specifier.startsWith('../')
 }
 
@@ -33,13 +34,13 @@ function isRelative(specifier) {
  * that wrote it — a cheap path join for relative sources, the engine's full
  * import-style resolution for everything else. Null when nothing resolves.
  */
-function starSourcePath(specifier, fromDir) {
+function starSourcePath(specifier: string, fromDir: string): string | null {
   if (isRelative(specifier)) return resolvePath(fromDir, specifier)
   return resolveModule(specifier, fromDir)
 }
 
 /** Parse cache for the walk: absolute path -> { names, starSources }. */
-function moduleInfo(absPath, cache) {
+function moduleInfo(absPath: string, cache: Map<string, EsmExportsInfo>): EsmExportsInfo {
   let info = cache.get(absPath)
   if (info === undefined) {
     try {
@@ -53,7 +54,7 @@ function moduleInfo(absPath, cache) {
 }
 
 /** Does the module at absPath (transitively) export `name`? */
-function providesName(absPath, name, cache, seen) {
+function providesName(absPath: string, name: string, cache: Map<string, EsmExportsInfo>, seen: Set<string>): boolean {
   if (seen.has(absPath)) return false
   seen.add(absPath)
   const info = moduleInfo(absPath, cache)
@@ -71,15 +72,17 @@ function providesName(absPath, name, cache, seen) {
  * source provides stay unresolved — the caller rethrows the original
  * not-found error.
  *
- * @param {Iterable<string>} missingNames
- * @param {string[]} starSources bare-star specifiers of the target module
- * @param {string} modulePath absolute path of the target module
- * @returns {{ binding: string, source: string }[]}
+ * @param starSources bare-star specifiers of the target module
+ * @param modulePath absolute path of the target module
  */
-export function resolveStarBindings(missingNames, starSources, modulePath) {
-  const cache = new Map()
+export function resolveStarBindings(
+  missingNames: Iterable<string>,
+  starSources: string[],
+  modulePath: string,
+): TapStarResolution[] {
+  const cache = new Map<string, EsmExportsInfo>()
   const dir = dirname(modulePath)
-  const resolutions = []
+  const resolutions: TapStarResolution[] = []
   for (const name of missingNames) {
     const providers = starSources.filter((specifier) => {
       const source = starSourcePath(specifier, dir)
@@ -91,7 +94,7 @@ export function resolveStarBindings(missingNames, starSources, modulePath) {
       )
     }
     if (providers.length === 1) {
-      resolutions.push({ binding: name, source: providers[0] })
+      resolutions.push({ binding: name, source: providers[0]! })
     }
   }
   return resolutions
@@ -106,11 +109,29 @@ export function resolveStarBindings(missingNames, starSources, modulePath) {
  * original loud error; ambiguous names (two sources — importers cannot
  * link them either) throw their own.
  */
-export function tapWithStarRetry(tap, decode, modulePath, entriesInput, cjs, registry, filename, upstreamMap) {
+export type BoundTap = (
+  entries: TapEntryInput[],
+  cjs: boolean,
+  registry: boolean,
+  filename: string,
+  upstreamMap: string | undefined,
+  starResolutions: TapStarResolution[] | undefined,
+) => TapResult
+
+export function tapWithStarRetry(
+  tap: BoundTap,
+  decode: () => string,
+  modulePath: string,
+  entriesInput: TapEntryInput[],
+  cjs: boolean,
+  registry: boolean,
+  filename: string,
+  upstreamMap: string | undefined,
+): TapResult {
   try {
     return tap(entriesInput, cjs, registry, filename, upstreamMap, undefined)
   } catch (err) {
-    if (cjs || !/not found in module/.test(String(err?.message))) throw err
+    if (cjs || !/not found in module/.test(err instanceof Error ? err.message : String(err))) throw err
     const sourceText = decode()
     const { names, starSources } = esmModuleExports(sourceText)
     if (starSources.length === 0) throw err

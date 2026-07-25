@@ -180,12 +180,19 @@ every Node 22/24/26 rung, including the minors where sync hooks and
 | [`wrap-esm-lambda`](index.d.ts) (repo root)              | the native oxc addon — the default engine: `exportsTap*` (the tap) and `transformLambda*` (the handler wrap), with zero-copy `Buffer` variants |
 | [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) | the pure-JS engine (acorn + magic-string), same surface and byte-identical snippets — select with `WRAP_ESM_LAMBDA_ENGINE=acorn`               |
 
+All four are written in TypeScript (`src/*.mts`) and ship compiled ESM plus
+declarations (`dist/*.mjs` + `dist/*.d.mts`, with declaration and source maps
+back to the `.mts`), so a config file gets real completion on
+`definePatches`, and `TransformEngine` — the surface the native addon and the
+acorn engine both implement — is now a type the compiler checks them against,
+not only a contract the parity tests assert.
+
 The `core` source mirrors the pipeline a patch travels:
-[`config.mjs`](packages/core/src/config.mjs) (the entry shapes) ->
-[`match.mjs`](packages/core/src/match.mjs) (which entries apply to which
-module) -> [`format.mjs`](packages/core/src/format.mjs) (the CJS-or-ESM
-decision) -> [`apply.mjs`](packages/core/src/apply.mjs) (entries ->
-instrumented source), plus [`registry.mjs`](packages/core/src/registry.mjs)
+[`config.mts`](packages/core/src/config.mts) (the entry shapes) ->
+[`match.mts`](packages/core/src/match.mts) (which entries apply to which
+module) -> [`format.mts`](packages/core/src/format.mts) (the CJS-or-ESM
+decision) -> [`apply.mts`](packages/core/src/apply.mts) (entries ->
+instrumented source), plus [`registry.mts`](packages/core/src/registry.mts)
 (the runtime patch-registry contract).
 
 ## Config reference
@@ -410,11 +417,17 @@ analysis: [docs/serverless.md](docs/serverless.md).
 
 1. `pnpm install` — install dependencies
 2. `pnpm build` — build the native addon (`napi build --release`)
-3. `pnpm test` — the test suite, on Node's built-in
+3. `pnpm build:packages` — compile the workspace packages (`tsc -b`, project
+   references, incremental); `pnpm test` runs it for you
+4. `pnpm test` — the test suite, on Node's built-in
    [test runner](https://nodejs.org/api/test.html) (`node --test`; TypeScript
    specs load through `@oxc-node/core`)
-4. `cargo fmt` and `cargo clippy` before committing
-5. `cargo test` — Rust tests
+5. `cargo fmt` and `cargo clippy` before committing
+6. `cargo test` — Rust tests
+
+The packages import each other by their published specifiers, so the suite
+runs against the same `dist/` a consumer installs — `pnpm build:packages`
+first, or the imports resolve to nothing.
 
 ### WebAssembly
 

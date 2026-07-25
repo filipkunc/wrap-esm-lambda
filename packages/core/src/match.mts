@@ -8,15 +8,22 @@ import { readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
 import { satisfies } from './range.mjs'
 import { cleanPath } from './paths.mjs'
+import type { InstrumentConfig, InstrumentEntry, PatchEntry } from './config.mjs'
+
+/** Identity of the package a file belongs to, from its nearest package.json. */
+export interface PackageInfo {
+  name: string
+  version: string
+  root: string
+}
 
 // Nearest-package.json lookup, cached per directory so the runtime hook stays
 // cold-start-cheap across the many files of one package.
-const packageCache = new Map()
+const packageCache = new Map<string, PackageInfo | undefined>()
 
-/** @returns {{ name: string, version: string, root: string } | undefined} */
-export function nearestPackage(filePath) {
+export function nearestPackage(filePath: string): PackageInfo | undefined {
   let dir = dirname(filePath)
-  const visited = []
+  const visited: string[] = []
   while (true) {
     if (packageCache.has(dir)) {
       const hit = packageCache.get(dir)
@@ -25,9 +32,9 @@ export function nearestPackage(filePath) {
     }
     visited.push(dir)
     try {
-      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as Partial<PackageInfo>
       if (pkg.name) {
-        const info = { name: pkg.name, version: pkg.version ?? '0.0.0', root: dir }
+        const info: PackageInfo = { name: pkg.name, version: pkg.version ?? '0.0.0', root: dir }
         for (const d of visited) packageCache.set(d, info)
         return info
       }
@@ -43,7 +50,7 @@ export function nearestPackage(filePath) {
   }
 }
 
-function entryMatches(entry, path) {
+function entryMatches(entry: InstrumentEntry, path: string): boolean {
   if (entry.match !== undefined) {
     return typeof entry.match === 'string' ? path.endsWith(entry.match) : entry.match.test(path)
   }
@@ -63,20 +70,14 @@ function entryMatches(entry, path) {
   return false
 }
 
-/**
- * All entries matching a module id (bundlers) or file URL (loader hooks).
- * @param {import('./config.mjs').InstrumentConfig} config
- */
-export function matchEntries(config, idOrUrl) {
+/** All entries matching a module id (bundlers) or file URL (loader hooks). */
+export function matchEntries(config: InstrumentConfig, idOrUrl: string): InstrumentEntry[] {
   const path = cleanPath(idOrUrl)
   return config.entries.filter((entry) => entryMatches(entry, path))
 }
 
-/**
- * First matching entry — kept for callers that predate multi-entry matching.
- * @param {import('./config.mjs').InstrumentConfig} config
- */
-export function createMatcher(config) {
+/** First matching entry — kept for callers that predate multi-entry matching. */
+export function createMatcher(config: InstrumentConfig): (idOrUrl: string) => InstrumentEntry | undefined {
   return (idOrUrl) => matchEntries(config, idOrUrl)[0]
 }
 
@@ -93,12 +94,9 @@ export function createMatcher(config) {
  * covered `require()`: `import` of a builtin has never flowed through it,
  * see hooks/interplay-matrix.) `versionRange` on a builtin entry gates on
  * `process.versions.node`; `files` is meaningless there and rejected loudly.
- *
- * @param {import('./config.mjs').InstrumentConfig} config
- * @returns {import('./config.mjs').PatchEntry[]}
  */
-export function builtinPatchEntries(config) {
-  return config.entries.filter((entry) => {
+export function builtinPatchEntries(config: InstrumentConfig): PatchEntry[] {
+  return config.entries.filter((entry): entry is PatchEntry => {
     if (!entry.patch || !entry.module || !isBuiltin(entry.module.name)) return false
     if (entry.module.files) {
       throw new TypeError(`builtin patch entry '${entry.module.name}' cannot have 'files' — built-ins are one module`)
