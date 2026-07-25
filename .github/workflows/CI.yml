@@ -368,6 +368,13 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-latest
+    # Pull requests must never reach this job. Until now it was reached on
+    # every PR and only ever skipped because one of its `needs` had failed —
+    # so the first fully green PR ran it, and the one thing standing between a
+    # pull request and `npm publish` was a commit subject that happens not to
+    # start with a version number. `git log -1 --pretty=%s` on a PR reads the
+    # branch's own head commit, so "0.2.0 add feature" would have been enough.
+    if: github.event_name == 'push'
     permissions:
       contents: write
       id-token: write
