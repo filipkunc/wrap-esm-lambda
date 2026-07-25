@@ -6,6 +6,7 @@
   "description": "Consumer of the function-logger package: an ordinary app, instrumented by installing one package and adding one --import flag.",
   "scripts": {
     "start": "node --import example-function-logger/register app.mjs",
+    "start:cjs": "node --import example-function-logger/register app.cjs",
     "start:env-config": "WRAP_ESM_LAMBDA_CONFIG=example-function-logger/config node --import @wrap-esm-lambda/hooks/register app.mjs"
   },
   "dependencies": {

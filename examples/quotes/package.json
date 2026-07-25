@@ -3,8 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Stand-in third-party library for the function-logger example: a few plain exported functions, one async, one that throws.",
+  "description": "Stand-in third-party library for the function-logger example: a dual package (ESM + CJS trees) with a few plain functions, one async, one that throws.",
   "exports": {
-    ".": "./index.mjs"
+    ".": {
+      "require": "./index.cjs",
+      "default": "./index.mjs"
+    }
   }
 }

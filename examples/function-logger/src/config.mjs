@@ -6,7 +6,7 @@ import { definePatches } from '@wrap-esm-lambda/core'
 export default definePatches(
   [
     {
-      module: { name: 'example-quotes', files: ['index.mjs'] },
+      module: { name: 'example-quotes', files: ['index.mjs', 'index.cjs'] },
       patch: { name: 'logCalls', from: './patches/log-calls.mjs' },
       bindings: ['getQuote', 'shout', 'fetchQuote', 'explode'],
     },
