@@ -214,16 +214,32 @@ test('builtin patch: versionRange gates on the running Node', async () => {
   assert.strictEqual(core.builtinPatchEntries(builtinConfig).length, 1)
 })
 
-test('builtin patch: a missing binding fails loudly at preload', async () => {
+test('builtin patch: a missing binding is the version-drift alarm — reported, and loud under strict', async () => {
   const { default: builtinConfig } = await import(pathToFileURL(fixture('wrap.config.builtin.mjs')).href)
   const hooks = await import('@wrap-esm-lambda/hooks')
   const broken = {
     entries: [{ ...builtinConfig.entries[0], bindings: ['definitelyNotAnOsExport'] }],
   }
   await hooks.preloadPatches(broken)
-  const err = captureThrows(() => hooks.applyBuiltinPatches(broken))
-  assert.match(err.message, /'definitelyNotAnOsExport' not found in node:os/)
-  assert.match(err.message, /hostname/, 'error lists what is available')
+
+  // strict mode keeps the hard error, with the same message and the same hint
+  // about what the builtin actually exports
+  process.env.WRAP_ESM_LAMBDA_STRICT = '1'
+  try {
+    const err = captureThrows(() => hooks.applyBuiltinPatches(broken))
+    assert.match(err.message, /'definitelyNotAnOsExport' not found in node:os/)
+    assert.match(err.message, /hostname/, 'error lists what is available')
+  } finally {
+    delete process.env.WRAP_ESM_LAMBDA_STRICT
+  }
+
+  // the default is recovery: the builtin keeps its own binding, the process
+  // lives, and the failure is retrievable rather than guessed at
+  const before = core.instrumentationFailures().total
+  hooks.applyBuiltinPatches(broken)
+  const failures = core.instrumentationFailures()
+  assert.strictEqual(failures.total, before + 1, 'the recovered failure is recorded')
+  assert.match(failures.entries.at(-1)!.what, /patching builtin 'node:os'/)
 })
 
 test('builtin patch: never matches file paths, so the build-time shell cannot silently claim it', async () => {

@@ -15,6 +15,8 @@
 // - apply.mjs    — entries -> instrumented source, via the engine, plus the
 //                  double-wrap sentinel
 // - registry.mjs — the runtime patch-function registry contract
+// - diagnostics.mjs — the failure policy the shells apply (kill switch,
+//                  strict mode, debug tracing, recovered-failure log)
 
 /**
  * @typedef {import('./config.mjs').WrapperSpec} WrapperSpec
@@ -33,3 +35,5 @@ export { runtimeFormatFor, moduleKindFor } from './format.mjs'
 export { SENTINEL, SENTINEL_TEXT, transformMatched, applyMatched, inlineMap } from './apply.mjs'
 export { PATCH_REGISTRY, patchKey } from './registry.mjs'
 export { builtinAliases, builtinWrapperSource, builtinGuardKey } from './builtins.mjs'
+export { DEBUG, debug, isDisabled, isStrict, recover, warnOnce, instrumentationFailures } from './diagnostics.mjs'
+export { selectEngine, FALLBACK_ENGINE } from './engine-select.mjs'

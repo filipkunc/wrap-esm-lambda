@@ -5,14 +5,20 @@
   "type": "module",
   "exports": {
     ".": "./src/index.mjs",
-    "./range": "./src/range.mjs"
+    "./range": "./src/range.mjs",
+    "./diagnostics": "./src/diagnostics.mjs"
   },
   "files": [
     "src"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">= 22.0.0"
+  },
   "dependencies": {
-    "@wrap-esm-lambda/engine-acorn": "workspace:^",
+    "@wrap-esm-lambda/engine-acorn": "workspace:^"
+  },
+  "optionalDependencies": {
     "wrap-esm-lambda": "workspace:^"
   }
 }

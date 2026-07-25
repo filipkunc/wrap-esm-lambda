@@ -344,6 +344,57 @@ For comparison the minimal wrapping code is re-implemented with
 [orchestrion-js](https://github.com/nodejs/orchestrion-js) — the benchmark
 story lives in [docs/benchmarks.md](docs/benchmarks.md).
 
+## Failure policy: what happens when instrumentation cannot do its job
+
+Instrumentation sits in the load path of every module of a process it does not
+own, so the question that decides whether it is deployable is not "does the
+patch work" but "what happens when it doesn't" — a binding renamed in a
+dependency bump, a patch function with a bug in it, a platform with no
+prebuilt addon.
+
+The rule: **fail soft wherever partial degradation exists, stay loud where
+there is nothing to degrade to.** Downstream of a valid config, every failure
+costs exactly what it has to and no more.
+
+| what fails                                       | what it costs                                       |
+| ------------------------------------------------ | --------------------------------------------------- |
+| the native addon cannot be loaded                | the process runs on the pure-JS acorn engine        |
+| a patch module will not import                   | that one entry drops; the other entries still apply |
+| a requested binding is gone (version drift)      | that one module loads untouched                     |
+| a patch function throws                          | that one patch call; the patched module still loads |
+| a builtin's binding moved                        | that one builtin patch                              |
+| `module.registerHooks` is missing (Node < 22.15) | the load hook; eager builtin patches still apply    |
+| the config cannot be found or loaded             | **startup** — loud, on purpose (see below)          |
+
+Every recovered failure reports once on stderr and is retrievable
+programmatically, so "is this process fully instrumented?" has an answer:
+
+```js
+import { instrumentationFailures } from '@wrap-esm-lambda/core'
+// { total: 1, entries: [{ what: "instrumenting file:///...", error: [Error] }] }
+```
+
+Three switches:
+
+| variable                    | effect                                                                                                                                                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WRAP_ESM_LAMBDA_DISABLE=1` | kill switch: no hooks, no patches, no transform — and the config is never resolved, the addon never loaded. Mitigates an incident without touching the app's start command. |
+| `WRAP_ESM_LAMBDA_STRICT=1`  | every recovered failure throws instead. What CI runs; also how to find out why a patch is silently not applying.                                                            |
+| `WRAP_ESM_LAMBDA_DEBUG=1`   | trace the decisions — engine bound, modules instrumented, entries skipped — to stderr.                                                                                      |
+
+Two deliberate exceptions to the soft default. **Config resolution is loud**:
+unlike a drifted binding it has nothing to degrade to, and an operator who
+passed `--import` should learn at startup that they got no instrumentation, not
+from absent telemetry hours later — `WRAP_ESM_LAMBDA_DISABLE=1` is the way to
+say "not now". And **the build-time shell keeps throwing**: a failing build is
+visible and cheap, a silently un-instrumented artifact is not.
+
+Engine availability is not governed by strict mode but by
+`WRAP_ESM_LAMBDA_ENGINE`: unset means "native, or the JS engine if the addon
+cannot be loaded", while naming an engine (`oxc`, `acorn`) means "this one or
+fail". CI names it, so a broken native build can never pass as a green acorn
+run.
+
 ## Deploying on serverless platforms
 
 Both AWS Lambda and Azure Functions can activate the runtime shell without
@@ -372,7 +423,16 @@ analysis: [docs/serverless.md](docs/serverless.md).
 
 ### CI
 
-CI tests against [`node@22`, `node@24`, `node@26`] x [`Linux`] matrix.
+Every supported Node major — `node@22`, `node@24`, `node@26` — runs the whole
+suite three ways on Linux: on the native addon (with `WRAP_ESM_LAMBDA_ENGINE`
+named explicitly, so a missing artifact fails the job instead of silently
+falling back), on the pure-JS acorn engine, and on the WASI build. A fourth
+lane runs with **no native artifact at all**, which is what a platform with no
+prebuilt addon looks like — proving the degraded mode end to end rather than
+only in a unit test.
+
+The Rust side needs `rustc >= 1.95` (`rust-version` in `Cargo.toml`); CI floats
+on stable.
 
 ## Performance
 
