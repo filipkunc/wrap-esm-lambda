@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
 import { captureThrows } from './helpers'
 
 import * as oxc from '../index.js'
@@ -87,7 +88,9 @@ test('resolveModule: both engines resolve import-style, byte-identical paths', (
   // acorn engine. Pinned on the fixture shapes that matter — an exports map
   // under the `import` condition, a map-less `"module"`-before-`"main"`
   // package, a relative file, and a specifier that resolves nowhere.
-  const shapesDir = new URL('./fixtures/tap-shapes/node_modules/@fake/shapes', import.meta.url).pathname
+  // fileURLToPath, not URL#pathname: on Windows the latter yields
+  // '/C:/...', which no resolver on either side can start a walk from
+  const shapesDir = fileURLToPath(new URL('./fixtures/tap-shapes/node_modules/@fake/shapes', import.meta.url))
   const cases: [string, string | null][] = [
     ['@fake/star-pkg', 'star-pkg/esm/index.js'],
     ['@fake/star-plain', 'star-plain/esm.js'],

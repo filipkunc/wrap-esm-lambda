@@ -436,16 +436,26 @@ first, or the imports resolve to nothing.
 
 ### CI
 
-Every supported Node major — `node@22`, `node@24`, `node@26` — runs the whole
-suite three ways on Linux: on the native addon (with `WRAP_ESM_LAMBDA_ENGINE`
-named explicitly, so a missing artifact fails the job instead of silently
-falling back), on the pure-JS acorn engine, and on the WASI build. A fourth
-lane runs with **no native artifact at all**, which is what a platform with no
-prebuilt addon looks like — proving the degraded mode end to end rather than
-only in a unit test.
+Every lane below runs the whole suite on **each** supported Node major —
+`node@22`, `node@24`, `node@26`:
+
+| lane                       | what it covers                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `linux-x64`, `linux-arm64` | the prebuilt addon on both Linux arches, in containers, native runners (no QEMU)            |
+| `win32-x64-msvc`           | Windows: drive letters and backslashes through matching, resolution and every child spawn   |
+| `darwin-arm64`             | macOS on Apple silicon                                                                      |
+| WASI                       | the `wasm32-wasip1-threads` build — the reach onto platforms with no prebuilt addon         |
+| JS-only                    | **no native artifact at all**: the degraded engine path a platform without a prebuild takes |
+
+Each native lane runs the suite twice, once per engine, and names
+`WRAP_ESM_LAMBDA_ENGINE` explicitly — an implicit run would let a missing or
+broken artifact pass as a green acorn run, since core falls back on purpose.
+The acorn engine earns its second pass on Windows especially: it reimplements
+import-style module resolution over `node:path`, which is where platform
+differences actually live.
 
 The Rust side needs `rustc >= 1.95` (`rust-version` in `Cargo.toml`); CI floats
-on stable.
+on stable. Not yet covered: musl (Alpine) and 32-bit targets.
 
 ## Performance
 
