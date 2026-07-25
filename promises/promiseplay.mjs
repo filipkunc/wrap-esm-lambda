@@ -7,6 +7,9 @@ global.Promise = class Promise extends OldPromise {
     super(executor) // call native Promise constructor
   }
 
+  // This file demonstrates a Promise subclass that intercepts then(): being
+  // thenable is the subject here, not an accident.
+  // eslint-disable-next-line unicorn/no-thenable
   then(onFulfilled, onRejected) {
     const oldOnFulfilled = onFulfilled
     onFulfilled = function (value) {

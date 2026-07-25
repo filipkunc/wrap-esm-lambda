@@ -1,3 +1,10 @@
+// oxc deprecated the AstBuilder methods this builds with, ahead of shipping
+// their replacement (oxc-project/oxc#23043). There is no external equivalent on
+// 0.139: the AST structs are #[non_exhaustive], so another crate cannot build
+// them by struct literal either — verified by trying. The exemption is scoped
+// to the functions that actually construct nodes, so clippy runs with plain
+// -D warnings and any NEW deprecation, here or anywhere else, still fails.
+// Deleting these attributes is how the migration finds its call sites.
 use oxc_allocator::{Allocator, Box as ArenaBox, CloneIn, Vec as ArenaVec};
 use oxc_ast::{
   NONE,
@@ -40,6 +47,7 @@ impl<'a> LambdaTransform<'a> {
 }
 
 impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
+  #[allow(deprecated)]
   fn enter_program(&mut self, program: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
     self.update_handler_name(&mut program.body, ctx);
 
@@ -99,6 +107,7 @@ impl<'a> LambdaTransform<'a> {
     }
   }
 
+  #[allow(deprecated)]
   fn var_handler(
     &mut self,
     init: &Option<Expression<'a>>,
@@ -119,6 +128,7 @@ impl<'a> LambdaTransform<'a> {
       .variable_declaration(SPAN, kind, ctx.ast.vec1(declarator), false)
   }
 
+  #[allow(deprecated)]
   fn wrap_expression(
     &mut self,
     expr: Expression<'a>,
@@ -149,6 +159,7 @@ impl<'a> LambdaTransform<'a> {
     }
   }
 
+  #[allow(deprecated)]
   fn transform_export_named_declaration(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
@@ -1005,6 +1016,7 @@ fn arena_ident<'a>(allocator: &'a Allocator, name: &str) -> Ident<'a> {
 
 /// Build a `ModuleExportName` for a name that may not be a plain identifier
 /// (`export { x as "not-an-ident" }` is legal).
+#[allow(deprecated)]
 fn module_export_name<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
@@ -1018,6 +1030,7 @@ fn module_export_name<'a>(
 }
 
 /// `let <name> = <init>;`
+#[allow(deprecated)]
 fn let_statement<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
@@ -1036,6 +1049,7 @@ fn let_statement<'a>(
 }
 
 /// `export { <local> as <exported> };`
+#[allow(deprecated)]
 fn export_alias_statement<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
@@ -1059,6 +1073,7 @@ fn export_alias_statement<'a>(
 }
 
 /// `import { <imported> as <local> } from "<source>";`
+#[allow(deprecated)]
 fn import_alias_statement<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
@@ -1082,6 +1097,7 @@ fn import_alias_statement<'a>(
 }
 
 /// `import * as <local> from "<source>";`
+#[allow(deprecated)]
 fn import_namespace_statement<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
@@ -1115,6 +1131,7 @@ fn import_namespace_statement<'a>(
 ///   optional import alias, a `let` snapshot, and an `export { local as
 ///   exported };`. The snapshot evaluates at end-of-module, after every
 ///   declaration it can reference.
+#[allow(deprecated)]
 fn apply_rewrites<'a>(
   allocator: &'a Allocator,
   program: &mut Program<'a>,

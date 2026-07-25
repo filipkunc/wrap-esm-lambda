@@ -381,6 +381,22 @@ import { instrumentationFailures } from '@wrap-esm-lambda/core'
 // { total: 1, entries: [{ what: "instrumenting file:///...", error: [Error] }] }
 ```
 
+Ahead of time, `wrap-esm-lambda-validate` asks the same questions against the
+installed tree — package present, version in range, declared files there, ESM
+exports still exported, patch module importable — and exits non-zero on any
+failure, so drift is a CI failure in your repo rather than absent telemetry
+later:
+
+```sh
+npx wrap-esm-lambda-validate ./wrap.config.mjs
+#   ERROR   hono >=4 <5 · dist/hono.js
+#           installed 4.12.31; dist/hono.js: 'Hono' not exported (available: HonoBase)
+```
+
+It claims only what static analysis can: a CJS target reports _unverifiable_
+rather than passing, because its exports are assembled at runtime — the same
+reason the CJS tap validates nothing and reaches through `module.exports`.
+
 Three switches:
 
 | variable                    | effect                                                                                                                                                                      |
@@ -454,8 +470,23 @@ The acorn engine earns its second pass on Windows especially: it reimplements
 import-style module resolution over `node:path`, which is where platform
 differences actually live.
 
+Gates in the lint job: `clippy -D warnings`, `oxlint --deny-warnings`,
+`prettier --check`, `tsc --noEmit` over the specs, and `cargo test`. A
+pack-and-install spec runs in every test lane, asserting that what the tarballs
+ship is what the manifests promise and that an app built from those tarballs
+alone actually instruments a package.
+
 The Rust side needs `rustc >= 1.95` (`rust-version` in `Cargo.toml`); CI floats
-on stable. Not yet covered: musl (Alpine) and 32-bit targets.
+on stable. Not yet covered: win-arm64 and 32-bit targets (Node ships no 32-bit
+Linux build, and win32-x86 is being retired).
+
+### Releasing
+
+Pushes and tags **dry-run** the release: `pnpm publish -r --dry-run` for the
+workspace packages and `napi prepublish --dry-run` for the addon, so the
+plumbing is exercised continuously without touching the registry. An actual npm
+publish requires running the workflow manually and typing the confirmation —
+nothing automatic can reach the registry.
 
 ## Performance
 

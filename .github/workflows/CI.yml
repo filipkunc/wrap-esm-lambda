@@ -19,9 +19,21 @@ env:
       - .editorconfig
       - docs/**
   pull_request: null
+  # The ONLY route to a real npm publish: a human running the workflow and
+  # typing the confirmation. Everything automatic is a dry run.
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Type "publish" to release to npm. Anything else dry-runs.'
+        required: false
+        default: 'dry-run'
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+# Least privilege for every job; the publish job re-grants what a release needs
+# (contents: write for the GitHub Release, id-token: write for provenance).
+permissions:
+  contents: read
 jobs:
   lint:
     name: Lint
@@ -54,12 +66,11 @@ jobs:
       - name: Cargo fmt
         run: cargo fmt -- --check
       # A gate, not a report: without -D warnings this job passed with warnings
-      # nobody read. `-A deprecated` is a named, temporary carve-out — the oxc
-      # crates deprecated ~30 AstBuilder calls this code uses
-      # (oxc-project/oxc#23043) and that migration is its own piece of work;
-      # every OTHER warning, including any new one, fails here.
+      # nobody read. No lint-level carve-outs — the one unavoidable exemption
+      # (oxc's deprecated AstBuilder, see src/transform.rs) is scoped to the
+      # functions that need it, in the source, where it is reviewable.
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings -A deprecated
+        run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
       # formatting is checked, not fixed, in CI: `pnpm format` is the local fix
@@ -82,6 +93,9 @@ jobs:
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
             build: pnpm build --target x86_64-unknown-linux-musl -x
+          - host: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            build: pnpm build --target aarch64-unknown-linux-musl -x
           # Windows and macOS build natively on their own hosts — no
           # napi-cross, no zig. Both are tested below, so `napi.targets`
           # claims only platforms this workflow actually exercises.
@@ -168,6 +182,10 @@ jobs:
           # name), and the addon's own musl detection deciding which binary to
           # load.
           - x86_64-unknown-linux-musl
+          # and the combination: arm64 Alpine. The runner is native arm64 and
+          # the image comes from the target name, so this needs no new
+          # machinery — only the artifact.
+          - aarch64-unknown-linux-musl
         node:
           - '22'
           - '24'
@@ -430,7 +448,10 @@ jobs:
     # pull request and `npm publish` was a commit subject that happens not to
     # start with a version number. `git log -1 --pretty=%s` on a PR reads the
     # branch's own head commit, so "0.2.0 add feature" would have been enough.
-    if: github.event_name == 'push'
+    #
+    # A push dry-runs the release; a manual dispatch is the only thing that can
+    # arm it (see the Publish step).
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
       id-token: write
@@ -462,24 +483,45 @@ jobs:
       - name: List packages
         run: ls -R ./npm
         shell: bash
+      - name: Pack the workspace packages
+        # `pnpm publish -r --dry-run` resolves the workspace: protocol, runs each
+        # prepack, and reports exactly what would go up — without contacting the
+        # registry. The tarball contents themselves are asserted by
+        # __test__/tarballs.spec.ts, which every test lane runs.
+        # --filter './packages/*': `-r` alone includes the workspace ROOT, and
+        # the root is the addon, which publishes through `npm publish` +
+        # `napi prepublish` below. Without the filter the addon would be
+        # attempted twice and the second attempt would fail on an existing
+        # version.
+        run: pnpm publish -r --dry-run --no-git-checks --filter './packages/*'
+      - name: Prepublish the addon (dry run)
+        run: pnpm exec napi prepublish -t npm --dry-run
       - name: Publish
-        # Release detection looks at the commit SUBJECT only (%s). Grepping the
-        # full body (%B) once matched an incidental line starting with a
-        # version-like string and triggered an unintended publish attempt.
+        # Two things must both be true to reach npm: a human dispatched this
+        # workflow, and they typed the confirmation. A tag or a version-shaped
+        # commit subject is NOT enough — this repository is not publishing yet,
+        # and the pipeline being correct must not mean the pipeline being armed.
+        #
+        # The token lives on THIS step. It used to sit on the Release step
+        # below, which meant `npm publish` wrote an empty _authToken and the
+        # whole path was untested.
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'publish'
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          set -euo pipefail
           npm config set provenance true
-          COMMIT_SUBJECT=$(git log -1 --pretty=%s)
-          if echo "$COMMIT_SUBJECT" | grep -q "^[0-9]\+\.[0-9]\+\.[0-9]\+$";
-          then
-            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-            npm publish --access public
-          elif echo "$COMMIT_SUBJECT" | grep -q "^[0-9]\+\.[0-9]\+\.[0-9]\+";
-          then
-            echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-            npm publish --tag next --access public
-          else
-            echo "Not a release, skipping publish"
-          fi
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
+          # the workspace packages first, in dependency order (pnpm handles
+          # that): core depends on engine-acorn, and publishing it first would
+          # leave a window where the dependency does not resolve
+          pnpm publish -r --access public --no-git-checks --filter './packages/*'
+          # then the addon, through the napi flow its prepublishOnly runs
+          npm publish --access public
+      - name: Publish skipped
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'publish'
+        run: |
+          echo "Dry run only. To release: run this workflow manually with publish=publish." >> $GITHUB_STEP_SUMMARY
       - name: Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
@@ -492,4 +534,3 @@ jobs:
             hooks/benchChart.svg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
