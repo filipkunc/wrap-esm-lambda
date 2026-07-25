@@ -151,7 +151,7 @@ test('a config specifier that resolves nowhere fails loudly at startup', async (
 // entry — the instrumentation is baked in. The CJS-consumer leg (esbuild,
 // matching how the other specs scope esbuild coverage) drives the appended
 // require() delivery into the dual package's CJS tree.
-for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack', 'rspack']) {
   test(`the packaged config serves build-time delivery: ${bundler} bundle, plain node`, async () => {
     const outDir = await mkdtemp(join(tmpdir(), `wrap-esm-lambda-packaging-${bundler}-`))
     try {

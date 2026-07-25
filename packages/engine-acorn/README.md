@@ -60,7 +60,8 @@ tree-shake on the surviving annotation, and webpack honors a surviving
 cannot change); oxc codegen preserves comments as a feature.
 
 [`__test__/bundlers.spec.ts`](../../__test__/bundlers.spec.ts) runs the full
-tap-shapes fixture through rollup, rolldown and webpack for both engines —
+tap-shapes fixture through rollup, rolldown, webpack and rspack for both
+engines —
 webpack's production pipeline is the harshest consumer, and promptly caught
 the one real divergence: a statement this engine _creates_ must always end
 in `;` even when the source relied on ASI, or webpack's statement removal

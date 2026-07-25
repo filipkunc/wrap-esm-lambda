@@ -14,6 +14,7 @@
 // `require()` (which escapes the aliasing but shares the mutated object)
 // all observe the patch, and a shared globalThis guard keeps the hybrid
 // combination single-patched.
+import { isBuiltin } from 'node:module'
 import { createUnplugin } from 'unplugin'
 import {
   matchEntries,
@@ -44,10 +45,12 @@ function interceptBuiltinRequests(compiler, aliases) {
       if (name !== undefined) {
         const virtual = BUILTIN_PREFIX + name
         resolveData.request = virtual
-        // the externals check reads the DEPENDENCY's request, not
+        // webpack's externals check reads the DEPENDENCY's request, not
         // resolveData's — both must change or the node-externals preset
-        // still externalizes the original builtin id
-        for (const dependency of resolveData.dependencies) {
+        // still externalizes the original builtin id. rspack's resolveData
+        // carries no dependencies array (its externals check reads the
+        // rewritten request), so this loop is webpack-only.
+        for (const dependency of resolveData.dependencies ?? []) {
           dependency.request = virtual
         }
       }
@@ -65,7 +68,26 @@ export const unplugin = createUnplugin((config) => {
       if (aliases.size > 0) interceptBuiltinRequests(compiler, aliases)
     },
     rspack(compiler) {
-      if (aliases.size > 0) interceptBuiltinRequests(compiler, aliases)
+      if (aliases.size > 0) {
+        interceptBuiltinRequests(compiler, aliases)
+        // rspack decides externals in Rust, before the beforeResolve rewrite
+        // is read back — the node preset externalizes the original builtin id
+        // and the virtual module never happens. Carve the configured builtins
+        // out of the preset and reproduce its behavior for every other
+        // builtin with an externals function (which rspack does consult
+        // before its preset would have run).
+        compiler.options.externalsPresets.node = false
+        const existing = compiler.options.externals
+        compiler.options.externals = [
+          ...(existing === undefined ? [] : Array.isArray(existing) ? existing : [existing]),
+          ({ request }, callback) => {
+            if (!aliases.has(request) && isBuiltin(request)) {
+              return callback(null, `node-commonjs ${request}`)
+            }
+            callback()
+          },
+        ]
+      }
     },
     resolveId(id) {
       // identity for the virtual id itself: webpack re-resolves the
