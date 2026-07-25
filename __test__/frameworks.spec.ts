@@ -75,13 +75,26 @@ test('frameworks without the hook: nothing is patched (the ok signals are not am
   assert.match(stdout.trim(), /express:MISS fastify:MISS hono:MISS/)
 })
 
-test('rebinding a getter-only bundled-CJS export fails loudly, never silently', async () => {
+test('rebinding a getter-only bundled-CJS export is reported, never silently accepted', async () => {
   // hono's dist/cjs is sloppy mode with non-configurable getter exports:
   // plain assignment would no-op silently. The tap's verified setter turns
-  // that into a hard error at patch time.
+  // that into an error at patch time — which the runtime shell contains: the
+  // failure is reported on stderr and the app keeps running with hono
+  // unpatched, because a mis-aimed patch entry must not be an outage.
+  const rebindEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.hono-rebind-cjs.mjs') }
+  const { stdout, stderr } = await execFileAsync(
+    process.execPath,
+    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-frameworks.cjs')],
+    { env: rebindEnv },
+  )
+  assert.match(stderr, /rebinding Hono had no effect \(getter-only CJS export\)/)
+  assert.match(stderr, /WRAP_ESM_LAMBDA_STRICT=1 to fail instead/)
+  assert.match(stdout.trim(), /hono:MISS/, 'the app runs on, without the patch')
+
+  // and the loud contract is one env var away — what CI and the suite run with
   const err = await captureRejects(() =>
     execFileAsync(process.execPath, ['--import', '@wrap-esm-lambda/hooks/register', fixture('app-frameworks.cjs')], {
-      env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.hono-rebind-cjs.mjs') },
+      env: { ...rebindEnv, WRAP_ESM_LAMBDA_STRICT: '1' },
     }),
   )
   assert.match((err as Error & { stderr: string }).stderr, /rebinding Hono had no effect \(getter-only CJS export\)/)
