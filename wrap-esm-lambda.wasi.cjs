@@ -113,6 +113,7 @@ module.exports.exportsTap = __napiModule.exports.exportsTap
 module.exports.exportsTapFromBuffer = __napiModule.exports.exportsTapFromBuffer
 module.exports.hasModuleSyntax = __napiModule.exports.hasModuleSyntax
 module.exports.resolveModule = __napiModule.exports.resolveModule
+module.exports.tapContractVersion = __napiModule.exports.tapContractVersion
 module.exports.transformLambda = __napiModule.exports.transformLambda
 module.exports.transformLambdaFromBuffer = __napiModule.exports.transformLambdaFromBuffer
 module.exports.transformLambdaWithChainedMap = __napiModule.exports.transformLambdaWithChainedMap

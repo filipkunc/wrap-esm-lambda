@@ -33,15 +33,7 @@ export declare function esmModuleExports(input: string): EsmExportsInfo
  * module in the rewrite source map; `upstreamMap` chains an
  * already-applied transform's map through the rewrite.
  */
-export declare function exportsTap(
-  input: string,
-  entries: Array<TapEntryInput>,
-  cjs: boolean,
-  registry: boolean,
-  filename?: string | undefined | null,
-  upstreamMap?: string | undefined | null,
-  starResolutions?: Array<TapStarResolution> | undefined | null,
-): TapResult
+export declare function exportsTap(input: string, entries: Array<TapEntryInput>, cjs: boolean, registry: boolean, filename?: string | undefined | null, upstreamMap?: string | undefined | null, starResolutions?: Array<TapStarResolution> | undefined | null): TapResult
 
 /**
  * Buffer-input variant of `exportsTap`, for the runtime hook path where
@@ -54,15 +46,7 @@ export declare function exportsTap(
  * costs the same single conversion). In CJS mode `input` is ignored — pass
  * an empty buffer. Throws if `input` is not valid UTF-8.
  */
-export declare function exportsTapFromBuffer(
-  input: Buffer,
-  entries: Array<TapEntryInput>,
-  cjs: boolean,
-  registry: boolean,
-  filename?: string | undefined | null,
-  upstreamMap?: string | undefined | null,
-  starResolutions?: Array<TapStarResolution> | undefined | null,
-): TapResult
+export declare function exportsTapFromBuffer(input: Buffer, entries: Array<TapEntryInput>, cjs: boolean, registry: boolean, filename?: string | undefined | null, upstreamMap?: string | undefined | null, starResolutions?: Array<TapStarResolution> | undefined | null): TapResult
 
 /**
  * Whether the source contains ESM module syntax (`import`/`export`
@@ -88,6 +72,20 @@ export declare function hasModuleSyntax(input: string): boolean
  * the caller keeps its loud unresolved-star error.
  */
 export declare function resolveModule(specifier: string, fromDir: string): string | null
+
+/**
+ * The version of the transform contract this addon implements: the emitted
+ * snippet shapes plus the `TapEntryInput` / `TapResult` surfaces core depends
+ * on. Bumped whenever one of those changes in a way core has to match.
+ *
+ * Core's package range cannot express this on its own. The addon is an
+ * optional dependency resolved on the consumer's machine, so a core that was
+ * installed with one addon can end up loaded next to another — and a silently
+ * mismatched tap emits code that looks right and patches nothing. Core asks
+ * for this number at bind time and treats a mismatch the same way it treats
+ * an addon that will not load at all.
+ */
+export declare function tapContractVersion(): number
 
 /**
  * One patch entry's inputs to the exports tap — mirrors the JS config entry.
@@ -151,44 +149,22 @@ export declare function transformLambdaFromBuffer(input: Buffer, handler: string
  * handler.ts` map) inside Rust via `oxc_sourcemap`, so the inlined map
  * already reaches the original source — no `@ampproject/remapping` needed.
  */
-export declare function transformLambdaWithChainedMap(
-  input: string,
-  handler: string,
-  wrapper: string,
-  filename: string,
-  upstreamMap: string,
-): string
+export declare function transformLambdaWithChainedMap(input: string, handler: string, wrapper: string, filename: string, upstreamMap: string): string
 
 /**
  * Like `transformLambdaWithChainedMap`, but returns the code and the chained
  * v3 map JSON separately (no inline URL appended).
  */
-export declare function transformLambdaWithChainedMapObject(
-  input: string,
-  handler: string,
-  wrapper: string,
-  filename: string,
-  upstreamMap: string,
-): TransformResult
+export declare function transformLambdaWithChainedMapObject(input: string, handler: string, wrapper: string, filename: string, upstreamMap: string): TransformResult
 
-export declare function transformLambdaWithMap(
-  input: string,
-  handler: string,
-  wrapper: string,
-  filename: string,
-): string
+export declare function transformLambdaWithMap(input: string, handler: string, wrapper: string, filename: string): string
 
 /**
  * Returns the transformed code and the raw v3 source map JSON separately, so a
  * caller can compose the map with an upstream `.ts` -> `.js` map (e.g. from
  * `tsc`) before attaching it.
  */
-export declare function transformLambdaWithMapObject(
-  input: string,
-  handler: string,
-  wrapper: string,
-  filename: string,
-): TransformResult
+export declare function transformLambdaWithMapObject(input: string, handler: string, wrapper: string, filename: string): TransformResult
 
 export interface TransformResult {
   code: string

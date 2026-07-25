@@ -15,7 +15,14 @@
     "./diagnostics": {
       "types": "./dist/diagnostics.d.mts",
       "default": "./dist/diagnostics.mjs"
+    },
+    "./validate": {
+      "types": "./dist/validate.d.mts",
+      "default": "./dist/validate.mjs"
     }
+  },
+  "bin": {
+    "wrap-esm-lambda-validate": "./dist/cli.mjs"
   },
   "files": [
     "dist",

@@ -18,10 +18,6 @@
 // degrade to, and an operator who passed the flag should learn at startup that
 // they got no instrumentation — not from absent telemetry hours later. The
 // disable switch is the deliberate way to say "not now".
-import { existsSync } from 'node:fs'
-import { createRequire } from 'node:module'
-import { isAbsolute, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 // the diagnostics subpath, not core's index: reading one env var must not pull
 // in the transform engine
 import { isDisabled, debug } from '@wrap-esm-lambda/core/diagnostics'
@@ -36,27 +32,15 @@ if (isDisabled()) {
     )
   }
 
-  // A path when it looks like one or names an existing file (so the historical
-  // bare `wrap.config.mjs` keeps meaning ./wrap.config.mjs). Otherwise a
-  // package specifier — resolved from the app's working directory, exactly
-  // where Node resolved the `--import` specifier itself. Importing it bare
-  // from here would instead resolve from the hooks package, which cannot see
-  // the app's dependencies under pnpm's strict layout.
-  const isPath = configPath.startsWith('.') || isAbsolute(configPath) || existsSync(configPath)
-  let configUrl
-  if (isPath) {
-    configUrl = pathToFileURL(configPath).href
-  } else {
-    const requireFromApp = createRequire(join(process.cwd(), 'noop.js'))
-    try {
-      configUrl = pathToFileURL(requireFromApp.resolve(configPath)).href
-    } catch (err) {
-      throw new Error(
-        `@wrap-esm-lambda/hooks/register: WRAP_ESM_LAMBDA_CONFIG '${configPath}' is neither an existing file nor a package specifier resolvable from ${process.cwd()}`,
-        { cause: err },
-      )
-    }
-  }
+  // Resolution rule lives in core (locate.mts) and is shared with
+  // `wrap-esm-lambda-validate`: a config that resolves for the validator but
+  // not for this entry — or the reverse — would be the worst kind of trap.
+  const { resolveConfigUrl } = await import('@wrap-esm-lambda/core')
+  const configUrl = resolveConfigUrl(
+    configPath,
+    `@wrap-esm-lambda/hooks/register: WRAP_ESM_LAMBDA_CONFIG`,
+    process.cwd(),
+  )
   const { default: config } = await import(configUrl)
   const { registerConfig } = await import('./index.mjs')
   await registerConfig(config)

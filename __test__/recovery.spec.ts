@@ -2,7 +2,10 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { fileURLToPath } from 'node:url'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { captureRejects } from './helpers'
 
 // The failure policy: what happens when instrumentation cannot do its job.
@@ -108,6 +111,75 @@ test('a binding that moved in a dependency bump costs the patch, not the process
     runApp(config, { WRAP_ESM_LAMBDA_STRICT: '1' }, 'app-frameworks.mjs'),
   )
   assert.match(err.stderr, /'HonoRenamedInV5' not found in module/)
+})
+
+test('build-time delivery contains a throwing patch too', async () => {
+  // The runtime shell contains a throwing patch in the function it registers,
+  // but a bundle has no registry: the emitted code calls the user's function
+  // directly, so the containment has to be emitted with it. Same policy, same
+  // strict-mode escape hatch, no runtime dependency added to the artifact.
+  const { build } = await import('esbuild')
+  const { unplugin } = await import('@wrap-esm-lambda/unplugin')
+  const { default: config } = await import(pathToFileURL(fixture('wrap.config.recover-throwing-patch.mjs')).href)
+  const outDir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-recovery-'))
+  try {
+    const outfile = join(outDir, 'bundle.mjs')
+    await build({
+      entryPoints: [fixture('app.mjs')],
+      bundle: true,
+      format: 'esm',
+      platform: 'node',
+      outfile,
+      plugins: [unplugin.esbuild(config)],
+      logLevel: 'silent',
+    })
+    const bundled = await readFile(outfile, 'utf8')
+    assert.ok(bundled.includes('catch (__wel_err)'), 'the guard is baked into the artifact')
+
+    // plain node, no hooks, no env: the patch throws and the app runs on
+    const { stdout, stderr } = await execFileAsync(process.execPath, [outfile])
+    assert.match(stderr, /patch code is broken/)
+    assert.match(stderr, /failed, continuing without it/)
+    assert.strictEqual(stdout.trim(), 'sent:hello', 'the module evaluated, unpatched')
+
+    // and the same artifact fails loudly under strict mode
+    const err = await captureRejects<Error & { stderr: string }>(() =>
+      execFileAsync(process.execPath, [outfile], { env: { ...process.env, WRAP_ESM_LAMBDA_STRICT: '1' } }),
+    )
+    assert.match(err.stderr, /patch code is broken/)
+
+    // '0' and 'false' are off, exactly as the runtime shell reads them
+    const notStrict = await execFileAsync(process.execPath, [outfile], {
+      env: { ...process.env, WRAP_ESM_LAMBDA_STRICT: '0' },
+    })
+    assert.strictEqual(notStrict.stdout.trim(), 'sent:hello')
+  } finally {
+    await rm(outDir, { recursive: true, force: true })
+  }
+})
+
+test('the engines report the same transform contract version core expects', async () => {
+  // Core's package range cannot police this: the addon is an optional
+  // dependency resolved on the consumer's machine, so a mismatch is possible
+  // and worse than a missing addon — code that looks right and patches
+  // nothing. Both engines answer, and core refuses an engine that disagrees.
+  const oxc = await import('../index.js')
+  const acorn = await import('@wrap-esm-lambda/engine-acorn')
+  assert.strictEqual(oxc.tapContractVersion(), core.TAP_CONTRACT_VERSION)
+  assert.strictEqual(acorn.tapContractVersion(), core.TAP_CONTRACT_VERSION)
+
+  // an engine that loads but reports the wrong contract is rejected like one
+  // that will not load at all — for the default engine, that means degrading
+  const wrongContract = {
+    oxc: () => Promise.resolve({ tapContractVersion: () => 999 }),
+    acorn: () => Promise.resolve({ tapContractVersion: () => core.TAP_CONTRACT_VERSION }),
+  }
+  const verify = (engine: { tapContractVersion(): number }) => {
+    if (engine.tapContractVersion() !== core.TAP_CONTRACT_VERSION) throw new Error('transform contract mismatch')
+  }
+  const selected = await core.selectEngine(undefined, wrongContract, { verify })
+  assert.strictEqual(selected.engineName, 'acorn', 'a mismatched addon degrades to the JS engine')
+  await assert.rejects(() => core.selectEngine('oxc', wrongContract, { verify }), /contract mismatch/)
 })
 
 test('recovered failures are retrievable, not just printed', async () => {

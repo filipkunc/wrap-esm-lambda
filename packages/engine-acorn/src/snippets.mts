@@ -104,13 +104,36 @@ export function buildSnippet(
     )
   }
   const alias = `__wel_patch_${aliasIndex}`
+  const call = guardedCall(alias, `${patchFrom}#${patchName}`, props)
   if (cjs) {
-    return (
-      `\n;(() => {\nconst { ${patchName}: ${alias} } = require(${quoteJsString(patchFrom)});\n` +
-      `${alias}({${props}\n});\n})();\n`
-    )
+    return `\n;(() => {\nconst { ${patchName}: ${alias} } = require(${quoteJsString(patchFrom)});\n${call}})();\n`
   }
-  return `\nimport { ${patchName} as ${alias} } from ${quoteJsString(patchFrom)};\n${alias}({${props}\n});\n`
+  return `\nimport { ${patchName} as ${alias} } from ${quoteJsString(patchFrom)};\n${call}`
+}
+
+/**
+ * The patch call itself, in import delivery: wrapped so a throwing patch
+ * cannot break the evaluation of the module it patches. The runtime shell
+ * contains that failure in the function it registers (@wrap-esm-lambda/hooks,
+ * guardPatch), but a bundled artifact has no registry to wrap — the emitted
+ * code calls the user's function directly, so the containment is emitted too.
+ *
+ * Deliberate properties: WRAP_ESM_LAMBDA_STRICT is read with the same
+ * semantics as the runtime shell (unset, empty, `0` and `false` are off), a
+ * `process`-less bundle does not throw a second error out of the catch, and
+ * the report matches the runtime's message shape so one grep finds both. The
+ * `__wel_err` / `__wel_s` bindings are block-scoped to the catch, so several
+ * entries in one module cannot collide.
+ *
+ * Byte-identical to the native engine's `push_guarded_call` (src/transform.rs).
+ */
+function guardedCall(alias: string, key: string, props: string): string {
+  return (
+    `try {\n${alias}({${props}\n});\n} catch (__wel_err) {\n` +
+    'const __wel_s = typeof process === "undefined" ? "" : process.env.WRAP_ESM_LAMBDA_STRICT;\n' +
+    'if (__wel_s && __wel_s !== "0" && __wel_s !== "false") throw __wel_err;\n' +
+    `console.error(${quoteJsString(`wrap-esm-lambda: patch '${key}' failed, continuing without it:`)}, __wel_err);\n}\n`
+  )
 }
 
 /**

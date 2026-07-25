@@ -21,11 +21,17 @@
 /** The engine used when the default one cannot be loaded. */
 export const FALLBACK_ENGINE = 'acorn'
 
-export interface SelectEngineOptions {
+export interface SelectEngineOptions<Engine> {
   /** The engine to bind when WRAP_ESM_LAMBDA_ENGINE is unset. */
   defaultEngine?: string
   /** Called with the load failure just before the fallback is bound. */
   onFallback?: (err: unknown) => void
+  /**
+   * Checked against a freshly loaded engine; throwing rejects it exactly as a
+   * failed import would, so an engine that loads but cannot be trusted (a
+   * mismatched transform contract) degrades down the same path.
+   */
+  verify?: (engine: Engine) => void
 }
 
 /**
@@ -35,9 +41,9 @@ export interface SelectEngineOptions {
 export async function selectEngine<Engine>(
   requested: string | undefined,
   loaders: Record<string, () => Promise<Engine>>,
-  options: SelectEngineOptions = {},
+  options: SelectEngineOptions<Engine> = {},
 ): Promise<{ engineName: string; engine: Engine }> {
-  const { defaultEngine = 'oxc', onFallback } = options
+  const { defaultEngine = 'oxc', onFallback, verify } = options
   const explicit = requested !== undefined && requested !== ''
   const name = explicit ? requested : defaultEngine
   if (!Object.hasOwn(loaders, name)) {
@@ -46,7 +52,9 @@ export async function selectEngine<Engine>(
     )
   }
   try {
-    return { engineName: name, engine: await loaders[name]!() }
+    const engine = await loaders[name]!()
+    verify?.(engine)
+    return { engineName: name, engine }
   } catch (err) {
     // An explicit request, or a failure of the fallback itself: nothing left
     // to degrade to, so this is the loud path.
@@ -57,7 +65,9 @@ export async function selectEngine<Engine>(
     try {
       const fallback = loaders[FALLBACK_ENGINE]
       if (fallback === undefined) throw err
-      return { engineName: FALLBACK_ENGINE, engine: await fallback() }
+      const engine = await fallback()
+      verify?.(engine)
+      return { engineName: FALLBACK_ENGINE, engine }
     } catch (fallbackErr) {
       throw new Error(
         `wrap-esm-lambda: neither the '${name}' engine nor the '${FALLBACK_ENGINE}' fallback could be loaded`,
