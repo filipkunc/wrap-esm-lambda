@@ -24,6 +24,35 @@ import { fileURLToPath } from 'node:url'
 const execFileAsync = promisify(execFile)
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
+/**
+ * How to invoke pnpm here — or null when there is none to invoke.
+ *
+ * Two things make this less obvious than it looks. `execFile` cannot spawn a
+ * `.cmd` shim (Node refuses batch files without a shell since CVE-2024-27980),
+ * which is what `pnpm` is on Windows; and the container lanes run the suite
+ * under plain `node` in an image that ships no package manager at all. So:
+ * prefer the JS entry point pnpm exports when the suite was started through it,
+ * fall back to a shell lookup, and skip if neither answers.
+ */
+async function findPnpm(): Promise<((args: string[], cwd: string) => Promise<string>) | null> {
+  const execpath = process.env.npm_execpath
+  if (execpath !== undefined && /pnpm/i.test(execpath) && existsSync(execpath)) {
+    return async (args, cwd) => (await execFileAsync(process.execPath, [execpath, ...args], { cwd })).stdout
+  }
+  try {
+    await execFileAsync('pnpm', ['--version'], { shell: true })
+    return async (args, cwd) => (await execFileAsync('pnpm', args, { cwd, shell: true })).stdout
+  } catch {
+    return null
+  }
+}
+
+const pnpm = await findPnpm()
+// The lanes that do have pnpm — every runner-hosted one, plus local dev — cover
+// this; the container lanes exist to exercise the prebuilt binding in an image,
+// not to re-check packaging.
+const testPacking = pnpm === null ? test.skip : test
+
 const PACKAGES = ['core', 'engine-acorn', 'hooks', 'unplugin'] as const
 /**
  * Third-party runtime deps of the packed packages, and which package declares
@@ -68,11 +97,10 @@ interface Manifest {
 }
 
 async function packAll(dest: string): Promise<Map<string, string>> {
+  assert.ok(pnpm, 'packAll needs pnpm; these tests skip without it')
   const tarballs = new Map<string, string>()
   for (const pkg of PACKAGES) {
-    const { stdout } = await execFileAsync('pnpm', ['pack', '--pack-destination', dest], {
-      cwd: join(repoRoot, 'packages', pkg),
-    })
+    const stdout = await pnpm(['pack', '--pack-destination', dest], join(repoRoot, 'packages', pkg))
     const tgz = stdout
       .split('\n')
       .map((line) => line.trim())
@@ -90,7 +118,7 @@ async function extract(tgz: string, into: string): Promise<void> {
   await execFileAsync('tar', ['-xzf', tgz, '-C', into, '--strip-components=1'])
 }
 
-test('every path a manifest promises is inside the tarball', async () => {
+testPacking('every path a manifest promises is inside the tarball', async () => {
   const dest = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-pack-'))
   try {
     const tarballs = await packAll(dest)
@@ -123,7 +151,7 @@ test('every path a manifest promises is inside the tarball', async () => {
   }
 })
 
-test('an app installed from the tarballs alone instruments a package', async () => {
+testPacking('an app installed from the tarballs alone instruments a package', async () => {
   const dest = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-install-'))
   try {
     const tarballs = await packAll(dest)
