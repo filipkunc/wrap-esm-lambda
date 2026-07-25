@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 // Reach comparison against import-in-the-middle (the loader-proxy mechanism
 // OTel/dd-trace use for ESM today), on the same fixture package the exports
@@ -21,7 +21,10 @@ const { supportsSyncHooks } = await import('import-in-the-middle/supports-sync-h
 const testSyncIitm = supportsSyncHooks() ? test : test.skip
 
 const run = async (setup: string, app: string) => {
-  const { stdout } = await execFileAsync(process.execPath, ['--import', fixture(setup), fixture(app)])
+  // --import takes a URL (or a relative/bare specifier), not an absolute path:
+  // on Windows 'D:\\...' parses as a URL with scheme 'd:' and Node refuses it
+  const setupUrl = pathToFileURL(fixture(setup)).href
+  const { stdout } = await execFileAsync(process.execPath, ['--import', setupUrl, fixture(app)])
   return stdout.trim()
 }
 

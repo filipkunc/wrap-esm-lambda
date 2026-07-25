@@ -101,11 +101,15 @@ test('resolveModule: both engines resolve import-style, byte-identical paths', (
   for (const [specifier, suffix] of cases) {
     const fromOxc = oxc.resolveModule(specifier, shapesDir)
     const fromAcorn = (acorn as Engine).resolveModule(specifier, shapesDir)
+    // byte-identical between engines is the actual contract, on every platform
     assert.strictEqual(fromAcorn, fromOxc, `engines agree on ${specifier}`)
     if (suffix === null) {
       assert.strictEqual(fromOxc, null, `${specifier} resolves nowhere`)
     } else {
-      assert.ok(fromOxc !== null && fromOxc.endsWith(suffix), `${specifier} -> .../${suffix} (got ${fromOxc})`)
+      // the expected suffixes are written '/'-separated; both resolvers answer
+      // in the platform's separators (backslashes on Windows)
+      const resolved = fromOxc === null ? null : fromOxc.replaceAll('\\', '/')
+      assert.ok(resolved !== null && resolved.endsWith(suffix), `${specifier} -> .../${suffix} (got ${fromOxc})`)
     }
   }
 })
