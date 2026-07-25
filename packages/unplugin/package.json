@@ -10,6 +10,9 @@
     "src"
   ],
   "license": "MIT",
+  "engines": {
+    "node": ">= 22.0.0"
+  },
   "dependencies": {
     "@wrap-esm-lambda/core": "workspace:^",
     "unplugin": "^3.3.0"

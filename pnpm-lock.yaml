@@ -8,10 +8,6 @@ packageExtensionsChecksum: sha256-CLhVnJ9VAsNyhYkH4VNkQwrvI/R0wguRlJ7c2P+4rBg=
 
 importers:
   .:
-    dependencies:
-      chart.js:
-        specifier: ^4.5.0
-        version: 4.5.0
     devDependencies:
       '@apm-js-collab/code-transformer':
         specifier: ^0.18.0
@@ -100,6 +96,9 @@ importers:
       chalk:
         specifier: ^5.4.1
         version: 5.4.1
+      chart.js:
+        specifier: ^4.5.0
+        version: 4.5.0
       chartjs-node-canvas:
         specifier: ^5.0.0
         version: 5.0.0(chart.js@4.5.0)
@@ -207,6 +206,7 @@ importers:
       '@wrap-esm-lambda/engine-acorn':
         specifier: workspace:^
         version: link:../engine-acorn
+    optionalDependencies:
       wrap-esm-lambda:
         specifier: workspace:^
         version: link:../..

@@ -186,15 +186,30 @@ jobs:
           options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
           # node:25+ images bundle no package manager (yarn/corepack removed);
           # the suite runs on node's own test runner, so plain node suffices.
+          # WRAP_ESM_LAMBDA_ENGINE=oxc is EXPLICIT on purpose: core falls back
+          # to the pure-JS engine when the addon cannot be loaded, and an
+          # implicit run would turn a broken or missing native artifact into a
+          # green acorn run. Naming the engine makes the native lane fail.
           # Second run: the whole suite again on the pure-JS acorn engine, so
           # the JS-only mode stays as covered as the native one.
           run: |
-            OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+            WRAP_ESM_LAMBDA_ENGINE=oxc OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
             WRAP_ESM_LAMBDA_ENGINE=acorn OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
   test-wasi:
-    name: Test WASI target
+    name: Test WASI target - node@${{ matrix.node }}
     needs:
       - build
+    # The WASI build is the reach onto every platform with no prebuilt addon,
+    # so it carries the same Node matrix as the native lane rather than being
+    # spot-checked on one version: its runtime (@napi-rs/wasm-runtime, wasi
+    # threads) is exactly the layer Node keeps moving under us.
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - '22'
+          - '24'
+          - '26'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -203,7 +218,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: pnpm
       # The wasi runtime (@napi-rs/wasm-runtime) is a regular devDependency,
       # so a plain install suffices — no per-arch config needed.
@@ -221,6 +236,44 @@ jobs:
         run: pnpm test
         env:
           NAPI_RS_FORCE_WASI: 1
+          # explicit, like the native lane: a wasi binding that fails to load
+          # must fail this job, not quietly become an acorn run
+          WRAP_ESM_LAMBDA_ENGINE: oxc
+  test-js-only:
+    name: Test JS-only fallback - node@${{ matrix.node }}
+    # No artifact download and no Rust: the shape a consumer gets on a
+    # platform with no prebuilt addon (and the one npm's optional-dependency
+    # bug produces). Core degrades to the acorn engine with a warning instead
+    # of throwing out of `--import`, and this proves the degraded mode end to
+    # end on every supported major — not just in a unit test.
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - '22'
+          - '24'
+          - '26'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install
+      - name: Test with no native binding present
+        # The excluded specs are the ones that reach for the addon directly
+        # (`../index`) or pin WRAP_ESM_LAMBDA_ENGINE=oxc in a child process —
+        # both are native-by-construction and covered by test-linux-binding.
+        run: |
+          SPECS=$(ls __test__/*.spec.ts | grep -vE 'index\.spec|orchestrion-compare|patch\.spec|engine-parity|bundlers|comment-preservation')
+          echo "$SPECS"
+          OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test $SPECS
+        shell: bash
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -231,6 +284,7 @@ jobs:
       - lint
       - test-linux-binding
       - test-wasi
+      - test-js-only
     steps:
       - uses: actions/checkout@v4
       - name: Setup pnpm
