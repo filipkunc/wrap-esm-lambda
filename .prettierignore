@@ -5,11 +5,18 @@ index.js
 index.d.ts
 # pnpm writes this in its own canonical style; formatting it only creates churn
 pnpm-lock.yaml
-package-template.wasi-browser.js
-package-template.wasi.cjs
+# these are the napi template's names; the generated files in THIS repo carry
+# the binary name, and prettier was reformatting them on every sweep only for
+# the next `napi build` to write them back
+wrap-esm-lambda.wasi-browser.js
+wrap-esm-lambda.wasi.cjs
 wasi-worker-browser.mjs
 wasi-worker.mjs
 .yarnrc.yml
 # Source-map demo fixture: the blank lines are load-bearing (they are what
 # codegen strips to shift the throw's line), so prettier must not touch them.
 hooks/sourcemap-demo/handler-throws.mjs
+# Generated tables: update-bench-table.mjs and interplay-matrix/run.mjs write
+# these, so reformatting them here just means the next run undoes it.
+hooks/benchTable.md
+hooks/interplay-matrix/matrix.md

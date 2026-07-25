@@ -10,18 +10,18 @@ The problem: How to transform AWS Lambda `handler` below?
 
 ```js
 // input.js
-export const handler = async(event) => {
-    return "Hi from AWS Lambda";
-};
+export const handler = async (event) => {
+  return 'Hi from AWS Lambda'
+}
 ```
 
 To the following, notice the `WrapAwsLambda` wrapper:
 
 ```js
 // transformed.js
-export const handler = WrapAwsLambda(async(event) => {
-    return "Hi from AWS Lambda";
-});
+export const handler = WrapAwsLambda(async (event) => {
+  return 'Hi from AWS Lambda'
+})
 ```
 
 ---
@@ -34,8 +34,8 @@ Built-in Node.js mechanism to hook into the ESM `import`: https://nodejs.org/api
 
 ```js
 // register_async_hooks.mjs
-import { register } from "node:module";
-register("./async-hooks.mjs", import.meta.url);
+import { register } from 'node:module'
+register('./async-hooks.mjs', import.meta.url)
 ```
 
 Add `--import` to register hooks:
@@ -52,18 +52,19 @@ _The hooks `load` function runs on a dedicated thread!_
 
 ```js
 // async_hooks.mjs
-import { transformLambda } from "./myTransform.js";
-let patched = false;
+import { transformLambda } from './myTransform.js'
+let patched = false
 export async function load(url, context, nextLoad) {
-    const result = await nextLoad(url, context);
-    if (!patched && url.endsWith("/handler.mjs")) {
-        patched = true;
-        return {
-            format: "module", shortCircuit: true,
-            source: transformLambda(result.source.toString(), "handler", "WrapAwsLambda")
-        };
+  const result = await nextLoad(url, context)
+  if (!patched && url.endsWith('/handler.mjs')) {
+    patched = true
+    return {
+      format: 'module',
+      shortCircuit: true,
+      source: transformLambda(result.source.toString(), 'handler', 'WrapAwsLambda'),
     }
-    return result;
+  }
+  return result
 }
 ```
 
@@ -87,9 +88,11 @@ export async function load(url, context, nextLoad) { ... }
 ```sh
 node --import ./async-hooks-babel-one-file.mjs runtime.mjs
 ```
+
 but it adds significant overhead:
- * `208.6 ± 6.1 ms` for separate register file + hook file using Babel
- * `324.8 ± 5.3 ms` for all in one file using Babel
+
+- `208.6 ± 6.1 ms` for separate register file + hook file using Babel
+- `324.8 ± 5.3 ms` for all in one file using Babel
 
 ---
 
@@ -97,23 +100,23 @@ but it adds significant overhead:
 
 ```js
 // sync_hooks.mjs
-import { registerHooks } from "node:module";
-import { transformLambda } from "./myTransform.js";
-let patched = false;
+import { registerHooks } from 'node:module'
+import { transformLambda } from './myTransform.js'
+let patched = false
 registerHooks({
   load(url, context, nextLoad) {
-    const result = nextLoad(url, context);
-    if (!patched && url.endsWith("/handler.mjs")) {
-      patched = true;
+    const result = nextLoad(url, context)
+    if (!patched && url.endsWith('/handler.mjs')) {
+      patched = true
       return {
-        format: "module",
+        format: 'module',
         shortCircuit: true,
-        source: transformLambda(result.source.toString(), "handler", "WrapAwsLambda")
-      };
+        source: transformLambda(result.source.toString(), 'handler', 'WrapAwsLambda'),
+      }
     }
-    return result;
+    return result
   },
-});
+})
 ```
 
 ---
@@ -125,10 +128,7 @@ Naive approach using `RegExp()` for direct string manipulation:
 ```ts
 // regex-transform.ts
 export function transformLambda(input: string, handler: string, wrapper: string): string {
-  return input.replace(
-    new RegExp(`export const ${handler} = (.+);`, "s"),
-    `export const ${handler} = ${wrapper}($1);`
-  );
+  return input.replace(new RegExp(`export const ${handler} = (.+);`, 's'), `export const ${handler} = ${wrapper}($1);`)
 }
 ```
 
@@ -163,21 +163,21 @@ ExportNamedDeclaration(path) {
 Acorn is only a parser, `estraverse` and `astring` adds traversing and codegen.
 
 ```ts
-const ast = acorn.parse(code, { ecmaVersion: 2020, sourceType: "module" });
+const ast = acorn.parse(code, { ecmaVersion: 2020, sourceType: 'module' })
 estraverse.replace(ast as ESTree.Node, {
   enter: function (node) {
-    if (node.type === "ExportNamedDeclaration" 
-     && node.declaration?.type === "VariableDeclaration") {
-      const varDecl = node.declaration.declarations[0];
-      if (varDecl.id.type === "Identifier" && varDecl.id.name === handler) {
-        varDecl.init = NESTree.CallExpression(Helpers.AutoChain(wrapper),
-          [varDecl.init as NESTree.Expression]) as ESTree.Expression;
+    if (node.type === 'ExportNamedDeclaration' && node.declaration?.type === 'VariableDeclaration') {
+      const varDecl = node.declaration.declarations[0]
+      if (varDecl.id.type === 'Identifier' && varDecl.id.name === handler) {
+        varDecl.init = NESTree.CallExpression(Helpers.AutoChain(wrapper), [
+          varDecl.init as NESTree.Expression,
+        ]) as ESTree.Expression
       }
-      return { ...node };
+      return { ...node }
     }
-  }
-});
-return astring.generate(ast);
+  },
+})
+return astring.generate(ast)
 ```
 
 ---
@@ -199,7 +199,7 @@ pub fn transform_lambda(input: String) -> String {
 ```
 
 ```js
-const output = transformLambda(input);
+const output = transformLambda(input)
 ```
 
 ---
@@ -243,14 +243,14 @@ start, kept for scale: ~25.8 ms vs ~24.3 ms for the regex hook.)
 
 Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/bin/time -v` for Max RSS:
 
-| Hook | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
-|:---|---:|---:|---:|---:|---:|
-| regex | 24.3 ± 0.9 | 22.8 | 28.6 | 1.03 ± 0.06 | 44.24 |
-| oxc | 35.6 ± 1.0 | 33.9 | 38.4 | 1.51 ± 0.09 | 54.92 |
-| acorn | 45.0 ± 1.4 | 43.2 | 50.5 | 1.91 ± 0.11 | 56.30 |
-| swc plugin | 127.4 ± 4.3 | 120.8 | 135.1 | 5.42 ± 0.33 | 371.61 |
-| babel | 180.0 ± 4.0 | 172.1 | 188.2 | 7.66 ± 0.42 | 82.51 |
-| async babel | 211.4 ± 4.2 | 205.9 | 220.3 | 9.00 ± 0.49 | 90.44 |
+| Hook        |   Mean [ms] | Min [ms] | Max [ms] |    Relative | Max RSS [MB] |
+| :---------- | ----------: | -------: | -------: | ----------: | -----------: |
+| regex       |  24.3 ± 0.9 |     22.8 |     28.6 | 1.03 ± 0.06 |        44.24 |
+| oxc         |  35.6 ± 1.0 |     33.9 |     38.4 | 1.51 ± 0.09 |        54.92 |
+| acorn       |  45.0 ± 1.4 |     43.2 |     50.5 | 1.91 ± 0.11 |        56.30 |
+| swc plugin  | 127.4 ± 4.3 |    120.8 |    135.1 | 5.42 ± 0.33 |       371.61 |
+| babel       | 180.0 ± 4.0 |    172.1 |    188.2 | 7.66 ± 0.42 |        82.51 |
+| async babel | 211.4 ± 4.2 |    205.9 |    220.3 | 9.00 ± 0.49 |        90.44 |
 
 ---
 

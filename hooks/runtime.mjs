@@ -1,5 +1,5 @@
-import './wrap.mjs';
-import { handler } from './handler.mjs';
+import './wrap.mjs'
+import { handler } from './handler.mjs'
 
-const res = await handler({ foo: 'bar' }, {});
-console.log(res);
+const res = await handler({ foo: 'bar' }, {})
+console.log(res)

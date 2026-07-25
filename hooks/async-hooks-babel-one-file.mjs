@@ -1,17 +1,18 @@
-import { register } from "node:module";
-register(import.meta.url);
+import { register } from 'node:module'
+register(import.meta.url)
 
-import { transformLambda } from "../benchmark/lib/babel-transform.js";
+import { transformLambda } from '../benchmark/lib/babel-transform.js'
 
-let patched = false;
+let patched = false
 export async function load(url, context, nextLoad) {
-    const result = await nextLoad(url, context);
-    if (!patched && url.endsWith("/handler.mjs")) {
-        patched = true;
-        return {
-            format: "module", shortCircuit: true,
-            source: transformLambda(result.source.toString(), "handler", "WrapAwsLambda")
-        };
+  const result = await nextLoad(url, context)
+  if (!patched && url.endsWith('/handler.mjs')) {
+    patched = true
+    return {
+      format: 'module',
+      shortCircuit: true,
+      source: transformLambda(result.source.toString(), 'handler', 'WrapAwsLambda'),
     }
-    return result;
+  }
+  return result
 }

@@ -1,82 +1,84 @@
-import * as fs from "node:fs";
-import { ChartJSNodeCanvas } from "chartjs-node-canvas";
+import * as fs from 'node:fs'
+import { ChartJSNodeCanvas } from 'chartjs-node-canvas'
 
-let commands = [];
-let times = [];
-let memory = [];
+let commands = []
+let times = []
+let memory = []
 
 /** @type { string[] } */
-let benchTableLines = fs.readFileSync("benchTable.md", "utf-8").split("\n");
-benchTableLines.splice(1, 1);
+let benchTableLines = fs.readFileSync('benchTable.md', 'utf-8').split('\n')
+benchTableLines.splice(1, 1)
 for (let i = 0; i < benchTableLines.length; ++i) {
-  let entries = benchTableLines[i].split('|').slice(1, -1);
+  let entries = benchTableLines[i].split('|').slice(1, -1)
   for (let j = 0; j < entries.length; ++j) {
-    entries[j] = entries[j].trim();
+    entries[j] = entries[j].trim()
     if (entries[j].startsWith('`')) {
-      entries[j] = entries[j].slice(1, -1);
+      entries[j] = entries[j].slice(1, -1)
     }
   }
-  benchTableLines[i] = entries.join(',');
+  benchTableLines[i] = entries.join(',')
   if (i > 0 && benchTableLines[i].length > 0) {
-    commands.push(entries[0].replace("runtime.mjs", "")
-    .replace("node --import", "")
-    .replace("./", "")
-    .replace(".mjs", ""));
-    times.push(+(entries[1].split('±')[0]));
-    memory.push(+entries[entries.length - 1]);
+    commands.push(
+      entries[0].replace('runtime.mjs', '').replace('node --import', '').replace('./', '').replace('.mjs', ''),
+    )
+    times.push(+entries[1].split('±')[0])
+    memory.push(+entries[entries.length - 1])
   }
 }
 
-const canvas = new ChartJSNodeCanvas({ width: 800, height: 500, backgroundColour: "#333333", type: "svg" });
+const canvas = new ChartJSNodeCanvas({ width: 800, height: 500, backgroundColour: '#333333', type: 'svg' })
 
 /** @type { import("chart.js").ChartConfiguration } */
 const config = {
-  type: "bar",
+  type: 'bar',
   data: {
-    datasets: [{
-      label: "Mean [ms]",
-      data: times,
-      borderWidth: 1,
-    }, {
-      label: "Max RSS [MB]",
-      data: memory,
-      borderWidth: 1,
-    }],
-    labels: commands
+    datasets: [
+      {
+        label: 'Mean [ms]',
+        data: times,
+        borderWidth: 1,
+      },
+      {
+        label: 'Max RSS [MB]',
+        data: memory,
+        borderWidth: 1,
+      },
+    ],
+    labels: commands,
   },
   options: {
-    indexAxis: "y",
+    indexAxis: 'y',
     animation: false,
     responsive: false,
     maintainAspectRatio: false,
     scales: {
       x: {
         grid: {
-          color: "#65656569",
+          color: '#65656569',
         },
         ticks: {
-          color: "#f2f0f0ff"
-        }
+          color: '#f2f0f0ff',
+        },
       },
       y: {
         grid: {
-          color: "#65656569",
+          color: '#65656569',
         },
         ticks: {
-          color: "#f2f0f0ff"
-        }
-      }
+          color: '#f2f0f0ff',
+        },
+      },
     },
     plugins: {
       legend: {
         display: true,
         labels: {
-          color: "#f2f0f0ff"
-        }
-      }
-    }
-  }
-};
+          color: '#f2f0f0ff',
+        },
+      },
+    },
+  },
+}
 
-const buffer = canvas.renderToBufferSync(config);
-fs.writeFileSync("benchChart.svg", buffer);
+const buffer = canvas.renderToBufferSync(config)
+fs.writeFileSync('benchChart.svg', buffer)

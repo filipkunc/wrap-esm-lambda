@@ -10,7 +10,7 @@ class: invert
 
 Disclaimer:
 
-*This presentation and the code were heavily "vibe-coded" — proceed with good vibes and a cup of coffee ☕️.*
+_This presentation and the code were heavily "vibe-coded" — proceed with good vibes and a cup of coffee ☕️._
 
 ---
 
@@ -24,13 +24,15 @@ Disclaimer:
 ## Example (before → after)
 
 Before:
+
 ```js
-export const handler = async (event) => ({ status: 200, body: 'ok' });
+export const handler = async (event) => ({ status: 200, body: 'ok' })
 ```
 
 After:
+
 ```js
-export const handler = WrapAwsLambda(async (event) => ({ status: 200, body: 'ok' }));
+export const handler = WrapAwsLambda(async (event) => ({ status: 200, body: 'ok' }))
 ```
 
 Why: add observability hooks while preserving the original behavior of user code.
@@ -62,6 +64,7 @@ pub fn transform_lambda(input: String) -> String {
 ```
 
 Responsibilities:
+
 - `transform_lambda_source` — decode, run AST transform, codegen, and return result.
 - `LambdaTransform` — the AST walker/transformation logic (see next slides).
 
@@ -125,19 +128,22 @@ This pattern drains the program body and rebuilds it with transformed statements
 ## Usage (loader example)
 
 ```js
-import { registerHooks } from 'node:module';
-import { transformLambda } from '../index.js';
+import { registerHooks } from 'node:module'
+import { transformLambda } from '../index.js'
 
 registerHooks({
   load(url, ctx, next) {
-    const res = next(url, ctx);
+    const res = next(url, ctx)
     if (url.endsWith('/handler.mjs')) {
-      return { format: 'module', shortCircuit: true,
-        source: transformLambda(res.source.toString(), 'handler', 'WrapAwsLambda') };
+      return {
+        format: 'module',
+        shortCircuit: true,
+        source: transformLambda(res.source.toString(), 'handler', 'WrapAwsLambda'),
+      }
     }
-    return res;
-  }
-});
+    return res
+  },
+})
 ```
 
 To run the hook above use:
@@ -172,7 +178,6 @@ Use unit tests (like the `test_var_transform` above) to validate transform input
 
 ---
 
-
 ## Frida detours (retired)
 
 An earlier variant intercepted `libc` `open()`/`read()` and `uv_fs_fstat()`
@@ -192,14 +197,14 @@ README's "Frida hooking (removed)" section keeps the issue trail.
 
 Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/bin/time -v` for Max RSS:
 
-| Hook | Mean [ms] | Min [ms] | Max [ms] | Relative | Max RSS [MB] |
-|:---|---:|---:|---:|---:|---:|
-| regex | 24.3 ± 0.9 | 22.8 | 28.6 | 1.03 ± 0.06 | 44.24 |
-| oxc | 35.6 ± 1.0 | 33.9 | 38.4 | 1.51 ± 0.09 | 54.92 |
-| acorn | 45.0 ± 1.4 | 43.2 | 50.5 | 1.91 ± 0.11 | 56.30 |
-| swc plugin | 127.4 ± 4.3 | 120.8 | 135.1 | 5.42 ± 0.33 | 371.61 |
-| babel | 180.0 ± 4.0 | 172.1 | 188.2 | 7.66 ± 0.42 | 82.51 |
-| async babel | 211.4 ± 4.2 | 205.9 | 220.3 | 9.00 ± 0.49 | 90.44 |
+| Hook        |   Mean [ms] | Min [ms] | Max [ms] |    Relative | Max RSS [MB] |
+| :---------- | ----------: | -------: | -------: | ----------: | -----------: |
+| regex       |  24.3 ± 0.9 |     22.8 |     28.6 | 1.03 ± 0.06 |        44.24 |
+| oxc         |  35.6 ± 1.0 |     33.9 |     38.4 | 1.51 ± 0.09 |        54.92 |
+| acorn       |  45.0 ± 1.4 |     43.2 |     50.5 | 1.91 ± 0.11 |        56.30 |
+| swc plugin  | 127.4 ± 4.3 |    120.8 |    135.1 | 5.42 ± 0.33 |       371.61 |
+| babel       | 180.0 ± 4.0 |    172.1 |    188.2 | 7.66 ± 0.42 |        82.51 |
+| async babel | 211.4 ± 4.2 |    205.9 |    220.3 | 9.00 ± 0.49 |        90.44 |
 
 ---
 
@@ -209,6 +214,6 @@ Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/b
 
 ## References
 
-  - oxc: https://oxc.rs/
-  - napi.rs: https://napi.rs/
-  - oxc playground: https://playground.oxc.rs/
+- oxc: https://oxc.rs/
+- napi.rs: https://napi.rs/
+- oxc playground: https://playground.oxc.rs/
