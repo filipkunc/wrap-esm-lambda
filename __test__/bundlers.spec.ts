@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url'
 
 // The build-time shell across the real bundler matrix: the same tap-shapes
 // fixture (every rewrite shape the tap unlocks, consumed through every
-// import style) bundled by rollup, rolldown (Vite's engine) and webpack —
+// import style) bundled by rollup, rolldown (Vite's engine), webpack and
+// rspack —
 // in production mode with terser, the harshest downstream consumer — for
 // both transform engines. esbuild is covered by tap-shapes.spec.ts and
 // acorn-engine.spec.ts; each build runs in a child process so
@@ -26,7 +27,7 @@ const patchFixture = (name: string) => fileURLToPath(new URL(`./fixtures/patch/$
 const EXPECTED = 'wrapped:hi:x wrapped:hi:n wrapped:dflt:y patched:inner wrapped:greet ns:inner star:inner'
 
 describe('tap rewrite shapes across the bundler matrix', { concurrency: true }, () => {
-  for (const bundler of ['rollup', 'rolldown', 'webpack']) {
+  for (const bundler of ['rollup', 'rolldown', 'webpack', 'rspack']) {
     for (const engineName of ['oxc', 'acorn']) {
       test(`${bundler} + ${engineName} engine: every tap rewrite shape lands and behaves`, async () => {
         const outDir = await mkdtemp(join(tmpdir(), `wrap-esm-lambda-${bundler}-${engineName}-`))
@@ -56,7 +57,7 @@ describe('tap rewrite shapes across the bundler matrix', { concurrency: true }, 
 // observe the patch from a plain `node bundle.mjs`. Engine-independent (the
 // wrapper is generated, not parsed), so one run per bundler.
 describe('builtin wrapper across the bundler matrix', { concurrency: true }, () => {
-  for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+  for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack', 'rspack']) {
     test(`${bundler}: builtin patched at build time via the wrapper module`, async () => {
       const outDir = await mkdtemp(join(tmpdir(), `wrap-esm-lambda-builtin-${bundler}-`))
       try {
@@ -83,7 +84,7 @@ describe('builtin wrapper across the bundler matrix', { concurrency: true }, () 
 // ESM `import` would flip the module's format under each bundler's own
 // syntax sniffing. Every bundler of the matrix, both engines.
 describe('pure-CJS target across the bundler matrix', { concurrency: true }, () => {
-  for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack']) {
+  for (const bundler of ['esbuild', 'rollup', 'rolldown', 'webpack', 'rspack']) {
     for (const engineName of ['oxc', 'acorn']) {
       test(`${bundler} + ${engineName} engine: pure-CJS target patched at build time`, async () => {
         const outDir = await mkdtemp(join(tmpdir(), `wrap-esm-lambda-cjs-${bundler}-${engineName}-`))

@@ -49,12 +49,15 @@ switch (bundler) {
     await bundle.close()
     break
   }
-  case 'webpack': {
-    // production mode on purpose: terser minification is where comment
+  case 'webpack':
+  case 'rspack': {
+    // production mode on purpose: terser/SWC minification is where comment
     // preservation earns its keep (pure-annotation shaking, license
-    // extraction), and where fragile transforms break
-    const { default: webpack } = await import('webpack')
-    const compiler = webpack({
+    // extraction), and where fragile transforms break. rspack mirrors
+    // webpack's API and options, so the two share one case.
+    const compile =
+      bundler === 'webpack' ? (await import('webpack')).default : (await import('@rspack/core')).rspack
+    const compiler = compile({
       entry,
       mode: 'production',
       target: 'node',
@@ -67,7 +70,7 @@ switch (bundler) {
         chunkFormat: 'module',
       },
       experiments: { outputModule: true },
-      plugins: [unplugin.webpack(config)],
+      plugins: [unplugin[bundler](config)],
     })
     await new Promise((resolve, reject) => {
       compiler.run((err, stats) => {
