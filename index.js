@@ -398,6 +398,7 @@ module.exports.exportsTap = nativeBinding.exportsTap
 module.exports.exportsTapFromBuffer = nativeBinding.exportsTapFromBuffer
 module.exports.hasModuleSyntax = nativeBinding.hasModuleSyntax
 module.exports.resolveModule = nativeBinding.resolveModule
+module.exports.tapContractVersion = nativeBinding.tapContractVersion
 module.exports.transformLambda = nativeBinding.transformLambda
 module.exports.transformLambdaFromBuffer = nativeBinding.transformLambdaFromBuffer
 module.exports.transformLambdaWithChainedMap = nativeBinding.transformLambdaWithChainedMap

@@ -1296,6 +1296,43 @@ export { ",
   );
 }
 
+/// The patch call itself, in import delivery: wrapped so a throwing patch
+/// cannot break the evaluation of the module it patches. The runtime shell
+/// contains that failure in the function it registers (see
+/// `@wrap-esm-lambda/hooks`, guardPatch), but a bundled artifact has no
+/// registry to wrap — the emitted code calls the user's function directly, so
+/// the containment has to be emitted too.
+///
+/// Deliberate properties of the emitted guard: it reads
+/// WRAP_ESM_LAMBDA_STRICT with the same semantics as the runtime shell (unset,
+/// empty, `0` and `false` are all off), it tolerates a `process`-less bundle
+/// rather than throwing a second error out of the catch block, and it reports
+/// with the same message shape the runtime uses so one grep finds both. The
+/// `__wel_err`/`__wel_s` bindings are block-scoped to the catch, so several
+/// entries in one module cannot collide.
+fn push_guarded_call(
+  out: &mut String,
+  alias: &str,
+  key: &str,
+  accessors: &[(String, String, bool, bool)],
+) {
+  out.push_str("try {\n");
+  out.push_str(alias);
+  out.push_str("({");
+  push_accessors(out, accessors);
+  out.push_str("\n});\n} catch (__wel_err) {\n");
+  out.push_str(
+    "const __wel_s = typeof process === \"undefined\" ? \"\" : process.env.WRAP_ESM_LAMBDA_STRICT;\n",
+  );
+  out.push_str("if (__wel_s && __wel_s !== \"0\" && __wel_s !== \"false\") throw __wel_err;\n");
+  out.push_str("console.error(");
+  out.push_str(&quote_js_string(&format!(
+    "wrap-esm-lambda: patch '{}' failed, continuing without it:",
+    key
+  )));
+  out.push_str(", __wel_err);\n}\n");
+}
+
 /// Per-entry accessor snippet (the patch call), shared by both paths.
 /// Import delivery (`registry = false`) is mode-specific: an ESM module gets
 /// a static `import`, a CJS module a `require()` in an IIFE — an `import`
@@ -1326,10 +1363,13 @@ fn build_snippet(
     out.push_str(" } = require(");
     out.push_str(&quote_js_string(patch_from));
     out.push_str(");\n");
-    out.push_str(&alias);
-    out.push_str("({");
-    push_accessors(&mut out, accessors);
-    out.push_str("\n});\n})();\n");
+    push_guarded_call(
+      &mut out,
+      &alias,
+      &format!("{}#{}", patch_from, patch_name),
+      accessors,
+    );
+    out.push_str("})();\n");
   } else {
     let alias = format!("__wel_patch_{}", alias_index);
     out.push_str("\nimport { ");
@@ -1339,10 +1379,12 @@ fn build_snippet(
     out.push_str(" } from ");
     out.push_str(&quote_js_string(patch_from));
     out.push_str(";\n");
-    out.push_str(&alias);
-    out.push_str("({");
-    push_accessors(&mut out, accessors);
-    out.push_str("\n});\n");
+    push_guarded_call(
+      &mut out,
+      &alias,
+      &format!("{}#{}", patch_from, patch_name),
+      accessors,
+    );
   }
   out
 }

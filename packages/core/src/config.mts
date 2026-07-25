@@ -120,6 +120,11 @@ function resolveFrom(from: string, base: string | undefined, what: string): stri
   }
 }
 
+/** A patch entry with its `patch.from` resolved — the shape stays exact. */
+function resolvePatchEntry(entry: PatchEntry, base: string | undefined): PatchEntry {
+  return { ...entry, patch: { ...entry.patch, from: resolveFrom(entry.patch.from, base, 'patch.from') } }
+}
+
 function resolveEntry(entry: InstrumentEntry, base: string | undefined): InstrumentEntry {
   if (entry.patch) {
     return { ...entry, patch: { ...entry.patch, from: resolveFrom(entry.patch.from, base, 'patch.from') } }
@@ -147,6 +152,10 @@ export function defineConfig(config: InstrumentConfig, base?: string): Instrumen
  *
  * @param base the config module's `import.meta.url`
  */
-export function definePatches(entries: PatchEntry[], base?: string): InstrumentConfig {
-  return { entries: entries.map((entry) => resolveEntry(entry, base)) }
+// The return type stays PatchEntry[] rather than widening to InstrumentEntry[]:
+// a patches-only config IS patches only, and callers (the validator, tests,
+// anything introspecting a config) should not have to re-narrow what this
+// function already guarantees.
+export function definePatches(entries: PatchEntry[], base?: string): { entries: PatchEntry[] } {
+  return { entries: entries.map((entry) => resolvePatchEntry(entry, base)) }
 }

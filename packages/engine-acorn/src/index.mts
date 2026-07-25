@@ -12,6 +12,15 @@
 // - sourcemaps.mjs    — map chaining and data-URL inlining
 // - resolve.mjs       — import-style module resolution (oxc_resolver's twin)
 
+/**
+ * The transform contract this engine implements — the same number the native
+ * addon reports from `tapContractVersion()`. Core compares them at bind time,
+ * so the two implementations cannot drift apart across published versions.
+ */
+export function tapContractVersion(): number {
+  return 1
+}
+
 export { esmModuleExports, hasModuleSyntax } from './exports-index.mjs'
 export { exportsTap, exportsTapFromBuffer } from './tap.mjs'
 export { resolveModule } from './resolve.mjs'

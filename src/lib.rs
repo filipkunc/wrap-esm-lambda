@@ -7,6 +7,21 @@ use napi_derive::napi;
 use oxc_resolver::{ResolveOptions, Resolver};
 use std::sync::OnceLock;
 
+/// The version of the transform contract this addon implements: the emitted
+/// snippet shapes plus the `TapEntryInput` / `TapResult` surfaces core depends
+/// on. Bumped whenever one of those changes in a way core has to match.
+///
+/// Core's package range cannot express this on its own. The addon is an
+/// optional dependency resolved on the consumer's machine, so a core that was
+/// installed with one addon can end up loaded next to another — and a silently
+/// mismatched tap emits code that looks right and patches nothing. Core asks
+/// for this number at bind time and treats a mismatch the same way it treats
+/// an addon that will not load at all.
+#[napi]
+pub fn tap_contract_version() -> u32 {
+  1
+}
+
 #[napi]
 pub fn transform_lambda(input: String, handler: String, wrapper: String) -> String {
   transform::transform_lambda_source(&input, handler, wrapper)

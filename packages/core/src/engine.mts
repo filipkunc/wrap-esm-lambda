@@ -95,6 +95,7 @@ type TapTail = [
  * once in JavaScript, interchangeable at runtime.
  */
 export interface TransformEngine {
+  tapContractVersion(): number
   esmModuleExports(input: string): EsmExportsInfo
   exportsTap(input: string, entries: TapEntryInput[], cjs: boolean, registry: boolean, ...tail: TapTail): TapResult
   exportsTapFromBuffer(
@@ -114,12 +115,37 @@ const ENGINES: Record<string, () => Promise<TransformEngine>> = {
   acorn: () => import('@wrap-esm-lambda/engine-acorn'),
 }
 
+/**
+ * The transform contract core is written against: the emitted snippet shapes
+ * and the tap surfaces. Both engines report their own; a mismatch means the
+ * package range did not describe reality.
+ *
+ * It can happen: the addon is an OPTIONAL dependency resolved on the
+ * consumer's machine, so a core installed alongside one addon version can end
+ * up loaded next to another. A mismatch is worse than a missing addon —
+ * instrumentation that emits plausible code and patches nothing — so it is
+ * treated the same way, which for the default engine means degrading to the
+ * pure-JS one rather than trusting it.
+ */
+export const TAP_CONTRACT_VERSION = 1
+
+function verifyContract(engine: TransformEngine): void {
+  const reported = typeof engine.tapContractVersion === 'function' ? engine.tapContractVersion() : undefined
+  if (reported !== TAP_CONTRACT_VERSION) {
+    throw new Error(
+      `transform contract mismatch: core expects ${TAP_CONTRACT_VERSION}, the engine reports ${String(reported)} ` +
+        `— install a matching 'wrap-esm-lambda' addon version`,
+    )
+  }
+}
+
 const selected = await selectEngine(process.env.WRAP_ESM_LAMBDA_ENGINE, ENGINES, {
+  verify: verifyContract,
   onFallback: (err) => {
     const reason = err instanceof Error ? err.message : String(err)
     warnOnce(
       'engine',
-      `the native oxc addon could not be loaded (${reason}) — falling back to the pure-JS acorn engine ` +
+      `the native oxc addon could not be used (${reason}) — falling back to the pure-JS acorn engine ` +
         `(WRAP_ESM_LAMBDA_ENGINE=oxc to fail instead)`,
     )
   },

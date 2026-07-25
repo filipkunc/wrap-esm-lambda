@@ -5,7 +5,7 @@ import { definePatches } from '@wrap-esm-lambda/core'
 
 export default definePatches([
   {
-    module: { name: '@fake/smithy-client', versionRange: '>=4 <5', files: ['dist-cjs/index.js'] },
+    module: { name: '@fake/smithy-client', versionRange: '>=4 <5', files: ['dist-cjs/index.js', 'dist-es/client.js'] },
     patch: { name: 'patchThatThrows', from: fileURLToPath(new URL('./patches/throws.mjs', import.meta.url)) },
     bindings: ['Client'],
   },
