@@ -166,11 +166,24 @@ subtlest constraints:
   would run at preload time in one mode and at patched-module-eval time in
   the other, quietly breaking the identical-behavior guarantee. Pure exported
   functions only.
-- `patch.from` should be an **absolute path** (compute it via
-  `import.meta.url`, as the test configs do). A relative specifier resolves
-  against the _patched module_ in build mode; a bare package specifier
-  currently resolves from the hooks package at preload, which is fragile
-  under pnpm's strict layout.
+- `patch.from` must reach both shells as an **absolute path** — the build
+  shell stringifies it into an import appended to the _patched module_, where
+  a relative or bare specifier would resolve from the target package's own
+  directory (which cannot see your dependencies under pnpm's strict layout).
+  Pass `import.meta.url` as the second argument of
+  `defineConfig`/`definePatches` and write `from` however is convenient; it
+  is resolved to an absolute path at definition time:
+  - `./patches/x.mjs` — relative to the config file (the usual form, and
+    what makes a config + patches npm package self-contained);
+  - a bare specifier (`some-pkg/patches/x`) — resolved from the config's
+    location via Node's resolver, loud `TypeError` if it doesn't resolve
+    (subpath `exports` matching only the `import` condition are the one
+    known gap — export patch files with plain string targets);
+  - a `file://` URL (e.g. from `import.meta.resolve`) or an absolute path —
+    accepted with or without the base argument.
+
+  Without the base argument, non-absolute specifiers pass through unchanged —
+  the legacy fragile behavior, kept for backward compatibility.
 
 ### Dependencies
 

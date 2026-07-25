@@ -1,0 +1,19 @@
+{
+  "name": "example-function-logger",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A self-contained instrumentation package: before/after call logging with exception capture (and rethrow), shipped as config + patches + register entry in one npm package.",
+  "exports": {
+    "./register": "./src/register.mjs",
+    "./config": "./src/config.mjs",
+    "./patches/log-calls": "./src/patches/log-calls.mjs"
+  },
+  "files": [
+    "src"
+  ],
+  "dependencies": {
+    "@wrap-esm-lambda/core": "workspace:^",
+    "@wrap-esm-lambda/hooks": "workspace:^"
+  }
+}
