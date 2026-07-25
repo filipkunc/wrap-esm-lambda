@@ -18,7 +18,23 @@ const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/patch/${name
 
 // @ts-expect-error untyped ESM module
 const { supportsSyncHooks } = await import('import-in-the-middle/supports-sync-hooks.mjs')
-const testSyncIitm = supportsSyncHooks() ? test : test.skip
+
+// iitm cannot hook a SCOPED package on Windows, so the whole comparison is
+// skipped there — including the require() legs, which would otherwise pass for
+// the wrong reason (iitm intercepting nothing at all looks the same as iitm
+// declining to intercept require). The cause is upstream and specific: to
+// recognise an import of a package's top level, iitm asks
+// `baseDir.endsWith(specifier)` (index.js) — comparing a filesystem path
+// against the specifier as written. For '@fake/smithy-client' that is
+// '...\\node_modules\\@fake\\smithy-client'.endsWith('@fake/smithy-client'),
+// false on Windows and true everywhere else. An unscoped name has no
+// separator to disagree about, which is why this is invisible for 'express'.
+// Not a property of the platform, and not of the mechanism being compared:
+// the exports tap patches this same scoped fixture on Windows (patch.spec.ts,
+// aws.spec.ts, both green there).
+const onWindows = process.platform === 'win32'
+const testIitm = onWindows ? test.skip : test
+const testSyncIitm = supportsSyncHooks() && !onWindows ? test : test.skip
 
 const run = async (setup: string, app: string) => {
   // --import takes a URL (or a relative/bare specifier), not an absolute path:
@@ -28,11 +44,11 @@ const run = async (setup: string, app: string) => {
   return stdout.trim()
 }
 
-test('off-thread iitm intercepts the ESM import path', async () => {
+testIitm('off-thread iitm intercepts the ESM import path', async () => {
   assert.strictEqual(await run('iitm-setup-offthread.mjs', 'app.mjs'), 'iitm:sent:hello')
 })
 
-test('off-thread iitm never sees a pure require() chain', async () => {
+testIitm('off-thread iitm never sees a pure require() chain', async () => {
   assert.strictEqual(
     await run('iitm-setup-offthread.mjs', 'app.cjs'),
     'sent:hello',
