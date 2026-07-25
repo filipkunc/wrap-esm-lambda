@@ -29,6 +29,15 @@
     "src"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/filipkunc/wrap-esm-lambda.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/filipkunc/wrap-esm-lambda/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/filipkunc/wrap-esm-lambda/issues"
+  },
   "engines": {
     "node": ">= 22.0.0"
   },
