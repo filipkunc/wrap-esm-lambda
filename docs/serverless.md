@@ -12,11 +12,19 @@ Node 22/24/26 ladder — including every pre-fix minor:
   worker args via the `languageWorkers__node__arguments` app setting. The
   matrix registers the hook purely through `NODE_OPTIONS=--import` — OK on
   every rung.
-- **Bootstrap ordering**: both platforms boot a CJS bundle first (Lambda's
-  runtime interface client, Azure's node worker) and load the user handler
-  late — `import()` for ESM, `require()` for CJS. The matrix's
-  `tap-bootstrap-*` columns simulate exactly that shape — OK on every rung,
-  both module systems, both sides of the fix train.
+- **Bootstrap ordering**: both platforms boot their own main first and load
+  the user handler late — but not through the same loader, which is the part
+  that matters here. Lambda's runtime interface client is an **ES module**
+  (`"main": "dist/index.mjs"`, `"bin": {"aws-lambda-ric": "bin/index.mjs"}`;
+  the managed runtime boots `/var/runtime/index.mjs`), so the process main
+  enters through the ESM loader and reaches CJS via `createRequire`. Azure's
+  node worker is still a CJS bundle. Either way the handler arrives late and
+  indirectly, by the rule the RIC's `UserFunction.js` applies — extension
+  first, `.js` decided by the nearest package.json `"type"`:
+  `(pjHasModule && await _tryAwaitImport(p, '.js')) || (await _tryAwaitImport(p, '.mjs')) || _tryRequireFile(p, '.cjs')`.
+  The matrix runs both mains against both handler module systems — the
+  `tap-esm-main-*` (Lambda) and `tap-cjs-main-*` (Azure) columns — OK on
+  every rung, both sides of the fix train.
 - **The broken window itself**: the tap never touches `Module._load`, so the
   22.15.0–22.22.2 / 24.10.0–24.11.0 interplay bugs that blinded
   patch-based instrumentation don't reach it.

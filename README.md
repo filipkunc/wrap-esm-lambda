@@ -422,9 +422,10 @@ run.
 
 Both AWS Lambda and Azure Functions can activate the runtime shell without
 owning the node CLI (`NODE_OPTIONS=--import` / worker arguments), and the
-[interplay matrix](hooks/interplay-matrix) verifies the bootstrap shape both
-platforms use on every Node 22/24/26 rung — including the minors with broken
-loader interplay that the platforms may still run. When the platform minor is
+[interplay matrix](hooks/interplay-matrix) verifies both bootstrap shapes they
+use — Lambda's ESM runtime interface client and Azure's CJS node worker, each
+loading either handler module system — on every Node 22/24/26 rung, including
+the minors with broken loader interplay that the platforms may still run. When the platform minor is
 unverifiable and the risk budget is zero, the build-time shell delivers the
 identical instrumentation with no runtime loader machinery at all. Full
 analysis: [docs/serverless.md](docs/serverless.md).
