@@ -66,9 +66,8 @@ jobs:
       - name: Cargo fmt
         run: cargo fmt -- --check
       # A gate, not a report: without -D warnings this job passed with warnings
-      # nobody read. No lint-level carve-outs — the one unavoidable exemption
-      # (oxc's deprecated AstBuilder, see src/transform.rs) is scoped to the
-      # functions that need it, in the source, where it is reviewable.
+      # nobody read. The crate carries no lint-level carve-outs, so a warning
+      # anywhere — a new deprecation included — fails this job.
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
