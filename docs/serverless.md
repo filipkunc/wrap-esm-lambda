@@ -31,15 +31,32 @@ Node 22/24/26 ladder — including every pre-fix minor:
 
 Platform version reality (mid-2026): Lambda offers `nodejs22.x` and
 `nodejs24.x` ([runtimes table](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html));
-Azure Functions host 4.x offers Node 20 and 22 (Node 20 support ends
-April 2026, Node 22 runs to April 2027, programming model v4 —
-[supported languages](https://learn.microsoft.com/en-us/azure/azure-functions/supported-languages)).
+Azure Functions host 4.x publishes Node 20, 22 and 24 images (Node 22 runs
+to April 2027; Node 22 is the last major for Linux Consumption, Node 24
+wants Flex Consumption — [supported languages](https://learn.microsoft.com/en-us/azure/azure-functions/supported-languages)).
 Both vendors apply Node _minor_ updates on their own cadence behind
-nodejs.org, and neither publishes the embedded minor — so whether a given
-deployment sits before or after the v22.22.3 / v24.11.1 fix train can only
-be answered by logging `process.version` in a live function. The matrix
-exists precisely so that the answer doesn't matter for this library: the
-tap behaves identically on both sides.
+nodejs.org and neither announces the embedded minor, but for the **container
+images** it is not actually a mystery: it is readable straight out of the
+published image, and as of 2026-07-26 both vendors sit on the same two
+minors, both comfortably past the v22.22.3 / v24.11.1 fix train.
+
+| image                             | Node     |
+| --------------------------------- | -------- |
+| `public.ecr.aws/lambda/nodejs:22` | v22.23.1 |
+| `public.ecr.aws/lambda/nodejs:24` | v24.18.0 |
+| `azure-functions/node:4-node22`   | v22.23.1 |
+| `azure-functions/node:4-node24`   | v24.18.0 |
+| `azure-functions/node:4-node20`   | v20.20.2 |
+
+(Node 20 is moot here regardless: `module.registerHooks` arrives in 22.15.0,
+and this package's `engines` floor is Node 22.)
+
+What stays unanswerable is the **non-container** path — the zip-deployed
+managed runtimes, where nothing publishes the minor and only
+`process.version` from a live function can tell you. So the fix-train
+question is settled for anyone on images and still open for everyone else,
+which is why the matrix exists: the tap behaves identically on both sides,
+and the answer does not have to matter.
 
 For Lambda specifically, CI stops simulating and uses the platform's own
 image. A lane runs the whole suite — both engines, the prebuilt addon
@@ -49,8 +66,9 @@ then reruns the delivery shape above on that image: `NODE_OPTIONS`
 registration with the RIC bootstrap stand-in as the process main. That does
 not settle the managed-runtime minor question — the zip runtime is not the
 container image — but it removes the container path from the guesswork
-entirely, and each run prints the base image's `node --version` into the
-log, so the minor AWS is shipping there is at least on the record.
+entirely, and each run records the image's `node --version` and manifest
+digest on the job summary, so the minor AWS is shipping is on the record
+without anyone reading two thousand lines of TAP output to find it.
 
 Two honest caveats remain. First, on a pre-fix minor, registering _any_
 sync hook — ours included — triggers the `Module._load` blinding for

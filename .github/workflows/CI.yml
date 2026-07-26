@@ -331,6 +331,28 @@ jobs:
       - name: List packages
         run: ls -R .
         shell: bash
+      # AWS rebuilds these images on its own cadence and does not publish the
+      # Node minor inside them, so a run like this one is the only place the
+      # answer is observable. On the job summary it stays readable; buried in
+      # the suite's TAP output it is two thousand lines deep. The digest goes
+      # with it, because "node 22.23.1" is only reproducible if you can say
+      # which image it came out of.
+      - name: Record the runtime image's Node version
+        run: |
+          set -euo pipefail
+          image="public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}"
+          platform=${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }}
+          docker pull --quiet --platform "$platform" "$image" >/dev/null
+          version=$(docker run --rm --entrypoint /bin/sh --platform "$platform" "$image" -c 'node --version')
+          digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
+          {
+            echo "### Lambda runtime image"
+            echo
+            echo "| image | platform | node | digest |"
+            echo "| ----- | -------- | ---- | ------ |"
+            echo "| \`$image\` | \`$platform\` | \`$version\` | \`${digest#*@}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$image ($platform) runs $version"
       # A plain `docker run` rather than the action the lanes above use, for
       # one reason: the entrypoint. The base image boots the runtime interface
       # client and blocks waiting for an invocation, so for the suite it has
