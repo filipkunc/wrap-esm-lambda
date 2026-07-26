@@ -453,11 +453,13 @@ first, or the imports resolve to nothing.
 ### CI
 
 Every lane below runs the whole suite on **each** supported Node major —
-`node@22`, `node@24`, `node@26`:
+`node@22`, `node@24`, `node@26` — except the Lambda lane, which tracks the
+platform's runtimes rather than Node's release line:
 
 | lane                                 | what it covers                                                                                           |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
 | `linux-x64`, `linux-arm64`           | the prebuilt addon on both Linux arches, glibc and musl, in containers on native runners (no QEMU)       |
+| **AWS Lambda**                       | the real `public.ecr.aws/lambda/nodejs` image — `nodejs22.x` and `nodejs24.x`, x86_64 and Graviton       |
 | `win32-x64-msvc`, `win32-arm64-msvc` | Windows on both arches: drive letters and backslashes through matching, resolution and every child spawn |
 | `darwin-arm64`, `darwin-x64`         | macOS on Apple silicon and Intel                                                                         |
 | WASI                                 | the `wasm32-wasip1-threads` build — the reach onto platforms with no prebuilt addon                      |
@@ -465,6 +467,15 @@ Every lane below runs the whole suite on **each** supported Node major —
 
 Every runner is native — the arm64 lanes are arm64 machines, not QEMU — so a
 green lane means the artifact that platform downloads actually loads there.
+
+The Lambda lane is the one that is not a proxy for its target: Amazon Linux
+2023, AWS's own Node build, and a managed minor that moves on AWS's cadence
+rather than nodejs.org's. Past the suite, it also runs the delivery shape the
+platform forces and no other lane covers — the hook injected through
+`NODE_OPTIONS` (the node CLI is not yours on a managed runtime) with the
+runtime interface client's late, indirect handler load standing in as the
+process main. There is deliberately no `node@26` row: no `nodejs26.x` runtime
+exists, so the matrix gains one when AWS ships one.
 
 Each native lane runs the suite twice, once per engine, and names
 `WRAP_ESM_LAMBDA_ENGINE` explicitly — an implicit run would let a missing or

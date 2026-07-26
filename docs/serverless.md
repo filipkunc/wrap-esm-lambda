@@ -33,6 +33,17 @@ be answered by logging `process.version` in a live function. The matrix
 exists precisely so that the answer doesn't matter for this library: the
 tap behaves identically on both sides.
 
+For Lambda specifically, CI stops simulating and uses the platform's own
+image. A lane runs the whole suite — both engines, the prebuilt addon
+loaded off Amazon Linux 2023's glibc — inside
+`public.ecr.aws/lambda/nodejs:22` and `:24`, on x86_64 and Graviton, and
+then reruns the delivery shape above on that image: `NODE_OPTIONS`
+registration with the RIC bootstrap stand-in as the process main. That does
+not settle the managed-runtime minor question — the zip runtime is not the
+container image — but it removes the container path from the guesswork
+entirely, and each run prints the base image's `node --version` into the
+log, so the minor AWS is shipping there is at least on the record.
+
 Two honest caveats remain. First, on a pre-fix minor, registering _any_
 sync hook — ours included — triggers the `Module._load` blinding for
 `import`-ed CJS, which can degrade a _coexisting_ patch-based agent (Azure
