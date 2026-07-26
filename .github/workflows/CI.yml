@@ -281,6 +281,94 @@ jobs:
           run: |
             WRAP_ESM_LAMBDA_ENGINE=oxc OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
             WRAP_ESM_LAMBDA_ENGINE=acorn OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+  test-lambda-runtime:
+    name: Test lambda/nodejs:${{ matrix.runtime }} - ${{ matrix.target }}
+    needs:
+      - build
+    # The lanes above run node:N-slim and node:N-alpine — reasonable proxies.
+    # This one is not a proxy: it is the image an actual Lambda function runs
+    # on. Amazon Linux 2023, AWS's own Node build, and a managed minor that
+    # moves on AWS's cadence rather than nodejs.org's — docs/serverless.md
+    # makes the point that the embedded minor is unpublished and therefore
+    # unknowable, which is precisely why the platform's own image is worth
+    # testing against instead of assuming node:22-slim stands in for it.
+    #
+    # Both architectures Lambda sells (x86_64 and Graviton) and both runtimes
+    # it currently offers. Note what is absent: node 26. There is no
+    # nodejs26.x runtime, so this matrix tracks the platform rather than the
+    # Node release line — when AWS adds one, a row is added here.
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+        runtime:
+          - '22'
+          - '24'
+    runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      # The host node installs and compiles the workspace, nothing more: the
+      # image ships npm but no pnpm, so the arrangement is the musl lane's —
+      # install here, mount the workspace, run every test on the image's node.
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build packages
+        run: pnpm build:packages
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-${{ matrix.target }}
+          path: .
+      - name: List packages
+        run: ls -R .
+        shell: bash
+      # A plain `docker run` rather than the action the lanes above use, for
+      # one reason: the entrypoint. The base image boots the runtime interface
+      # client and blocks waiting for an invocation, so it has to be replaced
+      # with a shell. --platform is explicit so a lane that ever landed on the
+      # wrong runner fails loudly instead of quietly passing under emulation.
+      - name: Test bindings on the Lambda base image
+        run: |
+          docker run --rm \
+            --entrypoint /bin/sh \
+            --platform ${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }} \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -w "$GITHUB_WORKSPACE" \
+            -e OXC_TSCONFIG_PATH=./__test__/tsconfig.json \
+            -e WRAP_ESM_LAMBDA_CONFIG="$GITHUB_WORKSPACE/__test__/fixtures/patch/wrap.config.mjs" \
+            "public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}" -eu -c '
+              node --version
+              # the suite, both engines, engine named explicitly for the same
+              # reason as every other lane: an implicit run turns a native
+              # artifact that will not load into a green acorn run
+              WRAP_ESM_LAMBDA_ENGINE=oxc node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+              WRAP_ESM_LAMBDA_ENGINE=acorn node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+              # Then the delivery shape the platform forces, which no other
+              # lane covers: on Lambda the node CLI is not yours to change, so
+              # the hook arrives through NODE_OPTIONS, and the process main is
+              # the RIC — a CJS bootstrap that loads the handler afterwards.
+              # bootstrap-sim.cjs is that shape; here it runs on the real
+              # image instead of against a downloaded Node build.
+              for app in app.mjs app.cjs; do
+                out=$(WRAP_ESM_LAMBDA_ENGINE=oxc \
+                  NODE_OPTIONS="--import @wrap-esm-lambda/hooks/register" \
+                  node hooks/interplay-matrix/fixtures/bootstrap-sim.cjs "__test__/fixtures/patch/$app")
+                if [ "$out" != "patched:sent:hello" ]; then
+                  echo "NODE_OPTIONS delivery failed for $app: expected patched:sent:hello, got: $out"
+                  exit 1
+                fi
+                echo "NODE_OPTIONS delivery via RIC bootstrap: $app -> $out"
+              done
+            '
   test-native-platform:
     name: Test ${{ matrix.settings.target }} - node@${{ matrix.node }}
     needs:
@@ -484,6 +572,7 @@ jobs:
     needs:
       - lint
       - test-linux-binding
+      - test-lambda-runtime
       - test-native-platform
       - test-wasi
       - test-js-only
