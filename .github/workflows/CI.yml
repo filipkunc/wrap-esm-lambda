@@ -333,9 +333,10 @@ jobs:
         shell: bash
       # A plain `docker run` rather than the action the lanes above use, for
       # one reason: the entrypoint. The base image boots the runtime interface
-      # client and blocks waiting for an invocation, so it has to be replaced
-      # with a shell. --platform is explicit so a lane that ever landed on the
-      # wrong runner fails loudly instead of quietly passing under emulation.
+      # client and blocks waiting for an invocation, so for the suite it has
+      # to be replaced with a shell. --platform is explicit so a lane that
+      # ever landed on the wrong runner fails loudly instead of quietly
+      # passing under emulation.
       - name: Test bindings on the Lambda base image
         run: |
           docker run --rm \
@@ -352,23 +353,67 @@ jobs:
               # artifact that will not load into a green acorn run
               WRAP_ESM_LAMBDA_ENGINE=oxc node --import @oxc-node/core/register --test "__test__/*.spec.ts"
               WRAP_ESM_LAMBDA_ENGINE=acorn node --import @oxc-node/core/register --test "__test__/*.spec.ts"
-              # Then the delivery shape the platform forces, which no other
-              # lane covers: on Lambda the node CLI is not yours to change, so
-              # the hook arrives through NODE_OPTIONS, and the process main is
-              # the RIC — a CJS bootstrap that loads the handler afterwards.
-              # bootstrap-sim.cjs is that shape; here it runs on the real
-              # image instead of against a downloaded Node build.
+              # The delivery shape, cheap and deterministic: hook via
+              # NODE_OPTIONS, handler loaded late by an ESM main. This is the
+              # same stand-in the 11-version interplay matrix runs, so a
+              # failure here versus in the real-RIC step below tells you
+              # whether the shape broke or the platform plumbing did.
               for app in app.mjs app.cjs; do
                 out=$(WRAP_ESM_LAMBDA_ENGINE=oxc \
                   NODE_OPTIONS="--import @wrap-esm-lambda/hooks/register" \
-                  node hooks/interplay-matrix/fixtures/bootstrap-sim.cjs "__test__/fixtures/patch/$app")
+                  node hooks/interplay-matrix/fixtures/bootstrap-sim.mjs "__test__/fixtures/patch/$app")
                 if [ "$out" != "patched:sent:hello" ]; then
                   echo "NODE_OPTIONS delivery failed for $app: expected patched:sent:hello, got: $out"
                   exit 1
                 fi
-                echo "NODE_OPTIONS delivery via RIC bootstrap: $app -> $out"
+                echo "NODE_OPTIONS delivery via ESM bootstrap: $app -> $out"
               done
             '
+      # And then the thing no stand-in can be: AWS's own runtime interface
+      # client, booted by the image's own entrypoint, loading the handler by
+      # its own rules, answering a real invocation. The base images ship the
+      # runtime interface emulator for exactly this, so the entrypoint is
+      # left alone here and the container is driven over HTTP instead.
+      #
+      # LAMBDA_TASK_ROOT is pointed at the patch fixture so the RIC resolves
+      # `lambda-handler.handler` there; the working directory follows it so
+      # the bare specifier in NODE_OPTIONS resolves up into the workspace's
+      # node_modules. The engine is named for the usual reason — this must
+      # fail on a binding that will not load, not degrade to acorn.
+      - name: Invoke a handler through the real runtime interface client
+        run: |
+          set -euo pipefail
+          fixture="$GITHUB_WORKSPACE/__test__/fixtures/patch"
+          docker run -d --name ric-lane \
+            --platform ${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }} \
+            -p 9000:8080 \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+            -w "$fixture" \
+            -e LAMBDA_TASK_ROOT="$fixture" \
+            -e NODE_OPTIONS="--import @wrap-esm-lambda/hooks/register" \
+            -e WRAP_ESM_LAMBDA_CONFIG="$fixture/wrap.config.mjs" \
+            -e WRAP_ESM_LAMBDA_ENGINE=oxc \
+            "public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}" lambda-handler.handler
+
+          body=''
+          for _ in $(seq 1 30); do
+            body=$(curl -s --max-time 20 -XPOST \
+              'http://localhost:9000/2015-03-31/functions/function/invocations' -d '{}' || true)
+            if [ -n "$body" ]; then break; fi
+            sleep 1
+          done
+
+          ok=0
+          case "$body" in *patched:sent:hello*) ok=1 ;; esac
+          if [ "$ok" -ne 1 ]; then
+            echo "expected the RIC to return patched:sent:hello, got: ${body:-<no response>}"
+            echo '--- container logs ---'
+            docker logs ric-lane || true
+          else
+            echo "real RIC invocation returned: $body"
+          fi
+          docker rm -f ric-lane >/dev/null || true
+          [ "$ok" -eq 1 ]
   test-native-platform:
     name: Test ${{ matrix.settings.target }} - node@${{ matrix.node }}
     needs:

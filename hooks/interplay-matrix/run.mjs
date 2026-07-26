@@ -52,10 +52,18 @@ const tapEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: tapFixture('wrap.config
 // The serverless delivery shape: on managed runtimes the CLI is not ours to
 // change — AWS Lambda injects flags via the NODE_OPTIONS env var, Azure
 // Functions via languageWorkers__node__arguments — and the process' main is
-// the platform's CJS bootstrap (Lambda RIC / Azure node worker), which loads
-// the user handler afterwards.
+// the platform's bootstrap, which loads the user handler afterwards.
+//
+// The two platforms differ in the one way that matters to a module loader:
+// Lambda's runtime interface client is an ES module (`"main":
+// "dist/index.mjs"`, and the managed runtime boots /var/runtime/index.mjs),
+// while Azure's node worker is a CJS bundle. So the main enters through a
+// different loader on each, and both are run below against both handler
+// module systems — four columns, because "which loader started the process"
+// is precisely the variable the fix train moved.
 const nodeOptionsEnv = { ...tapEnv, NODE_OPTIONS: '--import @wrap-esm-lambda/hooks/register' }
-const bootstrap = join(here, 'fixtures', 'bootstrap-sim.cjs')
+const esmBootstrap = join(here, 'fixtures', 'bootstrap-sim.mjs')
+const cjsBootstrap = join(here, 'fixtures', 'bootstrap-sim.cjs')
 const E2E = [
   {
     name: 'wrap-esm-lambda-tap-esm',
@@ -75,15 +83,29 @@ const E2E = [
     env: nodeOptionsEnv,
     expect: 'patched:sent:hello',
   },
+  // Lambda's shape: ESM main (the RIC), either handler module system.
   {
-    name: 'tap-bootstrap-esm',
-    args: [bootstrap, tapFixture('app.mjs')],
+    name: 'tap-esm-main-esm-app',
+    args: [esmBootstrap, tapFixture('app.mjs')],
     env: nodeOptionsEnv,
     expect: 'patched:sent:hello',
   },
   {
-    name: 'tap-bootstrap-cjs',
-    args: [bootstrap, tapFixture('app.cjs')],
+    name: 'tap-esm-main-cjs-app',
+    args: [esmBootstrap, tapFixture('app.cjs')],
+    env: nodeOptionsEnv,
+    expect: 'patched:sent:hello',
+  },
+  // Azure's shape: CJS main (the node worker), either handler module system.
+  {
+    name: 'tap-cjs-main-esm-app',
+    args: [cjsBootstrap, tapFixture('app.mjs')],
+    env: nodeOptionsEnv,
+    expect: 'patched:sent:hello',
+  },
+  {
+    name: 'tap-cjs-main-cjs-app',
+    args: [cjsBootstrap, tapFixture('app.cjs')],
     env: nodeOptionsEnv,
     expect: 'patched:sent:hello',
   },
