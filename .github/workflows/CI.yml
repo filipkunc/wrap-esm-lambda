@@ -96,14 +96,28 @@ jobs:
             target: aarch64-unknown-linux-musl
             build: pnpm build --target aarch64-unknown-linux-musl -x
           # Windows and macOS build natively on their own hosts — no
-          # napi-cross, no zig. Both are tested below, so `napi.targets`
+          # napi-cross, no zig. All four are tested below, so `napi.targets`
           # claims only platforms this workflow actually exercises.
           - host: windows-latest
             target: x86_64-pc-windows-msvc
             build: pnpm build --target x86_64-pc-windows-msvc
+          # Windows on arm64 — Dev Kits, Snapdragon laptops, and arm64 CI. The
+          # runner is native (github's windows-11-arm, free on public repos),
+          # so this is a plain native build like the x64 one above, not a
+          # cross-compile.
+          - host: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            build: pnpm build --target aarch64-pc-windows-msvc
           - host: macos-latest
             target: aarch64-apple-darwin
             build: pnpm build --target aarch64-apple-darwin
+          # Intel macs are still most of the installed base, and darwin-x64 is
+          # a binary this package publishes. macos-15-intel is the last x86_64
+          # macOS image Actions offers (through 2027), so this lane has a shelf
+          # life — when it goes, so does the ability to test the artifact.
+          - host: macos-15-intel
+            target: x86_64-apple-darwin
+            build: pnpm build --target x86_64-apple-darwin
           - host: ubuntu-latest
             target: wasm32-wasip1-threads
             build: pnpm build --target wasm32-wasip1-threads
@@ -149,8 +163,13 @@ jobs:
         run: ${{ matrix.settings.setup }}
         if: ${{ matrix.settings.setup }}
         shell: bash
+      # --ignore-scripts for the same reason as the native test lane below:
+      # the benchmark chart tooling pulls in `canvas`, which has no prebuild
+      # for every host here (win-arm64 in particular) and would fall back to
+      # compiling against GTK/cairo. This job only runs `napi build`, and
+      # nothing it touches has an install script.
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --ignore-scripts
       - name: Build
         run: ${{ matrix.settings.build }}
         shell: bash
@@ -272,15 +291,23 @@ jobs:
     # node:path (drive letters, backslashes, junction-linked pnpm stores),
     # matching compares '/'-normalized suffixes, and every spec that shells
     # out spawns a real child process. The acorn run matters most here for
-    # exactly that reason, so both engines run on both platforms.
+    # exactly that reason, so both engines run on every platform.
+    #
+    # Both arches of both OSes: a napi addon is exactly the kind of thing that
+    # can be arch-specific, and building an artifact is not evidence that it
+    # loads. Every runner here is native — no emulation anywhere in this job.
     strategy:
       fail-fast: false
       matrix:
         settings:
           - host: windows-latest
             target: x86_64-pc-windows-msvc
+          - host: windows-11-arm
+            target: aarch64-pc-windows-msvc
           - host: macos-latest
             target: aarch64-apple-darwin
+          - host: macos-15-intel
+            target: x86_64-apple-darwin
         node:
           - '22'
           - '24'

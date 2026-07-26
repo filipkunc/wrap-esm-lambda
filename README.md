@@ -455,13 +455,16 @@ first, or the imports resolve to nothing.
 Every lane below runs the whole suite on **each** supported Node major —
 `node@22`, `node@24`, `node@26`:
 
-| lane                       | what it covers                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------- |
-| `linux-x64`, `linux-arm64` | the prebuilt addon on both Linux arches, in containers, native runners (no QEMU)            |
-| `win32-x64-msvc`           | Windows: drive letters and backslashes through matching, resolution and every child spawn   |
-| `darwin-arm64`             | macOS on Apple silicon                                                                      |
-| WASI                       | the `wasm32-wasip1-threads` build — the reach onto platforms with no prebuilt addon         |
-| JS-only                    | **no native artifact at all**: the degraded engine path a platform without a prebuild takes |
+| lane                                 | what it covers                                                                                           |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `linux-x64`, `linux-arm64`           | the prebuilt addon on both Linux arches, glibc and musl, in containers on native runners (no QEMU)       |
+| `win32-x64-msvc`, `win32-arm64-msvc` | Windows on both arches: drive letters and backslashes through matching, resolution and every child spawn |
+| `darwin-arm64`, `darwin-x64`         | macOS on Apple silicon and Intel                                                                         |
+| WASI                                 | the `wasm32-wasip1-threads` build — the reach onto platforms with no prebuilt addon                      |
+| JS-only                              | **no native artifact at all**: the degraded engine path a platform without a prebuild takes              |
+
+Every runner is native — the arm64 lanes are arm64 machines, not QEMU — so a
+green lane means the artifact that platform downloads actually loads there.
 
 Each native lane runs the suite twice, once per engine, and names
 `WRAP_ESM_LAMBDA_ENGINE` explicitly — an implicit run would let a missing or
@@ -477,8 +480,9 @@ ship is what the manifests promise and that an app built from those tarballs
 alone actually instruments a package.
 
 The Rust side needs `rustc >= 1.95` (`rust-version` in `Cargo.toml`); CI floats
-on stable. Not yet covered: win-arm64 and 32-bit targets (Node ships no 32-bit
-Linux build, and win32-x86 is being retired).
+on stable and nothing verifies that floor. Not covered: 32-bit targets (Node
+ships no 32-bit Linux build, and win32-x86 is being retired), armv7, FreeBSD,
+and `cargo test`/`clippy` anywhere but Linux.
 
 ### Releasing
 
