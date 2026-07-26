@@ -491,10 +491,24 @@ pack-and-install spec runs in every test lane, asserting that what the tarballs
 ship is what the manifests promise and that an app built from those tarballs
 alone actually instruments a package.
 
-The Rust side needs `rustc >= 1.95` (`rust-version` in `Cargo.toml`); CI floats
-on stable and nothing verifies that floor. Not covered: 32-bit targets (Node
-ships no 32-bit Linux build, and win32-x86 is being retired), armv7, FreeBSD,
-and `cargo test`/`clippy` anywhere but Linux.
+Two more gates run beside it, and both block a release:
+
+- **MSRV** — `cargo check --all-targets --locked` on exactly the `rustc 1.95`
+  that `rust-version` in `Cargo.toml` promises. Everything else Rust-side
+  floats on stable, so without this a dependency raising the real floor would
+  surface as a contributor's build breaking rather than as a red check.
+- **Security audit** — `cargo audit` over the whole `Cargo.lock` (every crate
+  there links into the shipped addon, so there is no dev/prod split to make),
+  and `pnpm audit --prod` over what the published packages actually depend on.
+  The full dev tree is audited too but never blocks: bundlers, the benchmark
+  chart generator and test helpers carry advisories no consumer of this
+  package is exposed to, and a gate that is always red is a gate nobody reads.
+
+Every action is pinned to a commit SHA rather than a moving tag, with Renovate
+configured to keep the digests current.
+
+Not covered: 32-bit targets (Node ships no 32-bit Linux build, and win32-x86 is
+being retired), armv7, FreeBSD, and `cargo test`/`clippy` anywhere but Linux.
 
 ### Releasing
 

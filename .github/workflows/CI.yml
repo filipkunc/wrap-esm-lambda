@@ -39,17 +39,21 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
       - name: Install
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
+          # explicit, and mandatory now that the action is pinned by SHA: this
+          # action reads the toolchain out of its own ref name, and a commit
+          # SHA has no name to read
+          toolchain: stable
           components: clippy, rustfmt
       - name: Install dependencies
         run: pnpm install
@@ -75,6 +79,71 @@ jobs:
       # formatting is checked, not fixed, in CI: `pnpm format` is the local fix
       - name: Prettier
         run: pnpm exec prettier --check .
+  msrv:
+    name: MSRV - rustc 1.95
+    runs-on: ubuntu-latest
+    # `rust-version = "1.95"` in Cargo.toml is a promise to contributors, and
+    # until now nothing kept it: every other Rust job floats on stable, so a
+    # dependency raising the real floor would surface as somebody's build
+    # breaking rather than as a red check. This job is that check. It is
+    # deliberately `check` and not `test` — the floor is about whether the
+    # crate compiles on the version it claims, and the test suite already runs
+    # on stable in the lint job.
+    #
+    # --locked matters: it checks the committed Cargo.lock instead of whatever
+    # a fresh resolve picks today, so the answer is about this repository's
+    # pinned tree rather than about crates.io's mood.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install the declared floor
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          # keep in step with `rust-version` in Cargo.toml
+          toolchain: '1.95'
+      - name: Cargo check on 1.95
+        run: cargo check --all-targets --locked
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - name: Setup node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install
+      # --prod is the gate, and that distinction is not a dodge. Everything
+      # this repository publishes depends on four things — acorn,
+      # magic-string, @jridgewell/remapping and unplugin — and that tree is
+      # clean. The full dev tree is not: bundlers, the benchmark chart
+      # generator and test helpers currently drag in a pile of advisories
+      # (tar-fs, picomatch, lodash-es, js-yaml…) that no consumer of this
+      # package is exposed to. Gating on those would paint the workflow red
+      # for reasons nobody can act on, and a gate that is always red is a
+      # gate everybody learns to ignore.
+      - name: pnpm audit - published dependencies
+        run: pnpm audit --prod
+      # Reported, never blocking: worth seeing when it changes, not worth
+      # stopping a release for.
+      - name: pnpm audit - full dev tree (informational)
+        continue-on-error: true
+        run: pnpm audit
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          tool: cargo-audit
+      # The Rust tree has no dev/prod split to make — every crate in
+      # Cargo.lock is linked into the addon that ships. Plain `cargo audit`
+      # fails on vulnerabilities and merely reports unmaintained/yanked
+      # crates, which is the right severity line for a gate.
+      - name: Cargo audit
+        run: cargo audit
   build:
     strategy:
       fail-fast: false
@@ -124,21 +193,21 @@ jobs:
     name: stable - ${{ matrix.settings.target }} - node@22
     runs-on: ${{ matrix.settings.host }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
       - name: Install
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           toolchain: stable
           targets: ${{ matrix.settings.target }}
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.cargo/registry/index/
@@ -148,12 +217,12 @@ jobs:
             .cargo-cache
             target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2
         if: ${{ contains(matrix.settings.target, 'musl') }}
         with:
           version: 0.14.1
       - name: Install cargo-zigbuild
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2
         if: ${{ contains(matrix.settings.target, 'musl') }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -174,7 +243,7 @@ jobs:
         run: ${{ matrix.settings.build }}
         shell: bash
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: bindings-${{ matrix.settings.target }}
           path: |
@@ -210,11 +279,11 @@ jobs:
           - '26'
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
@@ -224,8 +293,6 @@ jobs:
           node -e "
             if ('${{ matrix.target }}'.startsWith('aarch64')) {
               console.log('PLATFORM=linux/arm64')
-            } else if ('${{ matrix.target }}'.startsWith('armv7')) {
-              console.log('PLATFORM=linux/arm/v7')
             } else {
               console.log('PLATFORM=linux/amd64')
             }
@@ -241,8 +308,8 @@ jobs:
       # fetches those platform-specific optional deps natively. LIBC is the
       # exception: the musl lane installs on this glibc host and runs the suite
       # inside Alpine, which is why pnpm-workspace.yaml asks for both libc
-      # flavours. An arch tested without installing on it (armv7 under QEMU)
-      # would need the same treatment.
+      # flavours. Any future arch tested without installing on it — an
+      # emulated one, say — would need that same treatment.
       - name: Install dependencies
         run: pnpm install
       # on the host, where pnpm exists: the container runs plain node against
@@ -251,22 +318,15 @@ jobs:
       - name: Build packages
         run: pnpm build:packages
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: bindings-${{ matrix.target }}
           path: .
       - name: List packages
         run: ls -R .
         shell: bash
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        if: ${{ contains(matrix.target, 'armv7') }}
-        with:
-          platforms: all
-      - run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-        if: ${{ contains(matrix.target, 'armv7') }}
       - name: Test bindings
-        uses: addnab/docker-run-action@v3
+        uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
           options: '-v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}'
@@ -308,14 +368,14 @@ jobs:
           - '24'
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       # The host node installs and compiles the workspace, nothing more: the
       # image ships npm but no pnpm, so the arrangement is the musl lane's —
       # install here, mount the workspace, run every test on the image's node.
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -324,7 +384,7 @@ jobs:
       - name: Build packages
         run: pnpm build:packages
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: bindings-${{ matrix.target }}
           path: .
@@ -352,7 +412,10 @@ jobs:
             echo "| ----- | -------- | ---- | ------ |"
             echo "| \`$image\` | \`$platform\` | \`$version\` | \`${digest#*@}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "$image ($platform) runs $version"
+          # the digest too, not just the version: the summary is not readable
+          # from the API, so without this line a green run proves only that
+          # `docker image inspect` exited zero, not what it actually returned
+          echo "$image ($platform) runs $version at ${digest#*@}"
       # A plain `docker run` rather than the action the lanes above use, for
       # one reason: the entrypoint. The base image boots the runtime interface
       # client and blocks waiting for an invocation, so for the suite it has
@@ -469,11 +532,11 @@ jobs:
           - '26'
     runs-on: ${{ matrix.settings.host }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
@@ -489,7 +552,7 @@ jobs:
       - name: Build packages
         run: pnpm build:packages
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: bindings-${{ matrix.settings.target }}
           path: .
@@ -525,11 +588,11 @@ jobs:
           - '26'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
@@ -538,7 +601,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: bindings-wasm32-wasip1-threads
           path: .
@@ -568,11 +631,11 @@ jobs:
           - '26'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
@@ -600,16 +663,18 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
       - name: Install
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
       - name: Install dependencies
         run: pnpm install
       - name: Build addon
@@ -638,17 +703,19 @@ jobs:
       id-token: write
     needs:
       - lint
+      - msrv
+      - audit
       - test-linux-binding
       - test-lambda-runtime
       - test-native-platform
       - test-wasi
       - test-js-only
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -657,7 +724,7 @@ jobs:
       - name: create npm dirs
         run: pnpm exec napi create-npm-dirs
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
       - name: Move artifacts
@@ -711,7 +778,7 @@ jobs:
           echo "Dry run only. To release: run this workflow manually with publish=publish." >> $GITHUB_STEP_SUMMARY
       - name: Release
         if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           append_body: true
           body_path: hooks/benchTable.md
