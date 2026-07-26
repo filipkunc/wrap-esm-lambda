@@ -1,17 +1,11 @@
-// oxc deprecated the AstBuilder methods this builds with, ahead of shipping
-// their replacement (oxc-project/oxc#23043). There is no external equivalent on
-// 0.139: the AST structs are #[non_exhaustive], so another crate cannot build
-// them by struct literal either — verified by trying. The exemption is scoped
-// to the functions that actually construct nodes, so clippy runs with plain
-// -D warnings and any NEW deprecation, here or anywhere else, still fails.
-// Deleting these attributes is how the migration finds its call sites.
-use oxc_allocator::{Allocator, Box as ArenaBox, CloneIn, Vec as ArenaVec};
+use oxc_allocator::{Allocator, Box as ArenaBox, CloneIn, GetAllocator, Vec as ArenaVec};
 use oxc_ast::{
   NONE,
   ast::{
-    Argument, BindingPattern, Declaration, ExportNamedDeclaration, Expression, ImportOrExportKind,
-    ModuleExportName, Program, Statement, VariableDeclaration, VariableDeclarationKind,
-    VariableDeclarator,
+    Argument, BindingIdentifier, BindingPattern, Declaration, ExportNamedDeclaration,
+    ExportSpecifier, Expression, IdentifierName, ImportDeclaration, ImportDeclarationSpecifier,
+    ImportOrExportKind, ModuleExportName, Program, Statement, StringLiteral, VariableDeclaration,
+    VariableDeclarationKind, VariableDeclarator,
   },
 };
 use oxc_codegen::{Codegen, CodegenOptions};
@@ -47,11 +41,10 @@ impl<'a> LambdaTransform<'a> {
 }
 
 impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
-  #[allow(deprecated)]
   fn enter_program(&mut self, program: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
     self.update_handler_name(&mut program.body, ctx);
 
-    let mut new_stmts = ctx.ast.vec_with_capacity(program.body.len() * 2);
+    let mut new_stmts = ArenaVec::with_capacity_in(program.body.len() * 2, ctx);
     for stmt in program.body.drain(..) {
       match &stmt {
         Statement::ExportNamedDeclaration(export) => {
@@ -68,12 +61,13 @@ impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
             let init = &found.init;
             assert!(init.is_some());
             let wrapped_expr = self.wrap_expression(
-              init.clone_in_with_semantic_ids(ctx.ast.allocator).unwrap(),
+              init.clone_in_with_semantic_ids(ctx.allocator()).unwrap(),
               ctx,
             );
-            new_stmts.push(Statement::VariableDeclaration(
-              ctx.ast.alloc(self.var_handler(&Some(wrapped_expr), ctx)),
-            ));
+            let var_decl = self.var_handler(&Some(wrapped_expr), ctx);
+            new_stmts.push(Statement::VariableDeclaration(ArenaBox::new_in(
+              var_decl, ctx,
+            )));
             continue;
           }
         }
@@ -97,9 +91,9 @@ impl<'a> LambdaTransform<'a> {
           if let Some(name) = specifier.exported.identifier_name()
             && name == self.handler
           {
-            self.handler = Ident::from_strs_array_in([&specifier.local.name()], &ctx.ast.allocator);
+            self.handler = Ident::from_strs_array_in([&specifier.local.name()], &ctx.allocator());
             self.orig_handler =
-              Ident::from_strs_array_in(["orig_", &self.handler], &ctx.ast.allocator);
+              Ident::from_strs_array_in(["orig_", &self.handler], &ctx.allocator());
             return;
           }
         }
@@ -107,7 +101,6 @@ impl<'a> LambdaTransform<'a> {
     }
   }
 
-  #[allow(deprecated)]
   fn var_handler(
     &mut self,
     init: &Option<Expression<'a>>,
@@ -115,33 +108,32 @@ impl<'a> LambdaTransform<'a> {
   ) -> VariableDeclaration<'a> {
     let kind = VariableDeclarationKind::Const;
     let binding = ctx.generate_binding_in_current_scope(self.handler, SymbolFlags::empty());
-    let declarator = ctx.ast.variable_declarator(
+    let pattern = binding.create_binding_pattern(ctx);
+    let init = init.clone_in_with_semantic_ids(ctx.allocator());
+    let declarator = VariableDeclarator::new(SPAN, kind, pattern, NONE, init, false, ctx);
+    VariableDeclaration::new(
       SPAN,
       kind,
-      binding.create_binding_pattern(ctx),
-      NONE,
-      init.clone_in_with_semantic_ids(ctx.ast.allocator),
+      ArenaVec::from_value_in(declarator, ctx),
       false,
-    );
-    ctx
-      .ast
-      .variable_declaration(SPAN, kind, ctx.ast.vec1(declarator), false)
+      ctx,
+    )
   }
 
-  #[allow(deprecated)]
   fn wrap_expression(
     &mut self,
     expr: Expression<'a>,
     ctx: &mut TraverseCtx<'a, ()>,
   ) -> Expression<'a> {
-    ctx.ast.expression_call(
+    let callee = Expression::new_identifier(SPAN, self.wrapper, ctx);
+    let argument = Argument::from(expr.clone_in_with_semantic_ids(ctx.allocator()));
+    Expression::new_call_expression(
       SPAN,
-      ctx.ast.expression_identifier(SPAN, self.wrapper),
+      callee,
       NONE,
-      ctx.ast.vec1(Argument::from(
-        expr.clone_in_with_semantic_ids(ctx.ast.allocator),
-      )),
+      ArenaVec::from_value_in(argument, ctx),
       false,
+      ctx,
     )
   }
 
@@ -153,13 +145,12 @@ impl<'a> LambdaTransform<'a> {
     ctx: &mut TraverseCtx<'a, ()>,
   ) {
     if index < declarations.len() {
-      declarations[index] = new_decl.clone_in_with_semantic_ids(ctx.ast.allocator);
+      declarations[index] = new_decl.clone_in_with_semantic_ids(ctx.allocator());
     } else {
       declarations.push(new_decl);
     }
   }
 
-  #[allow(deprecated)]
   fn transform_export_named_declaration(
     &mut self,
     new_stmts: &mut ArenaVec<'a, Statement<'a>>,
@@ -174,43 +165,32 @@ impl<'a> LambdaTransform<'a> {
             match &decl.id {
               BindingPattern::BindingIdentifier(identifier) => {
                 if identifier.name == self.handler {
-                  let mut new_declarations = var
-                    .declarations
-                    .clone_in_with_semantic_ids(ctx.ast.allocator);
+                  let mut new_declarations =
+                    var.declarations.clone_in_with_semantic_ids(ctx.allocator());
                   let expr = self.wrap_expression(
                     decl
                       .init
-                      .clone_in_with_semantic_ids(ctx.ast.allocator)
+                      .clone_in_with_semantic_ids(ctx.allocator())
                       .unwrap(),
                     ctx,
                   );
-                  self.replace_var_declarator_at(
-                    &mut new_declarations,
-                    index,
-                    ctx.ast.variable_declarator(
-                      SPAN,
-                      var.kind,
-                      ctx
-                        .generate_binding_in_current_scope(self.handler, SymbolFlags::empty())
-                        .create_binding_pattern(ctx),
-                      NONE,
-                      Some(expr),
-                      false,
-                    ),
-                    ctx,
-                  );
+                  let pattern = ctx
+                    .generate_binding_in_current_scope(self.handler, SymbolFlags::empty())
+                    .create_binding_pattern(ctx);
+                  let declarator =
+                    VariableDeclarator::new(SPAN, var.kind, pattern, NONE, Some(expr), false, ctx);
+                  self.replace_var_declarator_at(&mut new_declarations, index, declarator, ctx);
+                  let declaration =
+                    VariableDeclaration::boxed(SPAN, var.kind, new_declarations, false, ctx);
                   new_stmts.push(Statement::ExportNamedDeclaration(
-                    ctx.ast.alloc_export_named_declaration(
+                    ExportNamedDeclaration::boxed(
                       SPAN,
-                      Some(Declaration::VariableDeclaration(
-                        ctx
-                          .ast
-                          .alloc_variable_declaration(SPAN, var.kind, new_declarations, false),
-                      )),
-                      ctx.ast.vec(),
+                      Some(Declaration::VariableDeclaration(declaration)),
+                      ArenaVec::new_in(ctx),
                       None,
                       ImportOrExportKind::Value,
                       NONE,
+                      ctx,
                     ),
                   ));
                   return true;
@@ -239,18 +219,20 @@ impl<'a> LambdaTransform<'a> {
         Declaration::FunctionDeclaration(func)
           if func.name().is_some_and(|x| x == self.handler) =>
         {
-          let mut func = func.clone_in_with_semantic_ids(ctx.ast.allocator);
+          let mut func = func.clone_in_with_semantic_ids(ctx.allocator());
           func.id = None;
           let init = self.wrap_expression(Expression::FunctionExpression(func), ctx);
           let var_decl = self.var_handler(&Some(init), ctx);
+          let declaration = ArenaBox::new_in(var_decl, ctx);
           new_stmts.push(Statement::ExportNamedDeclaration(
-            ctx.ast.alloc_export_named_declaration(
+            ExportNamedDeclaration::boxed(
               SPAN,
-              Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
-              ctx.ast.vec(),
+              Some(Declaration::VariableDeclaration(declaration)),
+              ArenaVec::new_in(ctx),
               None,
               ImportOrExportKind::Value,
               NONE,
+              ctx,
             ),
           ));
           return true;
@@ -262,39 +244,42 @@ impl<'a> LambdaTransform<'a> {
         if let Some(name) = specifier.exported.identifier_name()
           && name == self.handler
         {
-          new_stmts.push(Statement::ImportDeclaration(
-            ctx.ast.alloc_import_declaration(
-              SPAN,
-              Some(
-                ctx
-                  .ast
-                  .vec1(ctx.ast.import_declaration_specifier_import_specifier(
-                    SPAN,
-                    ModuleExportName::IdentifierName(ctx.ast.identifier_name(SPAN, self.handler)),
-                    ctx.ast.binding_identifier(SPAN, self.orig_handler),
-                    ImportOrExportKind::Value,
-                  )),
-              ),
-              export
-                .source
-                .clone_in_with_semantic_ids(ctx.ast.allocator)
-                .unwrap(),
-              None,
-              NONE,
-              ImportOrExportKind::Value,
-            ),
-          ));
-          let init =
-            self.wrap_expression(ctx.ast.expression_identifier(SPAN, self.orig_handler), ctx);
+          let imported =
+            ModuleExportName::IdentifierName(IdentifierName::new(SPAN, self.handler, ctx));
+          let local = BindingIdentifier::new(SPAN, self.orig_handler, ctx);
+          let specifier = ImportDeclarationSpecifier::new_import_specifier(
+            SPAN,
+            imported,
+            local,
+            ImportOrExportKind::Value,
+            ctx,
+          );
+          let source = export
+            .source
+            .clone_in_with_semantic_ids(ctx.allocator())
+            .unwrap();
+          new_stmts.push(Statement::ImportDeclaration(ImportDeclaration::boxed(
+            SPAN,
+            Some(ArenaVec::from_value_in(specifier, ctx)),
+            source,
+            None,
+            NONE,
+            ImportOrExportKind::Value,
+            ctx,
+          )));
+          let orig = Expression::new_identifier(SPAN, self.orig_handler, ctx);
+          let init = self.wrap_expression(orig, ctx);
           let var_decl = self.var_handler(&Some(init), ctx);
+          let declaration = ArenaBox::new_in(var_decl, ctx);
           new_stmts.push(Statement::ExportNamedDeclaration(
-            ctx.ast.alloc_export_named_declaration(
+            ExportNamedDeclaration::boxed(
               SPAN,
-              Some(Declaration::VariableDeclaration(ctx.ast.alloc(var_decl))),
-              ctx.ast.vec(),
+              Some(Declaration::VariableDeclaration(declaration)),
+              ArenaVec::new_in(ctx),
               None,
               ImportOrExportKind::Value,
               NONE,
+              ctx,
             ),
           ));
           return true;
@@ -1016,21 +1001,24 @@ fn arena_ident<'a>(allocator: &'a Allocator, name: &str) -> Ident<'a> {
 
 /// Build a `ModuleExportName` for a name that may not be a plain identifier
 /// (`export { x as "not-an-ident" }` is legal).
-#[allow(deprecated)]
 fn module_export_name<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
   name: &str,
 ) -> ModuleExportName<'a> {
   if is_plain_property_name(name) {
-    ModuleExportName::IdentifierName(ast.identifier_name(SPAN, arena_ident(allocator, name)))
+    ModuleExportName::IdentifierName(IdentifierName::new(SPAN, arena_ident(allocator, name), ast))
   } else {
-    ModuleExportName::StringLiteral(ast.string_literal(SPAN, arena_ident(allocator, name), None))
+    ModuleExportName::StringLiteral(StringLiteral::new(
+      SPAN,
+      arena_ident(allocator, name),
+      None,
+      ast,
+    ))
   }
 }
 
 /// `let <name> = <init>;`
-#[allow(deprecated)]
 fn let_statement<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
@@ -1038,42 +1026,43 @@ fn let_statement<'a>(
   init: Expression<'a>,
 ) -> Statement<'a> {
   let kind = VariableDeclarationKind::Let;
-  let pattern = ast.binding_pattern_binding_identifier(SPAN, arena_ident(allocator, name));
-  let declarator = ast.variable_declarator(SPAN, kind, pattern, NONE, Some(init), false);
-  Statement::VariableDeclaration(ast.alloc_variable_declaration(
+  let pattern = BindingPattern::new_binding_identifier(SPAN, arena_ident(allocator, name), ast);
+  let declarator = VariableDeclarator::new(SPAN, kind, pattern, NONE, Some(init), false, ast);
+  Statement::VariableDeclaration(VariableDeclaration::boxed(
     SPAN,
     kind,
-    ast.vec1(declarator),
+    ArenaVec::from_value_in(declarator, ast),
     false,
+    ast,
   ))
 }
 
 /// `export { <local> as <exported> };`
-#[allow(deprecated)]
 fn export_alias_statement<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
   local: &str,
   exported: &str,
 ) -> Statement<'a> {
-  let specifier = ast.export_specifier(
+  let specifier = ExportSpecifier::new(
     SPAN,
     module_export_name(allocator, ast, local),
     module_export_name(allocator, ast, exported),
     ImportOrExportKind::Value,
+    ast,
   );
-  Statement::ExportNamedDeclaration(ast.alloc_export_named_declaration(
+  Statement::ExportNamedDeclaration(ExportNamedDeclaration::boxed(
     SPAN,
     None,
-    ast.vec1(specifier),
+    ArenaVec::from_value_in(specifier, ast),
     None,
     ImportOrExportKind::Value,
     NONE,
+    ast,
   ))
 }
 
 /// `import { <imported> as <local> } from "<source>";`
-#[allow(deprecated)]
 fn import_alias_statement<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
@@ -1081,41 +1070,44 @@ fn import_alias_statement<'a>(
   local: &str,
   source: &str,
 ) -> Statement<'a> {
-  Statement::ImportDeclaration(ast.alloc_import_declaration(
+  let specifier = ImportDeclarationSpecifier::new_import_specifier(
     SPAN,
-    Some(ast.vec1(ast.import_declaration_specifier_import_specifier(
-      SPAN,
-      module_export_name(allocator, ast, imported),
-      ast.binding_identifier(SPAN, arena_ident(allocator, local)),
-      ImportOrExportKind::Value,
-    ))),
-    ast.string_literal(SPAN, arena_ident(allocator, source), None),
+    module_export_name(allocator, ast, imported),
+    BindingIdentifier::new(SPAN, arena_ident(allocator, local), ast),
+    ImportOrExportKind::Value,
+    ast,
+  );
+  Statement::ImportDeclaration(ImportDeclaration::boxed(
+    SPAN,
+    Some(ArenaVec::from_value_in(specifier, ast)),
+    StringLiteral::new(SPAN, arena_ident(allocator, source), None, ast),
     None,
     NONE,
     ImportOrExportKind::Value,
+    ast,
   ))
 }
 
 /// `import * as <local> from "<source>";`
-#[allow(deprecated)]
 fn import_namespace_statement<'a>(
   allocator: &'a Allocator,
   ast: &oxc_ast::AstBuilder<'a>,
   local: &str,
   source: &str,
 ) -> Statement<'a> {
-  Statement::ImportDeclaration(ast.alloc_import_declaration(
+  let specifier = ImportDeclarationSpecifier::new_import_namespace_specifier(
     SPAN,
-    Some(
-      ast.vec1(ast.import_declaration_specifier_import_namespace_specifier(
-        SPAN,
-        ast.binding_identifier(SPAN, arena_ident(allocator, local)),
-      )),
-    ),
-    ast.string_literal(SPAN, arena_ident(allocator, source), None),
+    BindingIdentifier::new(SPAN, arena_ident(allocator, local), ast),
+    ast,
+  );
+  Statement::ImportDeclaration(ImportDeclaration::boxed(
+    SPAN,
+    Some(ArenaVec::from_value_in(specifier, ast)),
+    StringLiteral::new(SPAN, arena_ident(allocator, source), None, ast),
     None,
     NONE,
     ImportOrExportKind::Value,
+    ast,
   ))
 }
 
@@ -1131,7 +1123,6 @@ fn import_namespace_statement<'a>(
 ///   optional import alias, a `let` snapshot, and an `export { local as
 ///   exported };`. The snapshot evaluates at end-of-module, after every
 ///   declaration it can reference.
-#[allow(deprecated)]
 fn apply_rewrites<'a>(
   allocator: &'a Allocator,
   program: &mut Program<'a>,
@@ -1194,7 +1185,7 @@ fn apply_rewrites<'a>(
       return Err("internal: split target is not an export statement".to_string());
     };
     let removed: std::collections::HashSet<usize> = splits.iter().map(|s| s.spec_idx).collect();
-    let old = std::mem::replace(&mut export.specifiers, ast.vec());
+    let old = std::mem::replace(&mut export.specifiers, ArenaVec::new_in(&ast));
     for (spec_idx, spec) in old.into_iter().enumerate() {
       if !removed.contains(&spec_idx) {
         export.specifiers.push(spec);
@@ -1220,7 +1211,7 @@ fn apply_rewrites<'a>(
       allocator,
       &ast,
       &split.local_ident,
-      ast.expression_identifier(SPAN, arena_ident(allocator, &source_local)),
+      Expression::new_identifier(SPAN, arena_ident(allocator, &source_local), &ast),
     ));
     appended.push(export_alias_statement(
       allocator,
@@ -1241,7 +1232,7 @@ fn apply_rewrites<'a>(
       allocator,
       &ast,
       &ns.local_ident,
-      ast.expression_identifier(SPAN, arena_ident(allocator, &import_local)),
+      Expression::new_identifier(SPAN, arena_ident(allocator, &import_local), &ast),
     ));
     appended.push(export_alias_statement(
       allocator,
