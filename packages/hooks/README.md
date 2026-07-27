@@ -13,18 +13,46 @@ WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs \
 
 ```js
 // wrap.config.mjs
-import { defineConfig } from '@wrap-esm-lambda/core'
+import { definePatches } from '@wrap-esm-lambda/core'
 
-export default defineConfig({
-  entries: [
+export default definePatches(
+  [
     {
-      match: 'handler.mjs',
-      handler: 'handler',
-      wrapper: { name: 'WrapAwsLambda', from: '/opt/nodejs/wrap-runtime.mjs' },
+      module: { name: 'express', versionRange: '>=5 <6', files: ['lib/express.js'] },
+      patch: { name: 'patchExpressRoute', from: './patches/http-route.mjs' },
+      bindings: ['application'],
     },
   ],
-})
+  import.meta.url,
+)
 ```
+
+## AWS Lambda
+
+On Lambda the function's own handler is a target whose file and export name
+only the platform knows — it hands them to its runtime interface client as
+`_HANDLER` and `LAMBDA_TASK_ROOT`. The `aws-lambda` preset reads the same
+contract at preload (a config is code, evaluated before the RIC's late
+handler import) and emits an ordinary path-matched patch entry, reproducing
+the RIC's own resolution rules:
+
+```js
+// wrap.config.mjs — nothing about the handler is written down
+import { definePatches } from '@wrap-esm-lambda/core'
+import { lambdaHandlerEntries } from '@wrap-esm-lambda/hooks/aws-lambda'
+
+export default definePatches(
+  [...lambdaHandlerEntries({ patch: { name: 'wrapHandler', from: './patches/lambda.mjs' } })],
+  import.meta.url,
+)
+```
+
+Outside Lambda the same config is inert (no `_HANDLER`, no entry), so one
+package can ship both this and its package-identity entries. Activation on
+the platform goes through `NODE_OPTIONS=--import` — see
+[docs/serverless.md](../../docs/serverless.md); the CI Lambda lane verifies
+the whole arrangement on the real `public.ecr.aws/lambda/nodejs` images
+through AWS's real runtime interface client.
 
 Sources already instrumented at build time (sentinel present) are passed
 through untouched, so layering this on an instrumented bundle is safe.

@@ -126,8 +126,16 @@ async function checkPatch(entry: PatchEntry): Promise<{ status: CheckStatus; det
   return null
 }
 
+/** A path match's candidate list, as an array whichever form was configured. */
+function pathCandidates(path: string | string[]): string[] {
+  return typeof path === 'string' ? [path] : path
+}
+
 function labelFor(entry: InstrumentEntry): string {
   if (entry.patch) {
+    if (entry.module.path !== undefined) {
+      return `path ${pathCandidates(entry.module.path).join(', ')}`
+    }
     const range = entry.module.versionRange ? ` ${entry.module.versionRange}` : ''
     const files = entry.module.files ? ` · ${entry.module.files.join(', ')}` : ''
     return `${entry.module.name}${range}${files}`
@@ -149,6 +157,26 @@ async function checkEntry(entry: InstrumentEntry, cwd: string): Promise<EntryRep
 
   const patchProblem = await checkPatch(entry)
   if (patchProblem) return { label, ...patchProblem }
+
+  if (entry.module.path !== undefined) {
+    // A path-matched entry names files, not a package — often files that only
+    // exist where the process runs (a Lambda handler under /var/task). What
+    // exists here is checked like a declared package file; what does not is
+    // not an error, because this tree may simply not be that environment.
+    const present = pathCandidates(entry.module.path).filter((p) => isAbsolute(p) && existsSync(p))
+    if (present.length === 0) {
+      return { label, status: 'skipped', detail: 'no candidate path exists here — matched on module path at load time' }
+    }
+    const results = present.map((file) => ({ file, ...checkFile(file, entry.bindings) }))
+    const failed = results.filter((r) => r.status === 'error')
+    if (failed.length > 0) {
+      return { label, status: 'error', detail: failed.map((r) => `${r.file}: ${r.detail}`).join('; ') }
+    }
+    if (results.every((r) => r.status === 'skipped')) {
+      return { label, status: 'skipped', detail: results[0]!.detail }
+    }
+    return { label, status: 'ok', detail: `${results.map((r) => r.file).join(', ')} ok` }
+  }
 
   if (isBuiltin(entry.module.name)) {
     if (entry.module.versionRange && !satisfies(process.versions.node, entry.module.versionRange)) {

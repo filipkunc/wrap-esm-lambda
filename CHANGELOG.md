@@ -30,6 +30,24 @@ would break a consumer.
 
 ### Added
 
+- Patch entries can match by **path** instead of package identity:
+  `module: { path: [...] }` (absolute paths match exactly, relative ones as
+  suffixes — the `files` rule) for code with no useful package name, such as
+  an app's own files. `path` replaces `name` and excludes
+  `versionRange`/`files`; `wrap-esm-lambda-validate` checks candidates that
+  exist locally and skips the rest as runtime-only.
+- `@wrap-esm-lambda/hooks/aws-lambda`: `lambdaHandlerEntries()` derives a
+  path-matched patch entry for a Lambda function's own handler from
+  `_HANDLER`/`LAMBDA_TASK_ROOT` at preload, reproducing the runtime
+  interface client's resolution rules (basename split on the first dot,
+  module-root prefix, the `''`/`.js`/`.mjs`/`.cjs` lookup order, first
+  property segment as the tapped binding). The original Lambda-handler use
+  case now runs entirely on the generic exports tap — no wrap entry, no
+  static handler knowledge; outside Lambda the preset emits no entry, so
+  the config is inert. Verified end-to-end against the RIC's load sequence
+  in `__test__/lambda-generic.spec.ts` and through AWS's real runtime
+  interface client on the `public.ecr.aws/lambda/nodejs` images in the CI
+  Lambda lane.
 - `wrap-esm-lambda-validate` (a `bin` of `@wrap-esm-lambda/core`): checks a
   config against the installed tree — package present, version in range,
   declared files present, ESM exports still there, patch module importable —

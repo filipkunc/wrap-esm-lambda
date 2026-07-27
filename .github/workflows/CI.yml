@@ -499,6 +499,56 @@ jobs:
           fi
           docker rm -f ric-lane >/dev/null || true
           [ "$ok" -eq 1 ]
+      # The same real-RIC exercise once more, with nothing about the handler
+      # written down anywhere: the config derives the handler's file and
+      # export name from _HANDLER/LAMBDA_TASK_ROOT at preload (the aws-lambda
+      # preset), exactly the way the RIC itself locates it. Both module
+      # systems, because the tap shapes differ — the ESM `export const
+      # handler` takes the rewrite path, the CJS handler is a
+      # `module.exports` property tap. This is the generic-tap replacement
+      # for the original wrap-entry Lambda story, proven on the platform's
+      # own runtime image.
+      - name: Invoke through the real RIC with the _HANDLER-derived generic config
+        run: |
+          set -euo pipefail
+          fixture="$GITHUB_WORKSPACE/__test__/fixtures/lambda-generic"
+          invoke() {
+            handler="$1"
+            port="$2"
+            docker run -d --name ric-generic \
+              --platform ${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }} \
+              -p "$port:8080" \
+              -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
+              -w "$fixture" \
+              -e LAMBDA_TASK_ROOT="$fixture" \
+              -e NODE_OPTIONS="--import @wrap-esm-lambda/hooks/register" \
+              -e WRAP_ESM_LAMBDA_CONFIG="$fixture/wrap.config.mjs" \
+              -e WRAP_ESM_LAMBDA_ENGINE=oxc \
+              -e WRAP_ESM_LAMBDA_DEBUG=1 \
+              "public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}" "$handler"
+
+            body=''
+            for _ in $(seq 1 30); do
+              body=$(curl -s --max-time 20 -XPOST \
+                "http://localhost:$port/2015-03-31/functions/function/invocations" -d '{"who":"ric"}' || true)
+              if [ -n "$body" ]; then break; fi
+              sleep 1
+            done
+
+            ok=0
+            case "$body" in *wrapped:hi:ric*) ok=1 ;; esac
+            if [ "$ok" -ne 1 ]; then
+              echo "expected the RIC to return wrapped:hi:ric for $handler, got: ${body:-<no response>}"
+              echo '--- container logs ---'
+              docker logs ric-generic || true
+            else
+              echo "real RIC invocation for $handler returned: $body"
+            fi
+            docker rm -f ric-generic >/dev/null || true
+            [ "$ok" -eq 1 ]
+          }
+          invoke handler.handler 9101
+          invoke handler-cjs/handler.handler 9102
   test-native-platform:
     name: Test ${{ matrix.settings.target }} - node@${{ matrix.node }}
     needs:

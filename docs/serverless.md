@@ -63,7 +63,16 @@ image. A lane runs the whole suite — both engines, the prebuilt addon
 loaded off Amazon Linux 2023's glibc — inside
 `public.ecr.aws/lambda/nodejs:22` and `:24`, on x86_64 and Graviton, and
 then reruns the delivery shape above on that image: `NODE_OPTIONS`
-registration with the RIC bootstrap stand-in as the process main. That does
+registration with the RIC bootstrap stand-in as the process main. Two more
+steps then drop the stand-in and answer real invocations through the
+image's own runtime interface client — one with a package-identity config,
+one with a config that names nothing at all: the `aws-lambda` preset
+(`@wrap-esm-lambda/hooks/aws-lambda`) derives the handler's file and export
+from `_HANDLER`/`LAMBDA_TASK_ROOT` at preload, the same contract the RIC
+itself reads, so the function's own handler is instrumented by the generic
+exports tap with zero handler-specific configuration — the ESM
+`export const` shape through the tap's rewrite path, the CJS
+`exports.handler` shape as a `module.exports` property tap. That does
 not settle the managed-runtime minor question — the zip runtime is not the
 container image — but it removes the container path from the guesswork
 entirely, and each run records the image's `node --version` and manifest

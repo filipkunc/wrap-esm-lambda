@@ -11,6 +11,10 @@
     "./register": {
       "types": "./dist/register.d.mts",
       "default": "./dist/register.mjs"
+    },
+    "./aws-lambda": {
+      "types": "./dist/aws-lambda.d.mts",
+      "default": "./dist/aws-lambda.mjs"
     }
   },
   "files": [

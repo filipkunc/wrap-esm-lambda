@@ -14,9 +14,11 @@ reach `Module._load` monkey-patching ever had, but working for `import` and
 `require()` alike, including on the Node minors where the classic patch points
 were [broken](docs/history.md).
 
-The project began as an experiment in wrapping AWS Lambda ESM handlers — that
-transform is still here ([below](#the-original-transform-wrapping-a-lambda-handler)) —
-and grew into a general instrumentation toolkit.
+The project began as an experiment in wrapping AWS Lambda ESM handlers — a
+job the generic tap now does on its own, discovering the handler from the
+Lambda environment ([below](#wrapping-a-lambda-handler--now-just-a-patch-entry));
+the original dedicated transform is still here too — and grew into a general
+instrumentation toolkit.
 
 ## Quick start
 
@@ -221,6 +223,15 @@ A config is a list of entries; two kinds exist and mix freely.
   [patch author contract](packages/core/README.md#patch-author-contract)).
   TypeScript patch files ride on Node's type stripping at runtime and on the
   bundler at build time.
+- **Path-identified targets**: `module: { path: [...] }` (a string or list;
+  an absolute path matches exactly, a relative one as a suffix) matches files
+  instead of a package, for code with no useful package identity — an app's
+  own files, or a Lambda handler whose location only the runtime environment
+  knows (the [aws-lambda preset](#wrapping-a-lambda-handler--now-just-a-patch-entry)
+  derives such an entry from `_HANDLER`/`LAMBDA_TASK_ROOT` at preload).
+  `path` replaces `name` and excludes `versionRange`/`files`; the validator
+  checks whichever candidates exist in the local tree and skips the rest as
+  runtime-only.
 - **Builtin targets** (`node:http`, `os`, ...) have no source to transform,
   so each shell reaches them through what it owns. The runtime shell patches
   their exports object **eagerly at preload**, before any user code loads.
@@ -249,7 +260,12 @@ A config is a list of entries; two kinds exist and mix freely.
 This rewrites `export const handler = ...` into
 `export const handler = WrapAwsLambda(...)` at the AST level, with source
 maps that keep stack traces pointing at the original lines (see
-[docs/source-maps.md](docs/source-maps.md)).
+[docs/source-maps.md](docs/source-maps.md)). The generic tap covers this
+shape now — a path-matched patch entry rebinding the handler, with the
+Lambda-specific discovery handled by the
+[aws-lambda preset](#wrapping-a-lambda-handler--now-just-a-patch-entry) —
+so prefer a patch entry for new configs; wrap entries remain for the
+wrapper-identifier-in-scope shape and as the original mechanism.
 
 ## Shipping instrumentation as a package
 
@@ -294,18 +310,19 @@ verified end-to-end (both runtime activations plus the bundled build) by
 
 The test suite doubles as a recipe book — each spec runs the real package:
 
-| target                             | what it shows                                                                                                                                                                                                                                       | spec                                                |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                                                                     | [`aws.spec.ts`](__test__/aws.spec.ts)               |
-| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch, and the same config lands through esbuild at build time                                                                                    | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
-| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself, in both shells                                                                                                                                | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
-| **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                                                                    | [`frameworks.spec.ts`](__test__/frameworks.spec.ts) |
-| **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                                                             | [`http-route.spec.ts`](__test__/http-route.spec.ts) |
-| **builtins** (`node:os`)           | eager preload patching at runtime, a resolution-aliased wrapper module at build time — require, default import and named import all observe it either way, single-patched when combined                                                             | [`patch.spec.ts`](__test__/patch.spec.ts)           |
-| **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — relative and bare package specifiers alike — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](__test__/tap-shapes.spec.ts) |
-| **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                                                             | [`hybrid.spec.ts`](__test__/hybrid.spec.ts)         |
-| **packaging**                      | instrumentation as one installed npm package (patches + config + register entry): `--import your-apm/register`, package-specifier configs, and the same packaged config bundled at build time                                                       | [`packaging.spec.ts`](__test__/packaging.spec.ts)   |
-| **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                                                                      | [`patch.spec.ts`](__test__/patch.spec.ts)           |
+| target                             | what it shows                                                                                                                                                                                                                                       | spec                                                        |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                                                                     | [`aws.spec.ts`](__test__/aws.spec.ts)                       |
+| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch, and the same config lands through esbuild at build time                                                                                    | [`frameworks.spec.ts`](__test__/frameworks.spec.ts)         |
+| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself, in both shells                                                                                                                                | [`frameworks.spec.ts`](__test__/frameworks.spec.ts)         |
+| **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                                                                    | [`frameworks.spec.ts`](__test__/frameworks.spec.ts)         |
+| **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                                                             | [`http-route.spec.ts`](__test__/http-route.spec.ts)         |
+| **builtins** (`node:os`)           | eager preload patching at runtime, a resolution-aliased wrapper module at build time — require, default import and named import all observe it either way, single-patched when combined                                                             | [`patch.spec.ts`](__test__/patch.spec.ts)                   |
+| **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — relative and bare package specifiers alike — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](__test__/tap-shapes.spec.ts)         |
+| **Lambda handler via `_HANDLER`**  | the generic approach carrying the original problem: the config learns the handler's file and export from the Lambda environment at preload, and the RIC's exact load sequence gets a wrapped handler — ESM rewrite path and CJS property tap alike  | [`lambda-generic.spec.ts`](__test__/lambda-generic.spec.ts) |
+| **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                                                             | [`hybrid.spec.ts`](__test__/hybrid.spec.ts)                 |
+| **packaging**                      | instrumentation as one installed npm package (patches + config + register entry): `--import your-apm/register`, package-specifier configs, and the same packaged config bundled at build time                                                       | [`packaging.spec.ts`](__test__/packaging.spec.ts)           |
+| **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                                                                      | [`patch.spec.ts`](__test__/patch.spec.ts)                   |
 
 For observe-only needs on core modules, Node's own
 [`diagnostics_channel`](https://nodejs.org/api/diagnostics_channel.html)
@@ -317,7 +334,7 @@ defining module, not the barrel; where rebinding meets bundled-CJS reality),
 the `http.route` mechanisms, and the builtin eager-patch design — live in
 [docs/real-packages.md](docs/real-packages.md).
 
-## The original transform: wrapping a Lambda handler
+## Wrapping a Lambda handler — now just a patch entry
 
 The problem this repo started with — transform:
 
@@ -337,13 +354,56 @@ export const handler = WrapAwsLambda(async (event) => {
 })
 ```
 
-The native addon exposes this directly (`transformLambda`,
-`transformLambdaWithMap`, `transformLambdaWithChainedMap`, buffer-input
-variants — see [index.d.ts](index.d.ts)), and a wrap entry does it
-declaratively through either shell. Stack traces survive: oxc emits a source
-map for ~1 µs, and the map can be chained all the way back to an original
-`.ts` — composed in Rust without leaving the addon. Details, demos and
-numbers: [docs/source-maps.md](docs/source-maps.md).
+The generic tap covers this today with no dedicated mechanism — including the
+part that used to make it special: **on Lambda, the handler's file and export
+name are not yours to write down.** The platform owns them and hands them to
+its runtime interface client at startup as `_HANDLER` (`src/index.handler`)
+and `LAMBDA_TASK_ROOT`. A config is code evaluated in the target process at
+preload — before the RIC's late handler import — so the `aws-lambda` preset
+reads the same two variables there and emits an ordinary path-matched patch
+entry, reproducing the RIC's own resolution rules (basename split on the
+first dot, module root prefix, the `''`/`.js`/`.mjs`/`.cjs` lookup order):
+
+```js
+// wrap.config.mjs — no file name, no export name: the environment knows
+import { definePatches } from '@wrap-esm-lambda/core'
+import { lambdaHandlerEntries } from '@wrap-esm-lambda/hooks/aws-lambda'
+
+export default definePatches(
+  [...lambdaHandlerEntries({ patch: { name: 'wrapHandler', from: './patches/lambda.mjs' } })],
+  import.meta.url,
+)
+```
+
+```js
+// patches/lambda.mjs — the platform picked the export's name, so don't name it
+export function wrapHandler(bindings) {
+  for (const name of Object.keys(bindings)) {
+    const original = bindings[name]
+    bindings[name] = WrapAwsLambda(original)
+  }
+}
+```
+
+Activation is the usual runtime-shell flag, which Lambda accepts through
+`NODE_OPTIONS` (details in [docs/serverless.md](docs/serverless.md)). An
+`export const handler` goes through the tap's rewrite path, a CJS
+`exports.handler` is a `module.exports` property tap, and outside Lambda the
+same config is inert — no `_HANDLER`, no entry.
+[`__test__/lambda-generic.spec.ts`](__test__/lambda-generic.spec.ts) replays
+the RIC's exact load sequence on every lane, and the CI Lambda lane runs the
+same fixture through AWS's real runtime interface client on the real
+`public.ecr.aws/lambda/nodejs` images, both module systems, answering real
+invocations.
+
+The original dedicated transform is still here: the native addon exposes it
+directly (`transformLambda`, `transformLambdaWithMap`,
+`transformLambdaWithChainedMap`, buffer-input variants — see
+[index.d.ts](index.d.ts)), and a wrap entry does it declaratively through
+either shell. Stack traces survive: oxc emits a source map for ~1 µs, and the
+map can be chained all the way back to an original `.ts` — composed in Rust
+without leaving the addon. Details, demos and numbers:
+[docs/source-maps.md](docs/source-maps.md).
 
 For comparison the minimal wrapping code is re-implemented with
 [Babel](https://babeljs.io/), [Acorn](https://github.com/acornjs/acorn),
