@@ -101,14 +101,14 @@ test('without a base, non-absolute specifiers pass through unchanged (legacy)', 
   assert.strictEqual(entries[0]!.patch.from, 'some-pkg/patches')
 })
 
-test('defineConfig resolves wrapper.from the same way', () => {
+test('defineConfig resolves patch.from the same way', () => {
   const { entries } = defineConfig(
-    { entries: [{ match: 'handler.mjs', handler: 'handler', wrapper: { name: 'W', from: './hooks/wrap.mjs' } }] },
+    {
+      entries: [{ module: { name: 'x' }, patch: { name: 'p', from: './patches/logger.mjs' }, bindings: ['a'] }],
+    },
     pathToFileURL(join(loggerDir, 'src', 'config.mjs')).href,
   )
-  const wrap = entries[0]
-  assert.ok(wrap && wrap.patch === undefined, 'expected the wrap entry back')
-  assert.strictEqual(wrap.wrapper.from, join(loggerDir, 'src', 'hooks', 'wrap.mjs'))
+  assert.strictEqual(entries[0]!.patch.from, join(loggerDir, 'src', 'patches', 'logger.mjs'))
 })
 
 test('one installed package delivers the whole instrumentation: --import vendor/register', async () => {

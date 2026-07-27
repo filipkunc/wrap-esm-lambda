@@ -77,12 +77,6 @@ export interface EsmExportsInfo {
   starSources: string[]
 }
 
-/** Transformed code plus the raw v3 source map JSON of the transform. */
-export interface TransformResult {
-  code: string
-  map?: string | null
-}
-
 /** The optional trailing arguments both tap variants share. */
 type TapTail = [
   filename?: string | undefined | null,
@@ -107,7 +101,6 @@ export interface TransformEngine {
   ): TapResult
   hasModuleSyntax(input: string): boolean
   resolveModule(specifier: string, fromDir: string): string | null
-  transformLambdaWithMapObject(input: string, handler: string, wrapper: string, filename: string): TransformResult
 }
 
 const ENGINES: Record<string, () => Promise<TransformEngine>> = {
@@ -127,7 +120,10 @@ const ENGINES: Record<string, () => Promise<TransformEngine>> = {
  * treated the same way, which for the default engine means degrading to the
  * pure-JS one rather than trusting it.
  */
-export const TAP_CONTRACT_VERSION = 1
+// Version 2: the wrap transform left the contract — the engine surface is
+// tap-only (the native addon still exports `transformLambda*`, but as
+// standalone functions core never calls).
+export const TAP_CONTRACT_VERSION = 2
 
 function verifyContract(engine: TransformEngine): void {
   const reported = typeof engine.tapContractVersion === 'function' ? engine.tapContractVersion() : undefined
@@ -156,11 +152,4 @@ export const engineName = selected.engineName
 
 debug(`engine: ${engineName}`)
 
-export const {
-  esmModuleExports,
-  exportsTap,
-  exportsTapFromBuffer,
-  hasModuleSyntax,
-  resolveModule,
-  transformLambdaWithMapObject,
-} = selected.engine
+export const { esmModuleExports, exportsTap, exportsTapFromBuffer, hasModuleSyntax, resolveModule } = selected.engine

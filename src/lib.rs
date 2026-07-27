@@ -19,9 +19,17 @@ use std::sync::OnceLock;
 /// an addon that will not load at all.
 #[napi]
 pub fn tap_contract_version() -> u32 {
-  1
+  // 2: the wrap transform left the engine contract — core drives the tap
+  // only. The `transform_lambda*` exports below remain as standalone
+  // functions (the project's original transform and the benchmark
+  // comparison subject), outside the contract.
+  2
 }
 
+/// The original standalone handler-wrap transform. Not part of the engine
+/// contract core binds to — the declarative surface covers this shape via
+/// the exports tap — but kept as a direct API and as the subject the
+/// benchmark comparisons (Babel/acorn/swc/orchestrion) are written against.
 #[napi]
 pub fn transform_lambda(input: String, handler: String, wrapper: String) -> String {
   transform::transform_lambda_source(&input, handler, wrapper)

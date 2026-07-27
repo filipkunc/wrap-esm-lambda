@@ -1,15 +1,15 @@
 // The apply step: turn matched entries into instrumented source, via the
 // selected transform engine (native oxc by default, pure-JS acorn via
 // WRAP_ESM_LAMBDA_ENGINE — see engine.mjs). Both shells call `applyMatched`,
-// so the instrumented output is byte-identical whichever mode produced it.
-import { basename, isAbsolute } from 'node:path'
-import { pathToFileURL } from 'node:url'
-import { transformLambdaWithMapObject, exportsTap, exportsTapFromBuffer } from './engine.mjs'
+// so for a given delivery the instrumented output is byte-identical
+// whichever mode produced it.
+import { basename } from 'node:path'
+import { exportsTap, exportsTapFromBuffer } from './engine.mjs'
 import { cleanPath } from './paths.mjs'
 import { moduleKindFor } from './format.mjs'
 import { tapWithStarRetry } from './stars.mjs'
 import type { TapEntryInput } from './engine.mjs'
-import type { InstrumentEntry, PatchEntry, WrapEntry } from './config.mjs'
+import type { InstrumentEntry, PatchEntry } from './config.mjs'
 
 /** What both shells hand to the transform: text, or the loader's raw bytes. */
 export type Source = string | Buffer | ArrayBuffer | NodeJS.TypedArray
@@ -42,54 +42,6 @@ export interface Applied {
 export const SENTINEL_TEXT = '@wrap-esm-lambda instrumented'
 export const SENTINEL = `/*! ${SENTINEL_TEXT} */`
 
-/**
- * The wrapper import specifier, in the form whatever resolves the emitted code
- * will accept. The two consumers disagree about absolute paths:
- *
- * - **Node's ESM loader** (runtime delivery) parses a specifier as a URL, so a
- *   Windows absolute path — `D:\\app\\wrap.mjs` — reads as scheme `d:` and
- *   throws ERR_UNSUPPORTED_ESM_URL_SCHEME. It has to be a `file://` URL.
- * - **Bundlers** (build delivery) are the mirror image: they resolve absolute
- *   paths, drive letters included, and do not resolve `file://` specifiers at
- *   all — so build-time emission keeps the path exactly as configured, which
- *   is also what makes a Lambda-layer path like `/opt/nodejs/wrap.mjs`
- *   survive a build that never sees that directory.
- *
- * Hence the conversion is keyed to delivery, not to the platform: one rule,
- * and each consumer gets the form it can actually resolve.
- */
-function wrapperSpecifier(from: string, registry: boolean): string {
-  return registry && isAbsolute(from) ? pathToFileURL(from).href : from
-}
-
-/**
- * The original wrap transform: rebind an exported const through the wrapper
- * via the engine's wrap transform, append the wrapper import (ESM imports are
- * hoisted, so appending keeps every existing line — and therefore the source
- * map — intact) and the double-wrap sentinel.
- *
- * @returns null when the source is already instrumented
- */
-export function transformMatched(
-  source: string,
-  entry: WrapEntry,
-  idOrUrl: string,
-  options: { delivery?: Delivery } = {},
-): { code: string; map: string | null } | null {
-  if (source.includes(SENTINEL_TEXT)) {
-    return null
-  }
-  const filename = basename(cleanPath(idOrUrl))
-  const { code, map } = transformLambdaWithMapObject(source, entry.handler, entry.wrapper.name, filename)
-  let finalCode = code
-  if (entry.wrapper.from) {
-    const specifier = wrapperSpecifier(entry.wrapper.from, options.delivery === 'registry')
-    finalCode += `\nimport { ${entry.wrapper.name} } from ${JSON.stringify(specifier)};`
-  }
-  finalCode += `\n${SENTINEL}\n`
-  return { code: finalCode, map: map ?? null }
-}
-
 /** The tap inputs for the native call, one element per patch entry. */
 function tapEntries(patches: PatchEntry[]): TapEntryInput[] {
   return patches.map((entry, aliasIndex) => ({
@@ -101,16 +53,14 @@ function tapEntries(patches: PatchEntry[]): TapEntryInput[] {
 }
 
 /**
- * Apply every matching entry to a module, in one pass shared by both shells.
- * Wrap entries run first (they re-generate the whole module); the patch
- * entries then go to the native exports tap in a single call — one parse for
- * all of them. The sentinel lands once at the end.
+ * Apply every matching entry to a module, in one pass shared by both shells:
+ * all entries go to the exports tap in a single call — one parse for all of
+ * them. The sentinel lands once at the end.
  *
  * The tap itself is tiered: bindings that are already reassignable locals
  * cost only an appended snippet, while shapes that need restructuring
  * (`export const`, an anonymous `export default`, re-exports, import-backed
- * list exports) come back as a regenerated module plus a source map — which
- * is chained through the wrap map when a wrap entry ran first.
+ * list exports) come back as a regenerated module plus a source map.
  *
  * `delivery` decides how the tap reaches the user's patch function:
  * - 'import' (build time, default): a static import is appended and the
@@ -122,7 +72,7 @@ function tapEntries(patches: PatchEntry[]): TapEntryInput[] {
  *
  * A `Buffer` (or any TypedArray/ArrayBuffer, e.g. straight from a
  * `registerHooks` load hook's `nextLoad`) is also accepted as `source`. For
- * patch-only matches that stay on the tap's fast path the source then never
+ * matches that stay on the tap's fast path the source then never
  * leaves UTF-8 — it crosses napi zero-copy for validation and one
  * `Buffer.concat` appends the snippets — and `code` in the result is a
  * `Buffer` a load hook can return as-is. When the tap has to rewrite, the
@@ -173,63 +123,42 @@ export function applyMatched(
   const cjs = kind === 'cjs'
   const registry = options.delivery === 'registry'
   const filename = basename(cleanPath(idOrUrl))
-  const wraps = entries.filter((entry): entry is WrapEntry => !entry.patch)
-  const patches = entries.filter((entry): entry is PatchEntry => Boolean(entry.patch))
 
   if (Buffer.isBuffer(input)) {
-    if (wraps.length === 0) {
-      // patch-only buffer fast path: the source crosses napi zero-copy; only
-      // when the tap must rewrite does it come back as a (string) module
-      const buf = input
-      const tap = tapWithStarRetry(
-        (entriesInput, ...rest) => exportsTapFromBuffer(cjs ? EMPTY_BUFFER : buf, entriesInput, ...rest),
-        () => buf.toString('utf8'),
-        cleanPath(idOrUrl),
-        tapEntries(patches),
-        cjs,
-        registry,
-        filename,
-        undefined,
-      )
-      const trailer = `${tap.snippets}\n${SENTINEL}\n`
-      if (tap.code == null) {
-        return { code: Buffer.concat([buf, Buffer.from(trailer)]), map: null }
-      }
-      return { code: tap.code + trailer, map: tap.map ?? null }
-    }
-    input = input.toString('utf8')
-  }
-
-  let code: string = input
-  let map: string | null = null
-  for (const entry of wraps) {
-    const wrapped = transformLambdaWithMapObject(code, entry.handler, entry.wrapper.name, filename)
-    code = wrapped.code
-    if (entry.wrapper.from) {
-      code += `\nimport { ${entry.wrapper.name} } from ${JSON.stringify(wrapperSpecifier(entry.wrapper.from, registry))};`
-    }
-    map = wrapped.map ?? null
-  }
-  if (patches.length > 0) {
-    // one native call for all patch entries; a wrap map chains through any
-    // tap rewrite so the final map still reaches the original source
-    const text = code
+    // buffer fast path: the source crosses napi zero-copy; only when the tap
+    // must rewrite does it come back as a (string) module
+    const buf = input
     const tap = tapWithStarRetry(
-      (entriesInput, ...rest) => exportsTap(cjs ? '' : text, entriesInput, ...rest),
-      () => text,
+      (entriesInput, ...rest) => exportsTapFromBuffer(cjs ? EMPTY_BUFFER : buf, entriesInput, ...rest),
+      () => buf.toString('utf8'),
       cleanPath(idOrUrl),
-      tapEntries(patches),
+      tapEntries(entries),
       cjs,
       registry,
       filename,
-      map ?? undefined,
+      undefined,
     )
-    if (tap.code != null) {
-      code = tap.code
-      map = tap.map ?? null
+    const trailer = `${tap.snippets}\n${SENTINEL}\n`
+    if (tap.code == null) {
+      return { code: Buffer.concat([buf, Buffer.from(trailer)]), map: null }
     }
-    code += tap.snippets
+    return { code: tap.code + trailer, map: tap.map ?? null }
   }
+
+  const text: string = input
+  const tap = tapWithStarRetry(
+    (entriesInput, ...rest) => exportsTap(cjs ? '' : text, entriesInput, ...rest),
+    () => text,
+    cleanPath(idOrUrl),
+    tapEntries(entries),
+    cjs,
+    registry,
+    filename,
+    undefined,
+  )
+  let code = tap.code != null ? tap.code : text
+  const map = tap.code != null ? (tap.map ?? null) : null
+  code += tap.snippets
   code += `\n${SENTINEL}\n`
   return { code, map }
 }

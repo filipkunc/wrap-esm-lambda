@@ -1,39 +1,19 @@
 // The declarative config surface — the part users touch. A config is a list
-// of entries of two kinds:
-// - wrap entries (`match` + `handler` + `wrapper`): AST-level rebind of an
-//   exported const, the original Lambda-handler transform.
-// - patch entries (`module` + `patch` + `bindings`): the generic exports tap —
-//   Module._load-monkey-patching ergonomics, delivered by source transform.
-//   The user's patch function receives the module's live bindings as get/set
-//   accessors and does ordinary imperative patching against real objects.
+// of patch entries (`module` + `patch` + `bindings`): the generic exports
+// tap — Module._load-monkey-patching ergonomics, delivered by source
+// transform. The user's patch function receives the module's live bindings
+// as get/set accessors and does ordinary imperative patching against real
+// objects.
 //
-// The two entry shapes carry `never`-typed markers for each other's
-// discriminating fields (`patch?: undefined` on a wrap entry), so the
-// `entry.patch ? ... : ...` narrowing the shells already did in JavaScript is
-// what the type checker now follows too.
+// This used to carry a second entry kind — wrap entries, the original
+// Lambda-handler transform (`match` + `handler` + `wrapper`) — until the
+// tap's rewrite path could rebind every shape the wrap could, and the
+// aws-lambda preset covered the runtime discovery. The standalone transform
+// survives as the native addon's `transformLambda*` exports (the benchmark
+// comparison subject); the config surface is tap-only.
 import { createRequire } from 'node:module'
 import { isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
-
-export interface WrapperSpec {
-  /** identifier the wrapped export is called through, e.g. 'WrapAwsLambda' */
-  name: string
-  /**
-   * module specifier to import `name` from; omit if the identifier is provided
-   * some other way (e.g. a preloaded global)
-   */
-  from?: string
-}
-
-export interface WrapEntry {
-  /** matched against the module's absolute file path */
-  match: string | RegExp
-  /** the exported binding to wrap */
-  handler: string
-  wrapper: WrapperSpec
-  patch?: undefined
-  module?: undefined
-}
 
 export interface PackageModuleMatch {
   /**
@@ -86,11 +66,10 @@ export interface PatchEntry {
   patch: PatchSpec
   /** exported names handed to the patch function */
   bindings: string[]
-  match?: undefined
-  wrapper?: undefined
 }
 
-export type InstrumentEntry = WrapEntry | PatchEntry
+/** The one entry kind a config holds; the alias is the old union's name. */
+export type InstrumentEntry = PatchEntry
 
 export interface InstrumentConfig {
   entries: InstrumentEntry[]
@@ -144,26 +123,16 @@ function resolvePatchEntry(entry: PatchEntry, base: string | undefined): PatchEn
   return { ...entry, patch: { ...entry.patch, from: resolveFrom(entry.patch.from, base, 'patch.from') } }
 }
 
-function resolveEntry(entry: InstrumentEntry, base: string | undefined): InstrumentEntry {
-  if (entry.patch) {
-    return { ...entry, patch: { ...entry.patch, from: resolveFrom(entry.patch.from, base, 'patch.from') } }
-  }
-  if (entry.wrapper?.from !== undefined) {
-    return { ...entry, wrapper: { ...entry.wrapper, from: resolveFrom(entry.wrapper.from, base, 'wrapper.from') } }
-  }
-  return entry
-}
-
 /**
  * Identity helper so config files get typing/autocomplete. Pass
- * `import.meta.url` as `base` to write `patch.from` / `wrapper.from` as
- * specifiers relative to the config file (or bare package specifiers) —
- * they are resolved to absolute paths here, at definition time.
+ * `import.meta.url` as `base` to write `patch.from` as specifiers relative
+ * to the config file (or bare package specifiers) — they are resolved to
+ * absolute paths here, at definition time.
  *
  * @param base the config module's `import.meta.url`
  */
 export function defineConfig(config: InstrumentConfig, base?: string): InstrumentConfig {
-  return { ...config, entries: config.entries.map((entry) => resolveEntry(entry, base)) }
+  return { ...config, entries: config.entries.map((entry) => resolvePatchEntry(entry, base)) }
 }
 
 /**

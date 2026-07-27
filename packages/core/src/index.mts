@@ -19,8 +19,6 @@
 //                  strict mode, debug tracing, recovered-failure log)
 
 export type {
-  WrapperSpec,
-  WrapEntry,
   ModuleMatch,
   PackageModuleMatch,
   PathModuleMatch,
@@ -34,20 +32,13 @@ export type { BuiltinPatchEntry, PackageInfo } from './match.mjs'
 export type { PatchFunction, PatchRegistry } from './registry.mjs'
 export type { RecoveredFailure } from './diagnostics.mjs'
 export type { SelectEngineOptions } from './engine-select.mjs'
-export type {
-  EsmExportsInfo,
-  TapEntryInput,
-  TapResult,
-  TapStarResolution,
-  TransformEngine,
-  TransformResult,
-} from './engine.mjs'
+export type { EsmExportsInfo, TapEntryInput, TapResult, TapStarResolution, TransformEngine } from './engine.mjs'
 
 export { defineConfig, definePatches } from './config.mjs'
 export { engineName } from './engine.mjs'
 export { nearestPackage, matchEntries, createMatcher, builtinPatchEntries } from './match.mjs'
 export { runtimeFormatFor, moduleKindFor } from './format.mjs'
-export { SENTINEL, SENTINEL_TEXT, transformMatched, applyMatched, inlineMap } from './apply.mjs'
+export { SENTINEL, SENTINEL_TEXT, applyMatched, inlineMap } from './apply.mjs'
 export { PATCH_REGISTRY, patchKey } from './registry.mjs'
 export { builtinAliases, builtinWrapperSource, builtinGuardKey } from './builtins.mjs'
 export { DEBUG, debug, isDisabled, isStrict, recover, warnOnce, instrumentationFailures } from './diagnostics.mjs'
