@@ -22,7 +22,13 @@ const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/patch/${name
 const fixtureDir = fileURLToPath(new URL('./fixtures/patch/', import.meta.url))
 const cli = fileURLToPath(new URL('../packages/core/dist/cli.mjs', import.meta.url))
 
-import type { InstrumentConfig, InstrumentEntry, PatchEntry, ValidationReport } from '@wrap-esm-lambda/core'
+import type {
+  InstrumentConfig,
+  InstrumentEntry,
+  PackageModuleMatch,
+  PatchEntry,
+  ValidationReport,
+} from '@wrap-esm-lambda/core'
 
 const core = await import('@wrap-esm-lambda/core')
 
@@ -35,6 +41,12 @@ const validate = (name: string) => loadConfig(name).then((config) => core.valida
 const patchEntry = (entry: InstrumentEntry | undefined): PatchEntry => {
   assert.ok(entry?.patch, 'expected a patch entry')
   return entry
+}
+
+/** A patch entry's module match, narrowed to the package-identity arm. */
+const packageMatch = (entry: PatchEntry): PackageModuleMatch => {
+  assert.ok(entry.module.name !== undefined, 'expected a package-identity match')
+  return entry.module
 }
 
 test('a config that matches the installed tree validates clean', async () => {
@@ -56,7 +68,10 @@ test('a version range that excludes the installed package is skipped, not failed
   const config = await loadConfig('wrap.config.mjs')
   const gated = {
     entries: [
-      { ...patchEntry(config.entries[0]), module: { ...patchEntry(config.entries[0]).module, versionRange: '>=9' } },
+      {
+        ...patchEntry(config.entries[0]),
+        module: { ...packageMatch(patchEntry(config.entries[0])), versionRange: '>=9' },
+      },
     ],
   }
   const report = await core.validateConfig(gated, { cwd: fixtureDir })
@@ -72,7 +87,7 @@ test('an uninstalled package is an error', async () => {
     entries: [
       {
         ...patchEntry(config.entries[0]),
-        module: { ...patchEntry(config.entries[0]).module, name: '@fake/not-installed' },
+        module: { ...packageMatch(patchEntry(config.entries[0])), name: '@fake/not-installed' },
       },
     ],
   }
@@ -87,7 +102,7 @@ test('a declared file the package does not have is an error', async () => {
     entries: [
       {
         ...patchEntry(config.entries[0]),
-        module: { ...patchEntry(config.entries[0]).module, files: ['dist-es/moved-in-v5.js'] },
+        module: { ...packageMatch(patchEntry(config.entries[0])), files: ['dist-es/moved-in-v5.js'] },
       },
     ],
   }

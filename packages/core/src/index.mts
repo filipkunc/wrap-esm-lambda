@@ -22,13 +22,15 @@ export type {
   WrapperSpec,
   WrapEntry,
   ModuleMatch,
+  PackageModuleMatch,
+  PathModuleMatch,
   PatchSpec,
   PatchEntry,
   InstrumentEntry,
   InstrumentConfig,
 } from './config.mjs'
 export type { Applied, ApplyOptions, Delivery, Source } from './apply.mjs'
-export type { PackageInfo } from './match.mjs'
+export type { BuiltinPatchEntry, PackageInfo } from './match.mjs'
 export type { PatchFunction, PatchRegistry } from './registry.mjs'
 export type { RecoveredFailure } from './diagnostics.mjs'
 export type { SelectEngineOptions } from './engine-select.mjs'

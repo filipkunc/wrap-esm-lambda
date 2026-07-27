@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
 import { satisfies } from './range.mjs'
 import { cleanPath } from './paths.mjs'
-import type { InstrumentConfig, InstrumentEntry, PatchEntry } from './config.mjs'
+import type { InstrumentConfig, InstrumentEntry, PackageModuleMatch, PatchEntry } from './config.mjs'
 
 /** Identity of the package a file belongs to, from its nearest package.json. */
 export interface PackageInfo {
@@ -50,11 +50,24 @@ export function nearestPackage(filePath: string): PackageInfo | undefined {
   }
 }
 
+/** The `path` / `files` rule: an absolute candidate exactly, a suffix otherwise. */
+function pathMatches(path: string, candidate: string): boolean {
+  const clean = candidate.replaceAll('\\', '/')
+  return path === clean || path.endsWith(`/${clean}`)
+}
+
 function entryMatches(entry: InstrumentEntry, path: string): boolean {
   if (entry.match !== undefined) {
     return typeof entry.match === 'string' ? path.endsWith(entry.match) : entry.match.test(path)
   }
   if (entry.module !== undefined) {
+    // Path-identified modules (an app's own files, a Lambda handler located
+    // via the runtime environment) carry no package identity at all — the
+    // path list IS the match.
+    if (entry.module.path !== undefined) {
+      const candidates = typeof entry.module.path === 'string' ? [entry.module.path] : entry.module.path
+      return candidates.some((candidate) => pathMatches(path, candidate))
+    }
     // Built-in targets (node:http, ...) have no source for a load hook or
     // bundler to transform — they never match a file. The runtime shell
     // patches them eagerly at preload; the build shell aliases their
@@ -64,7 +77,7 @@ function entryMatches(entry: InstrumentEntry, path: string): boolean {
     const pkg = nearestPackage(path)
     if (!pkg || pkg.name !== entry.module.name) return false
     if (entry.module.versionRange && !satisfies(pkg.version, entry.module.versionRange)) return false
-    if (entry.module.files && !entry.module.files.some((f) => path.endsWith(`/${f}`) || path === f)) return false
+    if (entry.module.files && !entry.module.files.some((f) => pathMatches(path, f))) return false
     return true
   }
   return false
@@ -95,9 +108,12 @@ export function createMatcher(config: InstrumentConfig): (idOrUrl: string) => In
  * see hooks/interplay-matrix.) `versionRange` on a builtin entry gates on
  * `process.versions.node`; `files` is meaningless there and rejected loudly.
  */
-export function builtinPatchEntries(config: InstrumentConfig): PatchEntry[] {
-  return config.entries.filter((entry): entry is PatchEntry => {
-    if (!entry.patch || !entry.module || !isBuiltin(entry.module.name)) return false
+/** A patch entry known to target a builtin — `module.name` is always set. */
+export type BuiltinPatchEntry = PatchEntry & { module: PackageModuleMatch }
+
+export function builtinPatchEntries(config: InstrumentConfig): BuiltinPatchEntry[] {
+  return config.entries.filter((entry): entry is BuiltinPatchEntry => {
+    if (!entry.patch || !entry.module || entry.module.name === undefined || !isBuiltin(entry.module.name)) return false
     if (entry.module.files) {
       throw new TypeError(`builtin patch entry '${entry.module.name}' cannot have 'files' — built-ins are one module`)
     }

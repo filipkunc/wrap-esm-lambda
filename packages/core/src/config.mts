@@ -35,7 +35,7 @@ export interface WrapEntry {
   module?: undefined
 }
 
-export interface ModuleMatch {
+export interface PackageModuleMatch {
   /**
    * package name, from the nearest package.json — or a Node builtin
    * (`node:http`, `os`): no source to transform, so the runtime shell patches
@@ -53,7 +53,26 @@ export interface ModuleMatch {
    * every file of the package; rejected for builtin entries
    */
   files?: string[]
+  path?: undefined
 }
+
+export interface PathModuleMatch {
+  /**
+   * file paths the module must match — an absolute path matches exactly, a
+   * relative one as a suffix (the same rule `files` uses). For code that has
+   * no useful package identity: an app's own files, a Lambda handler whose
+   * location only the runtime environment knows (see the aws-lambda preset in
+   * `@wrap-esm-lambda/hooks/aws-lambda`, which derives these from
+   * `_HANDLER`/`LAMBDA_TASK_ROOT`). Backslashes are tolerated (Windows
+   * configs); matching happens on forward-slash cleaned paths.
+   */
+  path: string | string[]
+  name?: undefined
+  versionRange?: undefined
+  files?: undefined
+}
+
+export type ModuleMatch = PackageModuleMatch | PathModuleMatch
 
 export interface PatchSpec {
   /** exported patch function in `from` */
