@@ -6,6 +6,26 @@ would break a consumer.
 
 ## Unreleased
 
+### Removed — the config surface is tap-only (breaking)
+
+- **Wrap entries are gone.** The second entry kind (`match` + `handler` +
+  `wrapper`, the original Lambda-handler transform) is removed from the
+  config surface, the matcher, the apply step, the validator and both
+  shells; `WrapperSpec`, `WrapEntry` and `transformMatched` are no longer
+  exported and `InstrumentEntry` is now an alias of `PatchEntry`. A wrap
+  entry translates directly to a patch entry: a `module: { path: [...] }`
+  match, `bindings: ['<handler>']`, and a one-line patch function
+  `bindings.handler = WrapAwsLambda(bindings.handler)` — with the
+  Lambda-specific runtime discovery handled by
+  `@wrap-esm-lambda/hooks/aws-lambda`.
+- The engine contract (`TransformEngine`) drops
+  `transformLambdaWithMapObject`, and `TAP_CONTRACT_VERSION` moves to 2 —
+  a core paired with an older engine (or vice versa) refuses the mismatch
+  loudly instead of guessing. The acorn engine's wrap implementation is
+  deleted outright; the native addon keeps its standalone `transformLambda*`
+  exports outside the contract, as the original transform and the subject
+  of the benchmark comparisons.
+
 ### Failure policy
 
 - Instrumentation failures no longer take the host process down. A patch module

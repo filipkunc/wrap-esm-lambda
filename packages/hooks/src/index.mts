@@ -165,10 +165,6 @@ export async function preloadPatches(config: InstrumentConfig): Promise<Instrume
   const registry = (globalSlots[PATCH_REGISTRY] ??= Object.create(null) as PatchRegistry) as PatchRegistry
   const entries: InstrumentConfig['entries'] = []
   for (const entry of config.entries) {
-    if (!entry.patch) {
-      entries.push(entry)
-      continue
-    }
     const key = patchKey(entry)
     try {
       const spec = isAbsolute(entry.patch.from) ? pathToFileURL(entry.patch.from).href : entry.patch.from

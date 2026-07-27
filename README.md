@@ -87,9 +87,11 @@ await build({
 })
 ```
 
-Both modes produce **byte-identical** instrumented output, and a sentinel
-comment guards against double-patching when they're combined. A runnable copy
-of this exact setup lives in [examples/express-route](examples/express-route):
+Both modes run the **same transform** — the instrumented output differs only
+in how the patch function is delivered (a bundled import vs the preloaded
+registry) — and a sentinel comment guards against double-patching when
+they're combined. A runnable copy of this exact setup lives in
+[examples/express-route](examples/express-route):
 
 ```sh
 pnpm --filter example-express-route start
@@ -174,13 +176,13 @@ every Node 22/24/26 rung, including the minors where sync hooks and
 
 ## The packages
 
-| package                                                  | role                                                                                                                                           |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@wrap-esm-lambda/core`](packages/core)                 | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)       |
-| [`@wrap-esm-lambda/hooks`](packages/hooks)               | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                               |
-| [`@wrap-esm-lambda/unplugin`](packages/unplugin)         | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack                  |
-| [`wrap-esm-lambda`](index.d.ts) (repo root)              | the native oxc addon — the default engine: `exportsTap*` (the tap) and `transformLambda*` (the handler wrap), with zero-copy `Buffer` variants |
-| [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) | the pure-JS engine (acorn + magic-string), same surface and byte-identical snippets — select with `WRAP_ESM_LAMBDA_ENGINE=acorn`               |
+| package                                                  | role                                                                                                                                                                                                                     |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`@wrap-esm-lambda/core`](packages/core)                 | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)                                                                                 |
+| [`@wrap-esm-lambda/hooks`](packages/hooks)               | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                                                                                                         |
+| [`@wrap-esm-lambda/unplugin`](packages/unplugin)         | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack                                                                                            |
+| [`wrap-esm-lambda`](index.d.ts) (repo root)              | the native oxc addon — the default engine: `exportsTap*` (the tap, the engine contract) with zero-copy `Buffer` variants, plus the standalone `transformLambda*` (the original transform, kept as the benchmark subject) |
+| [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) | the pure-JS engine (acorn + magic-string), same surface and byte-identical snippets — select with `WRAP_ESM_LAMBDA_ENGINE=acorn`                                                                                         |
 
 All four are written in TypeScript (`src/*.mts`) and ship compiled ESM plus
 declarations (`dist/*.mjs` + `dist/*.d.mts`, with declaration and source maps
@@ -199,7 +201,7 @@ instrumented source), plus [`registry.mts`](packages/core/src/registry.mts)
 
 ## Config reference
 
-A config is a list of entries; two kinds exist and mix freely.
+A config is a list of patch entries.
 
 ### Patch entries — the exports tap
 
@@ -247,25 +249,16 @@ A config is a list of entries; two kinds exist and mix freely.
   builtin) is a hard error, and a rebind that cannot take effect (getter-only
   CJS exports of a sloppy-mode bundle) throws instead of silently no-opping.
 
-### Wrap entries — the original handler wrap
-
-```ts
-{
-  match: 'handler.mjs',                                              // string suffix or RegExp on the file path
-  handler: 'handler',                                                // exported const to wrap
-  wrapper: { name: 'WrapAwsLambda', from: '/opt/nodejs/wrap.mjs' },  // identifier (+ optional import) to wrap it with
-}
-```
-
-This rewrites `export const handler = ...` into
-`export const handler = WrapAwsLambda(...)` at the AST level, with source
-maps that keep stack traces pointing at the original lines (see
-[docs/source-maps.md](docs/source-maps.md)). The generic tap covers this
-shape now — a path-matched patch entry rebinding the handler, with the
-Lambda-specific discovery handled by the
-[aws-lambda preset](#wrapping-a-lambda-handler--now-just-a-patch-entry) —
-so prefer a patch entry for new configs; wrap entries remain for the
-wrapper-identifier-in-scope shape and as the original mechanism.
+Patch entries are the only entry kind. Earlier versions had a second one —
+**wrap entries** (`match` + `handler` + `wrapper`), the original
+Lambda-handler transform — removed once the tap's rewrite path could rebind
+every shape they covered and the
+[aws-lambda preset](#wrapping-a-lambda-handler--now-just-a-patch-entry)
+covered the runtime discovery. A wrap entry translates directly: a
+`module: { path: [...] }` match, `bindings: [<handler>]`, and a one-line
+patch function `bindings.handler = WrapAwsLambda(bindings.handler)`. The
+standalone AST transform itself survives as the native addon's
+`transformLambda*` exports.
 
 ## Shipping instrumentation as a package
 
@@ -396,13 +389,13 @@ same fixture through AWS's real runtime interface client on the real
 `public.ecr.aws/lambda/nodejs` images, both module systems, answering real
 invocations.
 
-The original dedicated transform is still here: the native addon exposes it
-directly (`transformLambda`, `transformLambdaWithMap`,
+The original dedicated transform survives as standalone exports of the
+native addon (`transformLambda`, `transformLambdaWithMap`,
 `transformLambdaWithChainedMap`, buffer-input variants — see
-[index.d.ts](index.d.ts)), and a wrap entry does it declaratively through
-either shell. Stack traces survive: oxc emits a source map for ~1 µs, and the
-map can be chained all the way back to an original `.ts` — composed in Rust
-without leaving the addon. Details, demos and numbers:
+[index.d.ts](index.d.ts)); the declarative surface and both shells run
+entirely on the tap. Stack traces survive either way: oxc emits a source map
+for ~1 µs, and the map can be chained all the way back to an original `.ts`
+— composed in Rust without leaving the addon. Details, demos and numbers:
 [docs/source-maps.md](docs/source-maps.md).
 
 For comparison the minimal wrapping code is re-implemented with

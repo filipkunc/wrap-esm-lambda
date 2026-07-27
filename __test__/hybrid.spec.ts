@@ -8,9 +8,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
-import type { InstrumentConfig, InstrumentEntry, WrapEntry } from '@wrap-esm-lambda/core'
+import type { InstrumentConfig, InstrumentEntry } from '@wrap-esm-lambda/core'
 
-// The hybrid setup end-to-end: the same fixture (handler + wrapper + config)
+// The hybrid setup end-to-end: the same fixture (handler + patch + config)
 // instrumented once at runtime through @wrap-esm-lambda/hooks and once at
 // build time through @wrap-esm-lambda/unplugin, asserting identical behavior.
 
@@ -29,9 +29,9 @@ const { default: config } = (await import(pathToFileURL(fixture('wrap.config.mjs
   default: InstrumentConfig
 }
 
-/** The fixture config's single entry, narrowed to the wrap entry it is. */
-const wrapEntry = (entry: InstrumentEntry | undefined): WrapEntry => {
-  assert.ok(entry && entry.patch === undefined, 'expected a wrap entry')
+/** The fixture config's single entry. */
+const theEntry = (entry: InstrumentEntry | undefined): InstrumentEntry => {
+  assert.ok(entry, 'expected the config entry to match')
   return entry
 }
 
@@ -58,7 +58,7 @@ test('build mode: unplugin wraps the handler at bundle time', async () => {
       logLevel: 'silent',
     })
     const bundled = await readFile(outfile, 'utf8')
-    assert.ok(bundled.includes('WrapAwsLambda'))
+    assert.ok(bundled.includes('wrapHandler'), 'the patch function is bundled in')
 
     // plain `node bundle.mjs` — no hooks, no config: instrumentation is baked in
     const { stdout } = await execFileAsync(process.execPath, [outfile])
@@ -68,54 +68,38 @@ test('build mode: unplugin wraps the handler at bundle time', async () => {
   }
 })
 
-test('both modes produce identical instrumented code for the same module', async () => {
+test('per delivery, the instrumented output is identical however the module is identified', async () => {
   const source = await readFile(fixture('handler.mjs'), 'utf8')
-  const entry = wrapEntry(core.createMatcher(config)(fixture('handler.mjs')))
+  const entry = theEntry(core.createMatcher(config)(fixture('handler.mjs')))
 
-  // Both shells delegate to this one call — assert the invariant it provides.
-  const first = core.transformMatched(source, entry, fixture('handler.mjs'))
-  const second = core.transformMatched(source, entry, pathToFileURL(fixture('handler.mjs')).href)
+  // Both shells delegate to this one call — assert the invariant it provides:
+  // a plain path and a file URL produce the same bytes.
+  const first = core.applyMatched(source, [entry], fixture('handler.mjs'), { format: 'module' })
+  const second = core.applyMatched(source, [entry], pathToFileURL(fixture('handler.mjs')).href, { format: 'module' })
   assert.ok(first)
   assert.deepStrictEqual(first, second)
-  assert.ok(first!.code.includes('WrapAwsLambda('))
+  assert.ok(first!.code.includes('wrapHandler'))
   assert.ok(first!.code.includes(core.SENTINEL))
-})
 
-test('wrap delivery: Node gets a file:// URL, a bundler gets the path as configured', async () => {
-  // The one thing the two deliveries must NOT emit identically. Node's ESM
-  // loader parses an import specifier as a URL, so an absolute Windows path
-  // ('D:\\app\\wrap.mjs') reads as scheme 'd:' and throws
-  // ERR_UNSUPPORTED_ESM_URL_SCHEME — the runtime shell has to emit a file://
-  // URL. Bundlers are the mirror image: they resolve absolute paths and not
-  // file:// specifiers, which is also what lets a Lambda-layer path like
-  // /opt/nodejs/wrap.mjs survive a build that never sees that directory.
-  const source = await readFile(fixture('handler.mjs'), 'utf8')
-  const entry = wrapEntry(core.createMatcher(config)(fixture('handler.mjs')))
-  const wrapperFrom = entry.wrapper.from
-  assert.ok(wrapperFrom)
-
-  const runtime = core.applyMatched(source, [entry], fixture('handler.mjs'), {
+  // The one thing the two deliveries do NOT share: how the patch function
+  // arrives. Build delivery appends an import of the patch module for the
+  // bundler to resolve; registry delivery injects nothing and reads the
+  // global registry the runtime shell preloads.
+  const registry = core.applyMatched(source, [entry], fixture('handler.mjs'), {
     format: 'module',
     delivery: 'registry',
   })
-  assert.ok(
-    runtime!.code.includes(`from ${JSON.stringify(pathToFileURL(wrapperFrom).href)}`),
-    `runtime delivery must import a file:// URL, got: ${runtime!.code}`,
-  )
-
-  const built = core.applyMatched(source, [entry], fixture('handler.mjs'), { format: 'module' })
-  assert.ok(
-    built!.code.includes(`from ${JSON.stringify(wrapperFrom)}`),
-    `build delivery must keep the configured path, got: ${built!.code}`,
-  )
+  assert.ok(String(first!.code).includes(`import { wrapHandler as`), 'import delivery appends a static import')
+  assert.ok(String(registry!.code).includes('wrap-esm-lambda.patches'), 'registry delivery reads the global registry')
+  assert.ok(!String(registry!.code).includes('import { wrapHandler'), 'registry delivery injects no import')
 })
 
-test('double-wrap guard: transformMatched skips instrumented sources', async () => {
+test('double-wrap guard: applyMatched skips instrumented sources', async () => {
   const source = await readFile(fixture('handler.mjs'), 'utf8')
-  const entry = wrapEntry(core.createMatcher(config)(fixture('handler.mjs')))
-  const once = core.transformMatched(source, entry, fixture('handler.mjs'))
+  const entry = theEntry(core.createMatcher(config)(fixture('handler.mjs')))
+  const once = core.applyMatched(source, [entry], fixture('handler.mjs'), { format: 'module' })
   assert.ok(once)
-  assert.strictEqual(core.transformMatched(once.code, entry, fixture('handler.mjs')), null)
+  assert.strictEqual(core.applyMatched(String(once.code), [entry], fixture('handler.mjs'), { format: 'module' }), null)
 })
 
 testRuntime('double-wrap guard: runtime hook passes through a build-time instrumented bundle', async () => {

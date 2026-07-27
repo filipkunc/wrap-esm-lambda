@@ -128,6 +128,12 @@ export interface TapStarResolution {
   source: string
 }
 
+/**
+ * The original standalone handler-wrap transform. Not part of the engine
+ * contract core binds to — the declarative surface covers this shape via
+ * the exports tap — but kept as a direct API and as the subject the
+ * benchmark comparisons (Babel/acorn/swc/orchestrion) are written against.
+ */
 export declare function transformLambda(input: string, handler: string, wrapper: string): string
 
 /**

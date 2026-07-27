@@ -30,8 +30,9 @@ import type { InstrumentConfig, InstrumentEntry, PatchEntry } from './config.mjs
 /**
  * - `ok` — checked, and it holds.
  * - `skipped` — deliberately not active or not statically checkable (a version
- *   gate that excludes this environment, a CJS target, a path-matched wrap
- *   entry). Not a problem, but not a guarantee either.
+ *   gate that excludes this environment, a CJS target, a path-matched entry
+ *   whose files only exist where the process runs). Not a problem, but not a
+ *   guarantee either.
  * - `error` — the config asks for something this tree cannot deliver.
  */
 export type CheckStatus = 'ok' | 'skipped' | 'error'
@@ -132,28 +133,16 @@ function pathCandidates(path: string | string[]): string[] {
 }
 
 function labelFor(entry: InstrumentEntry): string {
-  if (entry.patch) {
-    if (entry.module.path !== undefined) {
-      return `path ${pathCandidates(entry.module.path).join(', ')}`
-    }
-    const range = entry.module.versionRange ? ` ${entry.module.versionRange}` : ''
-    const files = entry.module.files ? ` · ${entry.module.files.join(', ')}` : ''
-    return `${entry.module.name}${range}${files}`
+  if (entry.module.path !== undefined) {
+    return `path ${pathCandidates(entry.module.path).join(', ')}`
   }
-  return `wrap ${String(entry.match)} · ${entry.handler}`
+  const range = entry.module.versionRange ? ` ${entry.module.versionRange}` : ''
+  const files = entry.module.files ? ` · ${entry.module.files.join(', ')}` : ''
+  return `${entry.module.name}${range}${files}`
 }
 
 async function checkEntry(entry: InstrumentEntry, cwd: string): Promise<EntryReport> {
   const label = labelFor(entry)
-
-  if (!entry.patch) {
-    // a wrap entry matches on the module's path at load time; there is no
-    // package identity to resolve, so all that can be checked is the wrapper
-    if (entry.wrapper.from && isAbsolute(entry.wrapper.from) && !existsSync(entry.wrapper.from)) {
-      return { label, status: 'error', detail: `wrapper.from does not exist: ${entry.wrapper.from}` }
-    }
-    return { label, status: 'skipped', detail: 'wrap entry: matched on module path at load time' }
-  }
 
   const patchProblem = await checkPatch(entry)
   if (patchProblem) return { label, ...patchProblem }

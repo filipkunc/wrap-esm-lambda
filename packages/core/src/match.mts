@@ -1,8 +1,8 @@
-// Which entries apply to which module: package-identity matching for patch
-// entries (nearest package.json name + semver range + file suffixes), path
-// matching for wrap entries, and the builtin split — builtin targets never
-// match a file and are handed to the runtime shell for eager preload
-// patching instead.
+// Which entries apply to which module: package-identity matching (nearest
+// package.json name + semver range + file suffixes) or path matching
+// (`module.path`, for code with no package identity), and the builtin
+// split — builtin targets never match a file and are handed to the runtime
+// shell for eager preload patching instead.
 import { dirname, join } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
@@ -57,30 +57,24 @@ function pathMatches(path: string, candidate: string): boolean {
 }
 
 function entryMatches(entry: InstrumentEntry, path: string): boolean {
-  if (entry.match !== undefined) {
-    return typeof entry.match === 'string' ? path.endsWith(entry.match) : entry.match.test(path)
+  // Path-identified modules (an app's own files, a Lambda handler located
+  // via the runtime environment) carry no package identity at all — the
+  // path list IS the match.
+  if (entry.module.path !== undefined) {
+    const candidates = typeof entry.module.path === 'string' ? [entry.module.path] : entry.module.path
+    return candidates.some((candidate) => pathMatches(path, candidate))
   }
-  if (entry.module !== undefined) {
-    // Path-identified modules (an app's own files, a Lambda handler located
-    // via the runtime environment) carry no package identity at all — the
-    // path list IS the match.
-    if (entry.module.path !== undefined) {
-      const candidates = typeof entry.module.path === 'string' ? [entry.module.path] : entry.module.path
-      return candidates.some((candidate) => pathMatches(path, candidate))
-    }
-    // Built-in targets (node:http, ...) have no source for a load hook or
-    // bundler to transform — they never match a file. The runtime shell
-    // patches them eagerly at preload; the build shell aliases their
-    // specifiers to generated wrapper modules (see builtinPatchEntries and
-    // builtins.mjs).
-    if (isBuiltin(entry.module.name)) return false
-    const pkg = nearestPackage(path)
-    if (!pkg || pkg.name !== entry.module.name) return false
-    if (entry.module.versionRange && !satisfies(pkg.version, entry.module.versionRange)) return false
-    if (entry.module.files && !entry.module.files.some((f) => pathMatches(path, f))) return false
-    return true
-  }
-  return false
+  // Built-in targets (node:http, ...) have no source for a load hook or
+  // bundler to transform — they never match a file. The runtime shell
+  // patches them eagerly at preload; the build shell aliases their
+  // specifiers to generated wrapper modules (see builtinPatchEntries and
+  // builtins.mjs).
+  if (isBuiltin(entry.module.name)) return false
+  const pkg = nearestPackage(path)
+  if (!pkg || pkg.name !== entry.module.name) return false
+  if (entry.module.versionRange && !satisfies(pkg.version, entry.module.versionRange)) return false
+  if (entry.module.files && !entry.module.files.some((f) => pathMatches(path, f))) return false
+  return true
 }
 
 /** All entries matching a module id (bundlers) or file URL (loader hooks). */
@@ -113,7 +107,7 @@ export type BuiltinPatchEntry = PatchEntry & { module: PackageModuleMatch }
 
 export function builtinPatchEntries(config: InstrumentConfig): BuiltinPatchEntry[] {
   return config.entries.filter((entry): entry is BuiltinPatchEntry => {
-    if (!entry.patch || !entry.module || entry.module.name === undefined || !isBuiltin(entry.module.name)) return false
+    if (entry.module.name === undefined || !isBuiltin(entry.module.name)) return false
     if (entry.module.files) {
       throw new TypeError(`builtin patch entry '${entry.module.name}' cannot have 'files' — built-ins are one module`)
     }
