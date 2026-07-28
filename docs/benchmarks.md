@@ -38,24 +38,30 @@ The second shows the whole field for scale:
 
 ![Transform latency chart, all approaches](../hooks/transformChartAll.svg 'Exports tap latency, all approaches')
 
-Notes on the comparison (cases in
-[benchmark/tap-cases.ts](../benchmark/tap-cases.ts)):
+Every bar label reads **`tool: operation (input size)`** (cases in
+[benchmark/tap-cases.ts](../benchmark/tap-cases.ts)). The tools are `oxc`
+and `acorn` — this package's two engines — plus the neighbors, `iitm`
+(import-in-the-middle) and `orchestrion`. The operations come in two tiers:
 
-- The `oxc exports tap` bars are a **complete** per-module operation: full
-  AST parse plus validation of every requested binding against the module's
-  statically visible exports. The `hook op` bars add the string/buffer
-  plumbing a real `registerHooks` load hook pays; the buffer variants keep
-  the source in UTF-8 across napi (zero-copy in, `Buffer.concat` out).
-- The `acorn` bars are the same tap through the pure-JS engine — the
-  JS-only vs JS + Rust comparison below.
-- `iitm lexEsm` is import-in-the-middle's per-module analysis step
-  (es-module-lexer) — the fair mechanism comparison for our
-  parse + validate. Its full per-module cost additionally includes
-  generating and evaluating a facade module per interception.
-- The `orchestrion` bars are the same declarative intent (`Client#send`, as
-  a `{ className, methodName }` function query) through orchestrion-js's
-  body-rewriting transform; `cached selector` memoizes the `esquery.parse`
-  its shipped code recompiles on every call.
+- **`tap:`** — the transform call alone: full AST parse plus validation of
+  every requested binding against the module's statically visible exports
+  (the CJS row skips the parse entirely — CJS taps are pure snippet
+  emission).
+- **`whole hook op:`** — everything a real `registerHooks` load hook does
+  per module: take `nextLoad`'s bytes, transform, append the snippet.
+  `decode + tap + append` is the string plumbing (Buffer → UTF-16 →
+  napi); `zero-copy buffer` keeps the source in UTF-8 end to end
+  (`exportsTapFromBuffer` + `Buffer.concat`) — the path the runtime shell
+  actually ships. The acorn engine has no zero-copy variant: it parses
+  in-process, so there is no napi boundary for a buffer to save.
+
+The neighbors, for mechanism-fair comparison: `iitm: lexEsm analysis step`
+is import-in-the-middle's per-module scan (es-module-lexer) — its full cost
+additionally includes generating and evaluating a facade module per
+interception. The `orchestrion:` bars are the same declarative intent
+(`Client#send`, as a `{ className, methodName }` function query) through
+orchestrion-js's body-rewriting transform; `cached selector` memoizes the
+`esquery.parse` its shipped code recompiles on every call.
 
 The reach-vs-cost discussion around these numbers — what each mechanism can
 and cannot intercept on identical targets — is in

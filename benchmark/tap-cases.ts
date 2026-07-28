@@ -74,46 +74,56 @@ export const inputDescription =
   `input: @smithy/core@${corePkg.version}\n` +
   `  dist-es client.js: ${esmSource.length} bytes, dist-cjs index.js: ${cjsSource.length} bytes`
 
+// Every label reads `tool: operation (input)` — the tool first (oxc and
+// acorn are the two engines of THIS package, iitm and orchestrion the
+// neighbors), then which of the two tiers is being measured:
+// - "tap"           — the transform call alone (what src/transform.rs /
+//                     engine-acorn's tap.mts cost per call);
+// - "whole hook op" — everything a registerHooks load hook does per module:
+//                     take nextLoad's bytes, transform, append the snippet.
+//                     "decode + tap + append" is the string plumbing (Buffer
+//                     -> UTF-16 -> napi); "zero-copy buffer" keeps the source
+//                     in UTF-8 end to end (exportsTapFromBuffer +
+//                     Buffer.concat), which is what the runtime shell ships.
+// Inputs: 1.8 KB is @smithy/core's real dist-es client.js; 42 KB is the same
+// file padded to its dist-cjs bundle's size.
 export const cases: { label: string; run: () => void }[] = [
   {
-    label: 'oxc exports tap complete (dist-es, parse + validate)',
+    label: 'oxc tap: ESM parse + validate (1.8 KB)',
     run: () => exportsTap(esmSource, TAP, false, true),
   },
   {
-    label: 'oxc exports tap (cjs snippet, no source across napi)',
+    label: 'oxc tap: CJS snippet, no parse',
     run: () => exportsTap('', TAP, true, true),
   },
   {
     // same parse+validate, but the source crosses napi as a zero-copy Buffer
     // instead of a UTF-16 string paying an O(n) conversion
-    label: 'oxc exports tap complete (dist-es, buffer in)',
+    label: 'oxc tap: ESM parse + validate, buffer in (1.8 KB)',
     run: () => exportsTapFromBuffer(esmBuffer, TAP, false, true),
   },
   {
-    // the whole per-module hook operation on string plumbing: decode the
-    // Buffer nextLoad provides, send the string across napi, append in JS
-    label: 'hook op, strings (toString + tap + append)',
+    label: 'oxc whole hook op: decode + tap + append (1.8 KB)',
     run: () => {
       const source = esmBuffer.toString('utf8')
       void (source + exportsTap(source, TAP, false, true).snippets)
     },
   },
   {
-    // the same operation with the source never leaving UTF-8
-    label: 'hook op, buffer (tap + Buffer.concat)',
+    label: 'oxc whole hook op: zero-copy buffer (1.8 KB)',
     run: () => {
       void Buffer.concat([esmBuffer, Buffer.from(exportsTapFromBuffer(esmBuffer, TAP, false, true).snippets)])
     },
   },
   {
-    label: 'hook op, strings (dist-cjs-sized module)',
+    label: 'oxc whole hook op: decode + tap + append (42 KB)',
     run: () => {
       const source = esmBigBuffer.toString('utf8')
       void (source + exportsTap(source, TAP, false, true).snippets)
     },
   },
   {
-    label: 'hook op, buffer (dist-cjs-sized module)',
+    label: 'oxc whole hook op: zero-copy buffer (42 KB)',
     run: () => {
       void Buffer.concat([esmBigBuffer, Buffer.from(exportsTapFromBuffer(esmBigBuffer, TAP, false, true).snippets)])
     },
@@ -121,23 +131,24 @@ export const cases: { label: string; run: () => void }[] = [
   {
     // the same parse+validate through the pure-JS engine: what the tap costs
     // with no Rust in the loop (acorn parse instead of oxc-across-napi)
-    label: 'acorn exports tap complete (dist-es, parse + validate)',
+    label: 'acorn tap: ESM parse + validate (1.8 KB)',
     run: () => acornEngine.exportsTap(esmSource, TAP, false, true),
   },
   {
-    label: 'acorn exports tap (cjs snippet, pure JS)',
+    label: 'acorn tap: CJS snippet, no parse',
     run: () => acornEngine.exportsTap('', TAP, true, true),
   },
   {
-    // the whole per-module hook operation, JS-only: decode + parse + append
-    label: 'acorn hook op, strings (toString + tap + append)',
+    // no zero-copy variant here: the JS engine parses in-process, so there
+    // is no napi boundary for a buffer to save — decode is the only plumbing
+    label: 'acorn whole hook op: decode + tap + append (1.8 KB)',
     run: () => {
       const source = esmBuffer.toString('utf8')
       void (source + acornEngine.exportsTap(source, TAP, false, true).snippets)
     },
   },
   {
-    label: 'acorn hook op, strings (dist-cjs-sized module)',
+    label: 'acorn whole hook op: decode + tap + append (42 KB)',
     run: () => {
       const source = esmBigBuffer.toString('utf8')
       void (source + acornEngine.exportsTap(source, TAP, false, true).snippets)
@@ -147,15 +158,15 @@ export const cases: { label: string; run: () => void }[] = [
     // iitm's per-module analysis step (es-module-lexer): the fair mechanism
     // comparison for our parse+validate. Its full per-module cost additionally
     // includes generating and evaluating a facade module per interception.
-    label: 'iitm lexEsm scan step only (es-module-lexer)',
+    label: 'iitm: lexEsm analysis step (1.8 KB)',
     run: () => lexEsm(esmSource),
   },
   {
-    label: 'orchestrion Client#send query (stock)',
+    label: 'orchestrion: Client#send body rewrite, stock (1.8 KB)',
     run: () => orchestrion.transform(esmSource, 'esm'),
   },
   {
-    label: 'orchestrion Client#send query (cached selector)',
+    label: 'orchestrion: Client#send body rewrite, cached selector (1.8 KB)',
     run: () => {
       esquery.parse = (selector: string) => {
         let parsed = parseCache.get(selector)
