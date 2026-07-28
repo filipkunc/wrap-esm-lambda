@@ -63,7 +63,7 @@ test('acorn engine, build mode: the same rewrites land through esbuild', async (
       const { unplugin } = await import('@wrap-esm-lambda/unplugin')
       const { default: config } = await import(pathToFileURL(configPath).href)
       const { engineName } = await import('@wrap-esm-lambda/core')
-      if (engineName !== 'acorn') throw new Error('expected the acorn engine, got ' + engineName)
+      if (engineName() !== 'acorn') throw new Error('expected the acorn engine, got ' + engineName())
       await build({
         entryPoints: [entry],
         bundle: true,

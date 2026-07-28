@@ -6,11 +6,19 @@
 // - 'acorn': `@wrap-esm-lambda/engine-acorn` — acorn + magic-string, no
 //   native code at all.
 //
-// Selection is by WRAP_ESM_LAMBDA_ENGINE at load time, not per call: an
-// engine is a process-wide choice (the runtime hook and a build both
-// instrument every matched module with it), and binding once keeps the
-// unused engine's load cost — the native addon's dlopen or the JS engine's
-// module graph — entirely off the cold start.
+// The binding is process-wide (the runtime hook and a build both instrument
+// every matched module with one engine) and LAZY: nothing loads until the
+// first transform call actually needs an engine, so importing core — a
+// config file pulling in `definePatches`, a shell whose config turns out
+// inert — costs no engine at all. Only the selected engine ever loads; the
+// unused one's cost (the addon's dlopen or the JS engine's module graph)
+// never lands. Loading is `require()`-based — including `require(esm)` for
+// the acorn engine (Node >= 22.12) — because the first use can sit inside a
+// SYNCHRONOUS `registerHooks` load hook, where nothing can be awaited. The
+// runtime shell still binds at startup when its config has anything to
+// instrument (registerConfig calls `engineName()`), so a missing or
+// mismatched explicitly-named engine stays a startup failure, not a
+// per-module surprise.
 //
 // Both engines emit byte-identical snippets and share the tap contract
 // (enforced by __test__/engine-parity.spec.ts); rewrite-path output differs
@@ -27,6 +35,7 @@
 // stripped container layer, npm's optional-dependency bug) degrades to the
 // acorn engine with a warning rather than throwing out of `--import`. See
 // engine-select.mts — an explicitly requested engine is never substituted.
+import { createRequire } from 'node:module'
 import { selectEngine } from './engine-select.mjs'
 import { debug, warnOnce } from './diagnostics.mjs'
 
@@ -103,9 +112,14 @@ export interface TransformEngine {
   resolveModule(specifier: string, fromDir: string): string | null
 }
 
-const ENGINES: Record<string, () => Promise<TransformEngine>> = {
-  oxc: () => import('wrap-esm-lambda'),
-  acorn: () => import('@wrap-esm-lambda/engine-acorn'),
+const requireEngine = createRequire(import.meta.url)
+
+// require(), not import(): binding may happen inside a synchronous load
+// hook. The addon is CJS; the acorn engine is ESM without top-level await,
+// which require() loads synchronously on the Nodes core supports.
+const ENGINES: Record<string, () => TransformEngine> = {
+  oxc: () => requireEngine('wrap-esm-lambda') as TransformEngine,
+  acorn: () => requireEngine('@wrap-esm-lambda/engine-acorn') as TransformEngine,
 }
 
 /**
@@ -135,21 +149,43 @@ function verifyContract(engine: TransformEngine): void {
   }
 }
 
-const selected = await selectEngine(process.env.WRAP_ESM_LAMBDA_ENGINE, ENGINES, {
-  verify: verifyContract,
-  onFallback: (err) => {
-    const reason = err instanceof Error ? err.message : String(err)
-    warnOnce(
-      'engine',
-      `the native oxc addon could not be used (${reason}) — falling back to the pure-JS acorn engine ` +
-        `(WRAP_ESM_LAMBDA_ENGINE=oxc to fail instead)`,
-    )
-  },
-})
+let selected: { engineName: string; engine: TransformEngine } | undefined
 
-/** The engine this process is bound to: 'oxc' (native, default) or 'acorn' (pure JS). */
-export const engineName = selected.engineName
+/** Bind on first use, once per process; every transform call funnels here. */
+function boundEngine(): TransformEngine {
+  if (selected === undefined) {
+    selected = selectEngine(process.env.WRAP_ESM_LAMBDA_ENGINE, ENGINES, {
+      verify: verifyContract,
+      onFallback: (err) => {
+        const reason = err instanceof Error ? err.message : String(err)
+        warnOnce(
+          'engine',
+          `the native oxc addon could not be used (${reason}) — falling back to the pure-JS acorn engine ` +
+            `(WRAP_ESM_LAMBDA_ENGINE=oxc to fail instead)`,
+        )
+      },
+    })
+    debug(`engine: ${selected.engineName}`)
+  }
+  return selected.engine
+}
 
-debug(`engine: ${engineName}`)
+/**
+ * The engine this process is bound to: 'oxc' (native, default) or 'acorn'
+ * (pure JS). Calling this BINDS the engine if nothing else has — which is
+ * also its second job: the runtime shell calls it at register time so a
+ * missing or mismatched engine fails at startup, not inside the first
+ * module's synchronous load hook.
+ */
+export function engineName(): string {
+  boundEngine()
+  return selected!.engineName
+}
 
-export const { esmModuleExports, exportsTap, exportsTapFromBuffer, hasModuleSyntax, resolveModule } = selected.engine
+export const esmModuleExports: TransformEngine['esmModuleExports'] = (input) => boundEngine().esmModuleExports(input)
+export const exportsTap: TransformEngine['exportsTap'] = (...args) => boundEngine().exportsTap(...args)
+export const exportsTapFromBuffer: TransformEngine['exportsTapFromBuffer'] = (...args) =>
+  boundEngine().exportsTapFromBuffer(...args)
+export const hasModuleSyntax: TransformEngine['hasModuleSyntax'] = (input) => boundEngine().hasModuleSyntax(input)
+export const resolveModule: TransformEngine['resolveModule'] = (specifier, fromDir) =>
+  boundEngine().resolveModule(specifier, fromDir)

@@ -16,7 +16,7 @@
 // WRAP_ESM_LAMBDA_STRICT=1. The whole shell is off under
 // WRAP_ESM_LAMBDA_DISABLE=1.
 import * as nodeModule from 'node:module'
-import { createRequire } from 'node:module'
+import { createRequire, isBuiltin } from 'node:module'
 import type { LoadFnOutput, LoadHookSync } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { isAbsolute } from 'node:path'
@@ -27,6 +27,7 @@ import {
   inlineMap,
   builtinPatchEntries,
   builtinGuardKey,
+  engineName,
   runtimeFormatFor,
   PATCH_REGISTRY,
   patchKey,
@@ -264,6 +265,15 @@ export async function registerConfig(config: InstrumentConfig): Promise<void> {
   }
   const active = await preloadPatches(config)
   applyBuiltinPatches(active)
+  // Builtin entries never match a file, so a config with nothing else needs
+  // no load hook — and no engine: the transform engine binds lazily on first
+  // use, and for an inert config (e.g. the aws-lambda preset outside Lambda)
+  // first use never comes.
+  const fileEntries = active.entries.filter((entry) => entry.module.name === undefined || !isBuiltin(entry.module.name))
+  if (fileEntries.length === 0) {
+    debug('no file-matched entries — load hook not registered, engine not loaded')
+    return
+  }
   if (typeof nodeModule.registerHooks !== 'function') {
     recover(
       'registering the load hook',
@@ -274,6 +284,11 @@ export async function registerConfig(config: InstrumentConfig): Promise<void> {
     )
     return
   }
+  // Bind the engine NOW, not inside the first module's synchronous load
+  // hook: an engine that is missing or mismatched (WRAP_ESM_LAMBDA_ENGINE
+  // names one that cannot load) must be a loud startup failure, and the
+  // fallback warning belongs at startup too.
+  debug(`engine bound at register: ${engineName()}`)
   nodeModule.registerHooks({ load: createLoadHook(active) })
   debug(`load hook registered for ${active.entries.length} ${active.entries.length === 1 ? 'entry' : 'entries'}`)
 }
