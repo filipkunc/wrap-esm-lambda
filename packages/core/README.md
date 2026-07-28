@@ -35,7 +35,8 @@ re-exported from [`src/index.mts`](src/index.mts):
 ## Choosing the engine
 
 Every transform call goes through [`src/engine.mts`](src/engine.mts), which
-binds once, at load time, to one of two implementations of the same surface:
+binds once, **lazily on first use**, to one of two implementations of the
+same surface:
 
 - `oxc` (default) — the native `wrap-esm-lambda` addon: oxc parse/codegen in
   Rust, module sources crossing napi zero-copy as UTF-8 buffers;
@@ -45,6 +46,16 @@ binds once, at load time, to one of two implementations of the same surface:
 ```sh
 WRAP_ESM_LAMBDA_ENGINE=acorn node --import @wrap-esm-lambda/hooks/register app.mjs
 ```
+
+Lazy means importing this package costs no engine at all: a config file
+pulling in `definePatches`, or a config that turns out inert (the aws-lambda
+preset outside Lambda), never pays the addon's dlopen or the JS engine's
+module graph. The runtime shell still binds at startup whenever its config
+has something to instrument — `registerConfig` calls `engineName()` — so a
+missing or mismatched named engine stays a loud startup failure. Loading is
+`require()`-based (the first use can sit inside a synchronous `registerHooks`
+load hook), which for the ESM acorn engine relies on `require(esm)` —
+present in every Node the runtime shell supports.
 
 The choice is process-wide by design (both shells instrument every matched
 module with it), and an unknown name fails loudly at startup. The engines

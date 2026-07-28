@@ -35,14 +35,19 @@ export interface SelectEngineOptions<Engine> {
 }
 
 /**
+ * Synchronous on purpose: the first engine use can sit inside a synchronous
+ * `registerHooks` load hook, where nothing can be awaited — so engine
+ * loaders are `require()`-based (see engine.mts) and selection composes
+ * with them synchronously.
+ *
  * @param requested WRAP_ESM_LAMBDA_ENGINE, unset for the default
- * @param loaders engine name -> importer
+ * @param loaders engine name -> loader
  */
-export async function selectEngine<Engine>(
+export function selectEngine<Engine>(
   requested: string | undefined,
-  loaders: Record<string, () => Promise<Engine>>,
+  loaders: Record<string, () => Engine>,
   options: SelectEngineOptions<Engine> = {},
-): Promise<{ engineName: string; engine: Engine }> {
+): { engineName: string; engine: Engine } {
   const { defaultEngine = 'oxc', onFallback, verify } = options
   const explicit = requested !== undefined && requested !== ''
   const name = explicit ? requested : defaultEngine
@@ -52,7 +57,7 @@ export async function selectEngine<Engine>(
     )
   }
   try {
-    const engine = await loaders[name]!()
+    const engine = loaders[name]!()
     verify?.(engine)
     return { engineName: name, engine }
   } catch (err) {
@@ -65,7 +70,7 @@ export async function selectEngine<Engine>(
     try {
       const fallback = loaders[FALLBACK_ENGINE]
       if (fallback === undefined) throw err
-      const engine = await fallback()
+      const engine = fallback()
       verify?.(engine)
       return { engineName: FALLBACK_ENGINE, engine }
     } catch (fallbackErr) {

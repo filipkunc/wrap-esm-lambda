@@ -39,6 +39,23 @@ would break a consumer.
   demo scripts and the source-map demos — the research-phase story lives
   in `docs/history.md` and the presentations.
 
+### Engine binding is lazy
+
+- The transform engine (native oxc addon or the pure-JS acorn engine) now
+  binds on **first use** instead of at core import. Importing
+  `@wrap-esm-lambda/core` — a config file pulling in `definePatches`, a
+  build script — loads no engine; a config with nothing to instrument (the
+  aws-lambda preset outside Lambda, a builtins-only config) never loads one
+  at all, and the runtime shell skips registering its load hook entirely in
+  that case. When the config does have file-matched entries,
+  `registerConfig` binds the engine at startup, so a missing or mismatched
+  `WRAP_ESM_LAMBDA_ENGINE` remains a loud startup failure and the
+  native-to-acorn fallback warning still lands at startup.
+- Engine loading is now `require()`-based (the first use can sit inside a
+  synchronous `registerHooks` load hook): `selectEngine` is synchronous and
+  `engineName` is a function — calling it binds the engine if nothing else
+  has. Both are minor API breaks for direct consumers of those exports.
+
 ### Failure policy
 
 - Instrumentation failures no longer take the host process down. A patch module

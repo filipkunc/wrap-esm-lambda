@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { captureRejects } from './helpers'
+import { captureRejects, captureThrows } from './helpers'
 
 // The failure policy: what happens when instrumentation cannot do its job.
 // Everything downstream of a valid config degrades — one entry, one builtin,
@@ -32,47 +32,57 @@ const runApp = (config: string, extra: Record<string, string> = {}, app = 'app.m
 // --- engine selection ------------------------------------------------------
 // The addon is a per-platform prebuilt, so it can be missing for reasons that
 // have nothing to do with the app. selectEngine is the fallback decision on
-// its own, testable without breaking an installed addon.
+// its own, testable without breaking an installed addon. It is synchronous —
+// the first engine use can sit inside a synchronous registerHooks load hook —
+// so the mock loaders throw and return synchronously, like the real
+// require()-based ones.
 
 const loaders = {
-  oxc: () => Promise.reject(new Error('no prebuilt binary for this platform')),
-  acorn: () => Promise.resolve({ engine: 'acorn' }),
+  oxc: (): { engine: string } => {
+    throw new Error('no prebuilt binary for this platform')
+  },
+  acorn: () => ({ engine: 'acorn' }),
 }
 
-test('engine selection: an unloadable default engine falls back to the pure-JS one', async () => {
+test('engine selection: an unloadable default engine falls back to the pure-JS one', () => {
   const fallbacks: unknown[] = []
-  const selected = await core.selectEngine(undefined, loaders, { onFallback: (err: unknown) => fallbacks.push(err) })
+  const selected = core.selectEngine(undefined, loaders, { onFallback: (err: unknown) => fallbacks.push(err) })
   assert.strictEqual(selected.engineName, 'acorn')
   assert.strictEqual(fallbacks.length, 1, 'the fallback is reported, never silent')
   assert.match((fallbacks[0] as Error).message, /no prebuilt binary/)
 })
 
-test('engine selection: an explicitly requested engine is never substituted', async () => {
+test('engine selection: an explicitly requested engine is never substituted', () => {
   // WRAP_ESM_LAMBDA_ENGINE=oxc means "fail if the addon is missing" — what CI
   // runs with, so a broken native build cannot pass as an acorn run
-  await assert.rejects(() => core.selectEngine('oxc', loaders), /no prebuilt binary/)
+  assert.throws(() => core.selectEngine('oxc', loaders), /no prebuilt binary/)
 })
 
-test('engine selection: strict mode does not refuse the fallback', async () => {
+test('engine selection: strict mode does not refuse the fallback', () => {
   // WRAP_ESM_LAMBDA_STRICT is a policy for instrumentation failures, not a
   // statement about which engines are acceptable: wanting a moved binding to
   // throw must not cost the pure-JS engine on a platform with no addon
   process.env.WRAP_ESM_LAMBDA_STRICT = '1'
   try {
-    const selected = await core.selectEngine(undefined, loaders)
+    const selected = core.selectEngine(undefined, loaders)
     assert.strictEqual(selected.engineName, 'acorn')
   } finally {
     delete process.env.WRAP_ESM_LAMBDA_STRICT
   }
 })
 
-test('engine selection: an unknown engine name still fails loudly', async () => {
-  await assert.rejects(() => core.selectEngine('esbuild', loaders), /unknown engine 'esbuild'/)
+test('engine selection: an unknown engine name still fails loudly', () => {
+  assert.throws(() => core.selectEngine('esbuild', loaders), /unknown engine 'esbuild'/)
 })
 
-test('engine selection: both engines unloadable reports both causes', async () => {
-  const broken = { oxc: loaders.oxc, acorn: () => Promise.reject(new Error('acorn missing too')) }
-  const err = (await captureRejects(() => core.selectEngine(undefined, broken))) as Error & { cause: AggregateError }
+test('engine selection: both engines unloadable reports both causes', () => {
+  const broken = {
+    oxc: loaders.oxc,
+    acorn: (): { engine: string } => {
+      throw new Error('acorn missing too')
+    },
+  }
+  const err = captureThrows(() => core.selectEngine(undefined, broken)) as Error & { cause: AggregateError }
   assert.match(err.message, /neither the 'oxc' engine nor the 'acorn' fallback/)
   assert.strictEqual(err.cause.errors.length, 2, 'both failures survive in the cause chain')
 })
@@ -169,15 +179,15 @@ test('an engine that reports the wrong transform contract is refused', async () 
   // engine-parity.spec.ts, where the native addon is a given; this lane
   // deliberately runs without one.
   const wrongContract = {
-    oxc: () => Promise.resolve({ tapContractVersion: () => 999 }),
-    acorn: () => Promise.resolve({ tapContractVersion: () => core.TAP_CONTRACT_VERSION }),
+    oxc: () => ({ tapContractVersion: () => 999 }),
+    acorn: () => ({ tapContractVersion: () => core.TAP_CONTRACT_VERSION }),
   }
   const verify = (engine: { tapContractVersion(): number }) => {
     if (engine.tapContractVersion() !== core.TAP_CONTRACT_VERSION) throw new Error('transform contract mismatch')
   }
-  const selected = await core.selectEngine(undefined, wrongContract, { verify })
+  const selected = core.selectEngine(undefined, wrongContract, { verify })
   assert.strictEqual(selected.engineName, 'acorn', 'a mismatched addon degrades to the JS engine')
-  await assert.rejects(() => core.selectEngine('oxc', wrongContract, { verify }), /contract mismatch/)
+  assert.throws(() => core.selectEngine('oxc', wrongContract, { verify }), /contract mismatch/)
 })
 
 test('recovered failures are retrievable, not just printed', async () => {
