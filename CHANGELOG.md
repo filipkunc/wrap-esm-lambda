@@ -4,7 +4,7 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
-## Unreleased
+## 0.2.0 (2026-07-28)
 
 ### Removed — the config surface is tap-only (breaking)
 
@@ -114,9 +114,6 @@ would break a consumer.
   which the acorn fallback makes safe.
 - `engines.node` now states what is actually tested (>= 22, and >= 22.15 for
   `@wrap-esm-lambda/hooks`).
-- Windows fix: a wrap entry's injected import is emitted as a `file://` URL for
-  the runtime shell, since Node parses an import specifier as a URL and a
-  drive-letter path is not one.
 
 ### CI
 
