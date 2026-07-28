@@ -1,302 +1,18 @@
-use oxc_allocator::{Allocator, Box as ArenaBox, CloneIn, GetAllocator, Vec as ArenaVec};
+use oxc_allocator::{Allocator, CloneIn, Vec as ArenaVec};
 use oxc_ast::{
   NONE,
   ast::{
-    Argument, BindingIdentifier, BindingPattern, Declaration, ExportNamedDeclaration,
-    ExportSpecifier, Expression, IdentifierName, ImportDeclaration, ImportDeclarationSpecifier,
-    ImportOrExportKind, ModuleExportName, Program, Statement, StringLiteral, VariableDeclaration,
+    BindingIdentifier, BindingPattern, Declaration, ExportNamedDeclaration, ExportSpecifier,
+    Expression, IdentifierName, ImportDeclaration, ImportDeclarationSpecifier, ImportOrExportKind,
+    ModuleExportName, Program, Statement, StringLiteral, VariableDeclaration,
     VariableDeclarationKind, VariableDeclarator,
   },
 };
 use oxc_codegen::{Codegen, CodegenOptions};
 use oxc_parser::Parser;
-use oxc_semantic::{Scoping, SemanticBuilder, SymbolFlags};
 use oxc_sourcemap::{SourceMap, SourceMapBuilder};
 use oxc_span::{SPAN, SourceType};
 use oxc_str::Ident;
-use oxc_traverse::{Traverse, TraverseCtx, traverse_mut};
-
-pub struct LambdaTransform<'a> {
-  handler: Ident<'a>,
-  orig_handler: Ident<'a>,
-  wrapper: Ident<'a>,
-}
-
-impl<'a> LambdaTransform<'a> {
-  pub fn new(allocator: &'a Allocator, handler: String, wrapper: String) -> Self {
-    Self {
-      handler: Ident::from_strs_array_in([&handler], &allocator),
-      orig_handler: Ident::from_strs_array_in(["orig_", &handler], &allocator),
-      wrapper: Ident::from_strs_array_in([&wrapper], &allocator),
-    }
-  }
-  pub fn transform(
-    mut self,
-    allocator: &'a Allocator,
-    program: &mut Program<'a>,
-    scoping: Scoping,
-  ) {
-    traverse_mut(&mut self, allocator, program, scoping, ());
-  }
-}
-
-impl<'a> Traverse<'a, ()> for LambdaTransform<'a> {
-  fn enter_program(&mut self, program: &mut Program<'a>, ctx: &mut TraverseCtx<'a, ()>) {
-    self.update_handler_name(&mut program.body, ctx);
-
-    let mut new_stmts = ArenaVec::with_capacity_in(program.body.len() * 2, ctx);
-    for stmt in program.body.drain(..) {
-      match &stmt {
-        Statement::ExportNamedDeclaration(export) => {
-          if self.transform_export_named_declaration(&mut new_stmts, export, ctx) {
-            continue;
-          }
-        }
-        Statement::VariableDeclaration(var) => {
-          let found = var
-            .declarations
-            .iter()
-            .find(|x| x.id.get_identifier_name() == Some(self.handler));
-          if let Some(found) = found {
-            let init = &found.init;
-            assert!(init.is_some());
-            let wrapped_expr = self.wrap_expression(
-              init.clone_in_with_semantic_ids(ctx.allocator()).unwrap(),
-              ctx,
-            );
-            let var_decl = self.var_handler(&Some(wrapped_expr), ctx);
-            new_stmts.push(Statement::VariableDeclaration(ArenaBox::new_in(
-              var_decl, ctx,
-            )));
-            continue;
-          }
-        }
-        _ => (),
-      }
-      new_stmts.push(stmt);
-    }
-    program.body = new_stmts;
-  }
-}
-
-impl<'a> LambdaTransform<'a> {
-  fn update_handler_name(
-    &mut self,
-    stmts: &mut ArenaVec<'a, Statement<'a>>,
-    ctx: &mut TraverseCtx<'a, ()>,
-  ) {
-    for stmt in stmts {
-      if let Statement::ExportNamedDeclaration(export) = stmt {
-        for specifier in &export.specifiers {
-          if let Some(name) = specifier.exported.identifier_name()
-            && name == self.handler
-          {
-            self.handler = Ident::from_strs_array_in([&specifier.local.name()], &ctx.allocator());
-            self.orig_handler =
-              Ident::from_strs_array_in(["orig_", &self.handler], &ctx.allocator());
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  fn var_handler(
-    &mut self,
-    init: &Option<Expression<'a>>,
-    ctx: &mut TraverseCtx<'a, ()>,
-  ) -> VariableDeclaration<'a> {
-    let kind = VariableDeclarationKind::Const;
-    let binding = ctx.generate_binding_in_current_scope(self.handler, SymbolFlags::empty());
-    let pattern = binding.create_binding_pattern(ctx);
-    let init = init.clone_in_with_semantic_ids(ctx.allocator());
-    let declarator = VariableDeclarator::new(SPAN, kind, pattern, NONE, init, false, ctx);
-    VariableDeclaration::new(
-      SPAN,
-      kind,
-      ArenaVec::from_value_in(declarator, ctx),
-      false,
-      ctx,
-    )
-  }
-
-  fn wrap_expression(
-    &mut self,
-    expr: Expression<'a>,
-    ctx: &mut TraverseCtx<'a, ()>,
-  ) -> Expression<'a> {
-    let callee = Expression::new_identifier(SPAN, self.wrapper, ctx);
-    let argument = Argument::from(expr.clone_in_with_semantic_ids(ctx.allocator()));
-    Expression::new_call_expression(
-      SPAN,
-      callee,
-      NONE,
-      ArenaVec::from_value_in(argument, ctx),
-      false,
-      ctx,
-    )
-  }
-
-  fn replace_var_declarator_at(
-    &mut self,
-    declarations: &mut ArenaVec<'a, VariableDeclarator<'a>>,
-    index: usize,
-    new_decl: VariableDeclarator<'a>,
-    ctx: &mut TraverseCtx<'a, ()>,
-  ) {
-    if index < declarations.len() {
-      declarations[index] = new_decl.clone_in_with_semantic_ids(ctx.allocator());
-    } else {
-      declarations.push(new_decl);
-    }
-  }
-
-  fn transform_export_named_declaration(
-    &mut self,
-    new_stmts: &mut ArenaVec<'a, Statement<'a>>,
-    export: &ArenaBox<'a, ExportNamedDeclaration<'a>>,
-    ctx: &mut TraverseCtx<'a, ()>,
-  ) -> bool {
-    let export = export.as_ref();
-    if let Some(declaration) = &export.declaration {
-      match &declaration {
-        Declaration::VariableDeclaration(var) => {
-          for (index, decl) in var.declarations.iter().enumerate() {
-            match &decl.id {
-              BindingPattern::BindingIdentifier(identifier) => {
-                if identifier.name == self.handler {
-                  let mut new_declarations =
-                    var.declarations.clone_in_with_semantic_ids(ctx.allocator());
-                  let expr = self.wrap_expression(
-                    decl
-                      .init
-                      .clone_in_with_semantic_ids(ctx.allocator())
-                      .unwrap(),
-                    ctx,
-                  );
-                  let pattern = ctx
-                    .generate_binding_in_current_scope(self.handler, SymbolFlags::empty())
-                    .create_binding_pattern(ctx);
-                  let declarator =
-                    VariableDeclarator::new(SPAN, var.kind, pattern, NONE, Some(expr), false, ctx);
-                  self.replace_var_declarator_at(&mut new_declarations, index, declarator, ctx);
-                  let declaration =
-                    VariableDeclaration::boxed(SPAN, var.kind, new_declarations, false, ctx);
-                  new_stmts.push(Statement::ExportNamedDeclaration(
-                    ExportNamedDeclaration::boxed(
-                      SPAN,
-                      Some(Declaration::VariableDeclaration(declaration)),
-                      ArenaVec::new_in(ctx),
-                      None,
-                      ImportOrExportKind::Value,
-                      NONE,
-                      ctx,
-                    ),
-                  ));
-                  return true;
-                }
-              }
-              BindingPattern::ObjectPattern(pattern) => {
-                for prop in &pattern.properties {
-                  if let Some(name) = prop.key.name()
-                    && name == self.handler
-                  {
-                    let init = &decl.init;
-                    assert!(init.is_some());
-                    // todo: wrap init with object pattern specific code
-                    // e.g: (p => { return { ...p, handler: wrapper(p.handler) }; })(obj)
-                    return false;
-                  }
-                }
-              }
-              _ => {
-                // Other patterns are not supported
-                continue;
-              }
-            }
-          }
-        }
-        Declaration::FunctionDeclaration(func)
-          if func.name().is_some_and(|x| x == self.handler) =>
-        {
-          let mut func = func.clone_in_with_semantic_ids(ctx.allocator());
-          func.id = None;
-          let init = self.wrap_expression(Expression::FunctionExpression(func), ctx);
-          let var_decl = self.var_handler(&Some(init), ctx);
-          let declaration = ArenaBox::new_in(var_decl, ctx);
-          new_stmts.push(Statement::ExportNamedDeclaration(
-            ExportNamedDeclaration::boxed(
-              SPAN,
-              Some(Declaration::VariableDeclaration(declaration)),
-              ArenaVec::new_in(ctx),
-              None,
-              ImportOrExportKind::Value,
-              NONE,
-              ctx,
-            ),
-          ));
-          return true;
-        }
-        _ => (),
-      };
-    } else if export.source.is_some() {
-      for specifier in &export.specifiers {
-        if let Some(name) = specifier.exported.identifier_name()
-          && name == self.handler
-        {
-          let imported =
-            ModuleExportName::IdentifierName(IdentifierName::new(SPAN, self.handler, ctx));
-          let local = BindingIdentifier::new(SPAN, self.orig_handler, ctx);
-          let specifier = ImportDeclarationSpecifier::new_import_specifier(
-            SPAN,
-            imported,
-            local,
-            ImportOrExportKind::Value,
-            ctx,
-          );
-          let source = export
-            .source
-            .clone_in_with_semantic_ids(ctx.allocator())
-            .unwrap();
-          new_stmts.push(Statement::ImportDeclaration(ImportDeclaration::boxed(
-            SPAN,
-            Some(ArenaVec::from_value_in(specifier, ctx)),
-            source,
-            None,
-            NONE,
-            ImportOrExportKind::Value,
-            ctx,
-          )));
-          let orig = Expression::new_identifier(SPAN, self.orig_handler, ctx);
-          let init = self.wrap_expression(orig, ctx);
-          let var_decl = self.var_handler(&Some(init), ctx);
-          let declaration = ArenaBox::new_in(var_decl, ctx);
-          new_stmts.push(Statement::ExportNamedDeclaration(
-            ExportNamedDeclaration::boxed(
-              SPAN,
-              Some(Declaration::VariableDeclaration(declaration)),
-              ArenaVec::new_in(ctx),
-              None,
-              ImportOrExportKind::Value,
-              NONE,
-              ctx,
-            ),
-          ));
-          return true;
-        }
-      }
-    }
-    false
-  }
-}
-
-/// A generated source map in both the forms callers need: `json` (a v3 map, for
-/// composing with an upstream `.ts` -> `.js` map on the JS side) and `data_url`
-/// (for embedding inline).
-pub struct MapOutput {
-  pub json: String,
-  pub data_url: String,
-}
 
 /// Compose `wrap_map` (`transformed -> intermediate`, fresh from codegen) with
 /// `upstream` (`intermediate -> original`, e.g. tsc's `handler.js ->
@@ -338,149 +54,6 @@ fn chain_source_maps<'a>(wrap_map: &'a SourceMap, upstream: &'a SourceMap) -> So
     );
   }
   builder.into_sourcemap()
-}
-
-/// Parse `source_text`, wrap the handler, and generate code. When
-/// `source_map_path` is `Some`, oxc also emits a source map (relative to that
-/// path). When `None`, no map is generated (the fast path used by callers that
-/// only need the transformed code).
-///
-/// When `upstream_map_json` is also given, the emitted map is chained through
-/// it via [`chain_source_maps`] before serialization, so the returned
-/// [`MapOutput`] already reaches the upstream map's original sources.
-fn transform_and_generate(
-  source_text: &str,
-  handler: String,
-  wrapper: String,
-  source_map_path: Option<std::path::PathBuf>,
-  upstream_map_json: Option<&str>,
-) -> (String, Option<MapOutput>) {
-  let allocator = Allocator::default();
-  let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
-  let mut program = parsed.program;
-  let scoping = SemanticBuilder::new()
-    .build(&program)
-    .semantic
-    .into_scoping();
-  LambdaTransform::new(&allocator, handler, wrapper).transform(&allocator, &mut program, scoping);
-  let ret = Codegen::new()
-    .with_options(CodegenOptions {
-      source_map_path,
-      ..CodegenOptions::default()
-    })
-    .build(&program);
-  let map = ret.map.as_ref().map(|wrap_map| {
-    let upstream = upstream_map_json
-      .map(|json| SourceMap::from_json_string(json).expect("invalid upstream source map JSON"));
-    let chained = upstream
-      .as_ref()
-      .map(|upstream| chain_source_maps(wrap_map, upstream));
-    let map = chained.as_ref().unwrap_or(wrap_map);
-    MapOutput {
-      json: map.to_json_string(),
-      data_url: map.to_data_url(),
-    }
-  });
-  (ret.code, map)
-}
-
-pub fn transform_lambda_source(source_text: &str, handler: String, wrapper: String) -> String {
-  transform_and_generate(source_text, handler, wrapper, None, None).0
-}
-
-/// Same as [`transform_lambda_source`], but appends an inline
-/// `//# sourceMappingURL=` data-URL source map that maps the generated code
-/// back to `filename`. The wrapped handler body keeps its original spans, so an
-/// exception thrown inside the handler resolves to the original source line
-/// under Node's `--enable-source-maps`.
-pub fn transform_lambda_source_with_map(
-  source_text: String,
-  handler: String,
-  wrapper: String,
-  filename: String,
-) -> String {
-  let (mut code, map) = transform_and_generate(
-    &source_text,
-    handler,
-    wrapper,
-    Some(std::path::PathBuf::from(filename)),
-    None,
-  );
-  if let Some(map) = map {
-    code.push_str("\n//# sourceMappingURL=");
-    code.push_str(&map.data_url);
-    code.push('\n');
-  }
-  code
-}
-
-/// Like [`transform_lambda_source_with_map`], but returns the code and the raw
-/// v3 source map JSON separately (no inline URL appended). The JSON is what a
-/// caller composes with an upstream `.ts` -> `.js` map so the final map reaches
-/// the original TypeScript.
-pub fn transform_lambda_source_with_map_json(
-  source_text: String,
-  handler: String,
-  wrapper: String,
-  filename: String,
-) -> (String, Option<String>) {
-  let (code, map) = transform_and_generate(
-    &source_text,
-    handler,
-    wrapper,
-    Some(std::path::PathBuf::from(filename)),
-    None,
-  );
-  (code, map.map(|map| map.json))
-}
-
-/// Same as [`transform_lambda_source_with_map`], but chains the wrap map
-/// through `upstream_map_json` (`filename -> original`, e.g. tsc's
-/// `handler.js -> handler.ts` map) in Rust before inlining it, so the appended
-/// data URL already reaches the original source. The compose that
-/// `@ampproject/remapping` would do in JS happens here via `oxc_sourcemap`.
-///
-/// Panics if `upstream_map_json` is not a valid v3 source map (surfaces as a
-/// JS exception through napi, like `remapping` throwing on bad input).
-pub fn transform_lambda_source_with_chained_map(
-  source_text: String,
-  handler: String,
-  wrapper: String,
-  filename: String,
-  upstream_map_json: String,
-) -> String {
-  let (mut code, map) = transform_and_generate(
-    &source_text,
-    handler,
-    wrapper,
-    Some(std::path::PathBuf::from(filename)),
-    Some(&upstream_map_json),
-  );
-  if let Some(map) = map {
-    code.push_str("\n//# sourceMappingURL=");
-    code.push_str(&map.data_url);
-    code.push('\n');
-  }
-  code
-}
-
-/// Like [`transform_lambda_source_with_chained_map`], but returns the code and
-/// the chained v3 map JSON separately (no inline URL appended).
-pub fn transform_lambda_source_with_chained_map_json(
-  source_text: String,
-  handler: String,
-  wrapper: String,
-  filename: String,
-  upstream_map_json: String,
-) -> (String, Option<String>) {
-  let (code, map) = transform_and_generate(
-    &source_text,
-    handler,
-    wrapper,
-    Some(std::path::PathBuf::from(filename)),
-    Some(&upstream_map_json),
-  );
-  (code, map.map(|map| map.json))
 }
 
 /// One patch entry's inputs to the exports tap, mirroring the JS config
@@ -1604,12 +1177,13 @@ mod tests {
   use super::*;
 
   #[test]
-  fn test_chained_source_map() {
+  fn test_exports_tap_chained_upstream_map() {
     // Simulate the tsc pipeline without tsc: `original` plays handler.ts.
     // Codegen strips its blank lines, producing an intermediate handler.js
-    // plus an upstream map (handler.js -> handler.ts), exactly the two inputs
-    // the wrap step sees at load time. The chained wrap map must then reach
-    // handler.ts, not stop at handler.js.
+    // plus an upstream map (handler.js -> handler.ts), exactly the two
+    // inputs the tap's rewrite path sees at load time (a `const` demotion
+    // forces the rewrite). The chained map must then reach handler.ts, not
+    // stop at handler.js.
     let original =
       "export const handler = async (event) => {\n\n\n  throw new Error(\"boom\");\n};\n";
     let allocator = Allocator::default();
@@ -1622,17 +1196,24 @@ mod tests {
       .build(&parsed.program);
     let upstream_json = ret.map.unwrap().to_json_string();
 
-    let (code, map) = transform_lambda_source_with_chained_map_json(
-      ret.code,
-      "handler".to_string(),
-      "wrapper".to_string(),
-      "handler.js".to_string(),
-      upstream_json,
-    );
-    println!("{}", code);
-    assert!(code.contains("wrapper("));
-    let map = map.expect("chained map should be generated");
-    println!("{}", map);
+    let out = exports_tap(
+      &ret.code,
+      &[TapEntry {
+        bindings: vec!["handler".to_string()],
+        patch_name: "patchIt".to_string(),
+        patch_from: "/abs/patch.ts".to_string(),
+        alias_index: 0,
+      }],
+      false,
+      true,
+      Some("handler.js"),
+      Some(&upstream_json),
+      &[],
+    )
+    .expect("tap should apply");
+    let code = out.code.expect("const demotion takes the rewrite path");
+    assert!(code.contains("let handler"));
+    let map = out.map.expect("the rewrite emits a chained map");
     assert!(map.contains("\"sources\":[\"handler.ts\"]"));
     // The upstream map embeds `original` as sourcesContent; chaining carries it over.
     assert!(map.contains("\"sourcesContent\""));
@@ -2040,129 +1621,5 @@ mod tests {
     assert!(!has_module_syntax("import(\"x\").then(() => {});\n"));
     // does not parse as ESM at all -> not ESM
     assert!(!has_module_syntax("with (obj) { x = 1; }\n"));
-  }
-
-  #[test]
-  fn test_source_map_inline() {
-    let source_text =
-      "export const handler = async (event) => {\n  throw new Error(\"boom\");\n};\n".to_string();
-    let transformed = transform_lambda_source_with_map(
-      source_text,
-      "handler".to_string(),
-      "WrapAwsLambda".to_string(),
-      "handler.mjs".to_string(),
-    );
-    println!("{}", transformed);
-    assert!(transformed.contains("WrapAwsLambda"));
-    assert!(transformed.contains("//# sourceMappingURL=data:application/json"));
-  }
-
-  #[test]
-  fn test_var_transform() {
-    let source_text = r#"
-      export const handler = async function(event) {
-        return "Hi from AWS Lambda";
-      }, other = 123;
-    "#
-    .to_string();
-    let expected_text = "export const handler = wrapper(async function(event) {\n\treturn \"Hi from AWS Lambda\";\n}), other = 123;\n".to_string();
-    let handler = "handler".to_string();
-    let wrapper = "wrapper".to_string();
-
-    let transformed = transform_lambda_source(&source_text, handler, wrapper);
-    println!("{}", transformed);
-    assert!(transformed.contains("wrapper"));
-    assert!(transformed == expected_text);
-  }
-
-  #[test]
-  fn test_fn_transform() {
-    let source_text = r#"
-      export async function handler(event) {
-        return "Hi from AWS Lambda";
-      }
-    "#
-    .to_string();
-    let expected_text = "export const handler = wrapper(async function(event) {\n\treturn \"Hi from AWS Lambda\";\n});\n".to_string();
-    let handler = "handler".to_string();
-    let wrapper = "wrapper".to_string();
-
-    let transformed = transform_lambda_source(&source_text, handler, wrapper);
-    println!("{}", transformed);
-    assert!(transformed.contains("wrapper"));
-    assert!(transformed == expected_text);
-  }
-
-  #[test]
-  fn test_export_list() {
-    let source_text = r#"
-      const x = 1;
-      const y = async (event) => "Hi from AWS Lambda";
-      export { x, y };
-    "#
-    .to_string();
-    let handler = "y".to_string();
-    let wrapper = "wrapper".to_string();
-
-    let transformed = transform_lambda_source(&source_text, handler, wrapper);
-    println!("{}", transformed);
-    assert!(transformed.contains("const y = wrapper(async (event) => \"Hi from AWS Lambda\");"));
-    assert!(transformed.contains("export { x, y };"));
-  }
-
-  #[test]
-  fn test_export_renames() {
-    let source_text = r#"
-      const x = 1;
-      const y = async (event) => "Hi from AWS Lambda";
-      export { x, y as z };
-    "#
-    .to_string();
-    let handler = "z".to_string();
-    let wrapper = "wrapper".to_string();
-
-    let transformed = transform_lambda_source(&source_text, handler, wrapper);
-    println!("{}", transformed);
-    assert!(transformed.contains("const y = wrapper(async (event) => \"Hi from AWS Lambda\");"));
-    assert!(transformed.contains("export { x, y as z };"));
-  }
-
-  #[test]
-  #[ignore = "object pattern destructuring is not implemented"]
-  fn test_export_destructuring() {
-    let source_text = r#"
-const obj = {
-    abc: async (event) => "Hi from AWS Lambda",
-    xyz: 1
-};
-export const { abc: handler } = obj;
-"#
-    .to_string();
-    let _possible_solution = r#"
-const obj = {
-    abc: async (event) => "Hi from AWS Lambda",
-    xyz: 1
-};
-export const { abc: handler } = (p => { return { ...p, abc: wrapper(p.abc) }; })(obj);
-"#
-    .to_string();
-    let handler = "handler".to_string();
-    let wrapper = "wrapper".to_string();
-
-    let transformed = transform_lambda_source(&source_text, handler, wrapper);
-    println!("{}", transformed);
-    assert!(transformed.contains("wrapper"));
-  }
-
-  #[test]
-  fn test_export_from() {
-    let source_text = "export { handler } from \"other.js\";".to_string();
-    let handler = "handler".to_string();
-    let wrapper = "wrapper".to_string();
-
-    let transformed = transform_lambda_source(&source_text, handler, wrapper);
-    println!("{}", transformed);
-    assert!(transformed.contains("import { handler as orig_handler } from \"other.js\""));
-    assert!(transformed.contains("export const handler = wrapper(orig_handler);"));
   }
 }

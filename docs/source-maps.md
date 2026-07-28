@@ -1,103 +1,52 @@
 # Source maps
 
-Wrapping the handler shifts its lines: an exception then reports the position in
-the transformed code, not the original file. `transformLambdaWithMap` fixes this
-by asking oxc to also emit a source map, appended to the output as an inline
-`//# sourceMappingURL=` data URL. The wrapped handler body keeps its original
-spans, so under Node's `--enable-source-maps` a thrown error resolves to the
-original line.
+An instrumented module must not lose its stack traces. The exports tap is
+built around that:
 
-```js
-import { transformLambdaWithMap } from 'wrap-esm-lambda'
-const source = transformLambdaWithMap(originalSource, 'handler', 'WrapAwsLambda', 'handler.mjs')
-```
+- **Fast path** (every requested binding already reassignable): the module
+  source is untouched — the tap only **appends** snippets. Existing line
+  numbers, and therefore any existing source map, stay valid; no new map is
+  needed or emitted.
+- **Rewrite path** (`export const` demotion, anonymous defaults, re-export
+  splits): the module is restructured, so the engine emits a v3 source map
+  for the rewrite. The runtime shell inlines it as a
+  `//# sourceMappingURL=` data URL (`inlineMap` in core's apply step), and
+  Node's stack traces resolve through it; at build time the map is returned
+  to the bundler, which chains it into its own pipeline.
 
-A runnable before/after demo is in [hooks/sourcemap-demo](../hooks/sourcemap-demo):
-
-```sh
-./hooks/sourcemap-demo/run.sh
-```
-
-The handler throws on line 11, but codegen strips the blank lines above it. Without
-a map the stack points at line 4 (a comment); with the oxc map it points back at
-line 11:
-
-```
-=== WITHOUT source map (plain transformLambda) ===
-Error: boom for 42
-    at handler-throws.mjs:4:8
-
-=== WITH oxc source map (transformLambdaWithMap) ===
-Error: boom for 42
-    at handler-throws.mjs:11:9
-```
-
-Emitting the map is cheap: on a small handler the transform goes from ~2.9 µs to
-~4.2 µs, so even with a map oxc is faster than acorn without one.
+A demotion changes one keyword per affected statement, so mapped positions
+stay on their original lines — a `throw` on line 2 of the original resolves
+to line 2 through the rewrite map. Both engines emit one:
+[oxc](https://oxc.rs/) builds it in codegen (native side), the acorn engine
+builds it from magic-string edits, and
+[`__test__/engine-parity.spec.ts`](../__test__/engine-parity.spec.ts) pins
+that positions in untouched code resolve to the original source either way.
 
 ## Chaining back to TypeScript
 
-If the handler started as TypeScript, `tsc` already produced `handler.js` plus a
-`handler.js` -> `handler.ts` map. Our wrap adds a second step, so its map only
-reaches `handler.js`. To get an exception all the way back to the `.ts`, compose
-the two maps. oxc's map is `transformed -> handler.js`; chain it through the tsc
-map with [`@jridgewell/remapping`](https://github.com/jridgewell/sourcemaps)
-(the maintained home of `@ampproject/remapping`; synchronous, so it works
-inside a `registerHooks` load hook). `transformLambdaWithMapObject` returns
-the raw map for this:
+A rewritten module may itself be the output of an earlier transform — tsc's
+`handler.js` carrying a `handler.js -> handler.ts` map. The rewrite map
+alone would stop at `handler.js`, so both tap entry points
+(`exportsTap`/`exportsTapFromBuffer`) accept an `upstreamMap`: the emitted
+map is composed through it, and the final map reaches the original `.ts`.
 
-```js
-import remapping from '@jridgewell/remapping'
-import { transformLambdaWithMapObject } from 'wrap-esm-lambda'
+The compose runs where each engine lives:
 
-const { code, map } = transformLambdaWithMapObject(jsSource, 'handler', 'WrapAwsLambda', 'handler.js')
-const chained = remapping(map, (file) => (file.endsWith('handler.js') ? tscMap : null)).toString()
-// `chained` now maps transformed -> handler.ts; inline it as a data URL
-```
+- **Native**: `oxc_sourcemap` token lookup inside the addon
+  (`chain_source_maps` in `src/transform.rs`) — the rewrite map never
+  leaves Rust, skipping a JSON serialize/re-parse round-trip across napi.
+  The Rust unit test `test_exports_tap_chained_upstream_map` pins the
+  chained map's `sources` at `handler.ts` with `sourcesContent` carried
+  over.
+- **Pure JS**: [`@jridgewell/remapping`](https://github.com/jridgewell/sourcemaps)
+  (the maintained home of `@ampproject/remapping`) in the acorn engine
+  (`packages/engine-acorn/src/sourcemaps.mts`). Tokens the upstream map has
+  no mapping for are dropped by both, so the engines agree on chained-map
+  semantics.
 
-Demo in [hooks/sourcemap-ts-demo](../hooks/sourcemap-ts-demo) (`./run.sh` compiles
-the `.ts` first). The handler throws on line 15 of `handler.ts`; without chaining
-the stack stops at the generated `handler.js`, with chaining it reaches the `.ts`:
-
-```
-=== wrap with NON-chained map (transformed -> handler.js only) ===
-Error: boom for 42
-    at handler.js:4:11
-
-=== wrap with CHAINED map (transformed -> handler.js -> handler.ts) ===
-Error: boom for 42
-    at handler.ts:15:9
-```
-
-The compose costs ~22 µs on top of the transform (the map JSON round-trips through
-`remapping`), still well under a single Babel transform and paid once per module.
-
-## Composing the maps in Rust instead of `remapping`
-
-The compose itself doesn't need JS at all: `transformLambdaWithChainedMap` takes
-the upstream tsc map JSON and traces the wrap map through it in Rust, using
-`oxc_sourcemap`'s token lookup (the same trace `remapping` performs). The wrap
-map never leaves Rust — no serialize-to-JSON, cross napi, re-parse round-trip —
-so the whole wrap-and-chain runs in one call:
-
-```js
-import { transformLambdaWithChainedMap } from 'wrap-esm-lambda'
-
-// tscMap: the handler.js -> handler.ts map tsc emitted
-const source = transformLambdaWithChainedMap(jsSource, 'handler', 'WrapAwsLambda', 'handler.js', tscMap)
-// `source` has an inline map already reaching handler.ts
-```
-
-(`transformLambdaWithChainedMapObject` returns `{ code, map }` instead of
-inlining, mirroring `transformLambdaWithMapObject`.)
-
-This is ~2.5x faster end-to-end than composing with `remapping`: ~11 µs vs
-~27 µs for wrap + chain (the compose step drops from ~23 µs to ~7 µs). The
-result is byte-for-byte equivalent in effect — the demo's third variant
-(`sync-hooks-oxc-ts-rust.mjs`) resolves the same `handler.ts:15:9`:
-
-```
-=== wrap with CHAINED map composed in Rust (oxc_sourcemap, no remapping) ===
-Error: boom for 42
-    at handler.ts:15:9
-```
+Historical note: this machinery was built for the original standalone
+Lambda-handler wrap transform (`transformLambda*`), which measured ~1 µs
+per emitted map and ~2.5x end-to-end savings for the in-Rust compose vs
+`remapping`. That transform is gone — the tap's rewrite path inherited the
+same codegen and chaining — and the research-phase story lives in
+[history.md](history.md) and the repo's presentations.

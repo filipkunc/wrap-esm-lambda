@@ -13,20 +13,17 @@ version      = "0.1.3"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi            = "3.2.4"
-napi-derive     = "3.2.4"
-oxc             = "0.141.0"
-oxc_allocator   = "0.141.0"
-oxc_ast         = "0.141.0"
-oxc_codegen     = "0.141.0"
-oxc_parser      = "0.141.0"
-oxc_resolver    = "11.24.2"
-oxc_semantic    = "0.141.0"
-oxc_sourcemap   = "8.1.2"
-oxc_span        = "0.141.0"
-oxc_str         = "0.141.0"
-oxc_transformer = "0.141.0"
-oxc_traverse    = "0.141.0"
+napi          = "3.2.4"
+napi-derive   = "3.2.4"
+oxc_allocator = "0.141.0"
+oxc_ast       = "0.141.0"
+oxc_codegen   = "0.141.0"
+oxc_parser    = "0.141.0"
+oxc_resolver  = "11.24.2"
+
+oxc_sourcemap = "8.1.2"
+oxc_span      = "0.141.0"
+oxc_str       = "0.141.0"
 
 [build-dependencies]
 napi-build = "2"

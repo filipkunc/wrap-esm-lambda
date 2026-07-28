@@ -1,23 +1,20 @@
-import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { fileURLToPath } from 'node:url'
-import { promisify } from 'node:util'
 
 import { exportsTap, exportsTapFromBuffer } from '../index.js'
-// @ts-expect-error untyped workspace package
 import * as acornEngine from '@wrap-esm-lambda/engine-acorn'
 
 const TAP = [{ bindings: ['Client'], patchName: 'patch', patchFrom: '/p.ts', aliasIndex: 0 }]
 // @ts-expect-error untyped internal module
 import { lexEsm } from 'import-in-the-middle/lib/get-esm-exports.mjs'
 
-// Declarative-patch transform latency on the REAL instrumentation target:
-// @smithy/core's client submodule, the file every @aws-sdk/client-* send()
-// funnels through. Both tools express the same intent declaratively —
-// orchestrion as a { className, methodName } function query rewriting the
-// method body into tracingChannel publishes, the exports tap as a validated
-// append handing the class to user code.
+// The transform-latency cases, shared by `pnpm bench` (the table) and
+// `pnpm bench:chart` (the charts): declarative-patch transform latency on
+// the REAL instrumentation target — @smithy/core's client submodule, the
+// file every @aws-sdk/client-* send() funnels through. Both tools express
+// the same intent declaratively — orchestrion as a { className, methodName }
+// function query rewriting the method body into tracingChannel publishes,
+// the exports tap as a validated append handing the class to user code.
 
 const require = createRequire(import.meta.url)
 const { create } = require('@apm-js-collab/code-transformer')
@@ -60,7 +57,7 @@ const parseCache = new Map<string, unknown>()
 const originalParse = esquery.parse
 const orchestrionCached = createOrchestrionTransformer()
 
-function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): number {
+export function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): number {
   let end = performance.now() + warmupMs
   while (performance.now() < end) fn()
   let iters = 0
@@ -73,7 +70,11 @@ function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): number {
   return ((performance.now() - start) / iters) * 1000
 }
 
-const cases: { label: string; run: () => void }[] = [
+export const inputDescription =
+  `input: @smithy/core@${corePkg.version}\n` +
+  `  dist-es client.js: ${esmSource.length} bytes, dist-cjs index.js: ${cjsSource.length} bytes`
+
+export const cases: { label: string; run: () => void }[] = [
   {
     label: 'oxc exports tap complete (dist-es, parse + validate)',
     run: () => exportsTap(esmSource, TAP, false, true),
@@ -172,72 +173,3 @@ const cases: { label: string; run: () => void }[] = [
     },
   },
 ]
-
-console.log(`input: @smithy/core@${corePkg.version}`)
-console.log(`  dist-es client.js: ${esmSource.length} bytes, dist-cjs index.js: ${cjsSource.length} bytes\n`)
-for (const { label, run } of cases) {
-  const us = measureUs(run)
-  console.log(`${label.padEnd(55)} ${us.toFixed(1).padStart(9)} µs`)
-}
-
-// --- cold start: what each hooking mechanism adds to a whole process ---
-
-const execFileAsync = promisify(execFile)
-const fixture = (name: string) => fileURLToPath(new URL(`../__test__/fixtures/patch/${name}`, import.meta.url))
-
-async function medianSpawnMs(args: string[], env: NodeJS.ProcessEnv, expect: string): Promise<string> {
-  const times: number[] = []
-  for (let i = 0; i < 9; i++) {
-    const start = performance.now()
-    try {
-      const { stdout } = await execFileAsync(process.execPath, args, { env })
-      if (stdout.trim() !== expect) return `n/a (got '${stdout.trim()}')`
-    } catch (err) {
-      return `n/a (${(err as Error).message.split('\n')[1] ?? 'failed'})`
-    }
-    times.push(performance.now() - start)
-  }
-  times.sort((a, b) => a - b)
-  return `${times[Math.floor(times.length / 2)].toFixed(1)} ms`
-}
-
-const hookEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.ts') }
-const hookEnvMjs = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.mjs') }
-const coldStarts: [string, string[], NodeJS.ProcessEnv, string][] = [
-  ['baseline (no instrumentation)', [fixture('app.mjs')], process.env, 'sent:hello'],
-  [
-    'exports tap runtime hook (.ts config)',
-    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
-    hookEnv,
-    'patched:sent:hello',
-  ],
-  [
-    'exports tap runtime hook (.mjs config)',
-    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
-    hookEnvMjs,
-    'patched:sent:hello',
-  ],
-  [
-    'exports tap runtime hook (acorn engine, .mjs config)',
-    ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
-    { ...hookEnvMjs, WRAP_ESM_LAMBDA_ENGINE: 'acorn' },
-    'patched:sent:hello',
-  ],
-  [
-    'iitm sync (registerHooks)',
-    ['--import', fixture('iitm-setup.mjs'), fixture('app.mjs')],
-    process.env,
-    'iitm:sent:hello',
-  ],
-  [
-    'iitm off-thread (module.register)',
-    ['--import', fixture('iitm-setup-offthread.mjs'), fixture('app.mjs')],
-    process.env,
-    'iitm:sent:hello',
-  ],
-]
-
-console.log(`\ncold start (median of 9 runs, node ${process.version}):`)
-for (const [label, args, env, expect] of coldStarts) {
-  console.log(`${label.padEnd(55)} ${(await medianSpawnMs(args, env, expect)).padStart(12)}`)
-}

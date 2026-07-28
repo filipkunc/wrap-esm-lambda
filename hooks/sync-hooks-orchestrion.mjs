@@ -1,6 +1,9 @@
 import { registerHooks } from 'node:module'
 import { create } from '@apm-js-collab/code-transformer'
 
+// the identifier the minimal-wrap transform emits calls through
+globalThis.WrapAwsLambda = (orig) => async (event, context) => `wrapped:${await orig(event, context)}`
+
 const matcher = create([
   {
     channelName: 'lambda-handler',

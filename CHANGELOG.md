@@ -21,10 +21,23 @@ would break a consumer.
 - The engine contract (`TransformEngine`) drops
   `transformLambdaWithMapObject`, and `TAP_CONTRACT_VERSION` moves to 2 —
   a core paired with an older engine (or vice versa) refuses the mismatch
-  loudly instead of guessing. The acorn engine's wrap implementation is
-  deleted outright; the native addon keeps its standalone `transformLambda*`
-  exports outside the contract, as the original transform and the subject
-  of the benchmark comparisons.
+  loudly instead of guessing. Both wrap implementations are deleted
+  outright: the acorn engine's `wrap.mts` and the native addon's
+  `transformLambda*` exports (with their Rust transformer and the
+  `oxc`/`oxc_transformer`/`oxc_semantic`/`oxc_traverse` dependencies they
+  alone pulled in). The map-chaining machinery stays — the tap's rewrite
+  path uses it, now covered by its own unit test.
+- **The benchmark story is the tap's.** `pnpm bench` now runs the former
+  `bench:patch` suite — the exports tap (both engines, string and
+  zero-copy buffer paths) against orchestrion-js and import-in-the-middle
+  on the real `@smithy/core` client module, plus cold starts —
+  and `pnpm bench:chart` charts those cases. The hyperfine cold-start
+  harness (`hooks/bench_hooks.sh`) times the real register entry on both
+  engines against a no-op-hook floor and orchestrion. Retired with the
+  wrap: the Babel/acorn/swc/regex wrap re-implementations, the swc wasm
+  comparison plugin (`swc-plugin-esm-lambda`), the wrap-based loader-hook
+  demo scripts and the source-map demos — the research-phase story lives
+  in `docs/history.md` and the presentations.
 
 ### Failure policy
 

@@ -16,9 +16,8 @@ were [broken](docs/history.md).
 
 The project began as an experiment in wrapping AWS Lambda ESM handlers — a
 job the generic tap now does on its own, discovering the handler from the
-Lambda environment ([below](#wrapping-a-lambda-handler--now-just-a-patch-entry));
-the original dedicated transform is still here too — and grew into a general
-instrumentation toolkit.
+Lambda environment ([below](#wrapping-a-lambda-handler--now-just-a-patch-entry))
+— and grew into a general instrumentation toolkit.
 
 ## Quick start
 
@@ -176,13 +175,13 @@ every Node 22/24/26 rung, including the minors where sync hooks and
 
 ## The packages
 
-| package                                                  | role                                                                                                                                                                                                                     |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [`@wrap-esm-lambda/core`](packages/core)                 | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)                                                                                 |
-| [`@wrap-esm-lambda/hooks`](packages/hooks)               | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                                                                                                         |
-| [`@wrap-esm-lambda/unplugin`](packages/unplugin)         | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack                                                                                            |
-| [`wrap-esm-lambda`](index.d.ts) (repo root)              | the native oxc addon — the default engine: `exportsTap*` (the tap, the engine contract) with zero-copy `Buffer` variants, plus the standalone `transformLambda*` (the original transform, kept as the benchmark subject) |
-| [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) | the pure-JS engine (acorn + magic-string), same surface and byte-identical snippets — select with `WRAP_ESM_LAMBDA_ENGINE=acorn`                                                                                         |
+| package                                                  | role                                                                                                                                                |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@wrap-esm-lambda/core`](packages/core)                 | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)            |
+| [`@wrap-esm-lambda/hooks`](packages/hooks)               | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                                    |
+| [`@wrap-esm-lambda/unplugin`](packages/unplugin)         | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack                       |
+| [`wrap-esm-lambda`](index.d.ts) (repo root)              | the native oxc addon — the default engine: `exportsTap*` (the tap) with zero-copy `Buffer` variants, plus the resolver and format-detection helpers |
+| [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) | the pure-JS engine (acorn + magic-string), same surface and byte-identical snippets — select with `WRAP_ESM_LAMBDA_ENGINE=acorn`                    |
 
 All four are written in TypeScript (`src/*.mts`) and ship compiled ESM plus
 declarations (`dist/*.mjs` + `dist/*.d.mts`, with declaration and source maps
@@ -256,9 +255,7 @@ every shape they covered and the
 [aws-lambda preset](#wrapping-a-lambda-handler--now-just-a-patch-entry)
 covered the runtime discovery. A wrap entry translates directly: a
 `module: { path: [...] }` match, `bindings: [<handler>]`, and a one-line
-patch function `bindings.handler = WrapAwsLambda(bindings.handler)`. The
-standalone AST transform itself survives as the native addon's
-`transformLambda*` exports.
+patch function `bindings.handler = WrapAwsLambda(bindings.handler)`.
 
 ## Shipping instrumentation as a package
 
@@ -389,20 +386,18 @@ same fixture through AWS's real runtime interface client on the real
 `public.ecr.aws/lambda/nodejs` images, both module systems, answering real
 invocations.
 
-The original dedicated transform survives as standalone exports of the
-native addon (`transformLambda`, `transformLambdaWithMap`,
-`transformLambdaWithChainedMap`, buffer-input variants — see
-[index.d.ts](index.d.ts)); the declarative surface and both shells run
-entirely on the tap. Stack traces survive either way: oxc emits a source map
-for ~1 µs, and the map can be chained all the way back to an original `.ts`
-— composed in Rust without leaving the addon. Details, demos and numbers:
-[docs/source-maps.md](docs/source-maps.md).
-
-For comparison the minimal wrapping code is re-implemented with
-[Babel](https://babeljs.io/), [Acorn](https://github.com/acornjs/acorn),
-[swc.rs](https://swc.rs/) and
-[orchestrion-js](https://github.com/nodejs/orchestrion-js) — the benchmark
-story lives in [docs/benchmarks.md](docs/benchmarks.md).
+The dedicated transform this repo started with is gone — everything runs on
+the tap, and the handler shape rides its rewrite path. Stack traces survive:
+the rewrite emits a source map, chained all the way back to an original
+`.ts` when an upstream map exists — composed in Rust without leaving the
+addon ([docs/source-maps.md](docs/source-maps.md)). The research that got
+here — the wrap re-implemented with [Babel](https://babeljs.io/),
+[Acorn](https://github.com/acornjs/acorn), [swc.rs](https://swc.rs/) and
+loader hooks of every flavor — lives in [docs/history.md](docs/history.md)
+and the [presentations](Presentation.md); today's benchmark compares the
+tap against [orchestrion-js](https://github.com/nodejs/orchestrion-js) and
+[import-in-the-middle](https://github.com/nodejs/import-in-the-middle) on a
+real AWS SDK module ([docs/benchmarks.md](docs/benchmarks.md)).
 
 ## Failure policy: what happens when instrumentation cannot do its job
 
@@ -582,8 +577,7 @@ The headline numbers (details and methodology in
   CJS tap — orchestrion's body-rewriting transform on the same file costs
   ~950–1200 µs. Shapes that
   force the tap's rewrite path (`export const`, anonymous defaults,
-  re-exports) additionally pay one oxc codegen — the same machinery as the
-  wrap transform, still microseconds.
+  re-exports) additionally pay one oxc codegen — still microseconds.
 - Runtime-hook cold start overhead on a real fixture app is **~29 ms**
   (half of which used to be the `semver` package, now replaced by an
   in-package range matcher), on par with import-in-the-middle's sync mode
