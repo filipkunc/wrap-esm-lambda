@@ -304,6 +304,11 @@ jobs:
               console.log('IMAGE=node:${{ matrix.node }}-slim')
             }
           " >> $GITHUB_OUTPUT
+      # An explicit, retried pull: `docker run` would pull implicitly, but
+      # without retries — one registry TLS timeout (a real occurrence) fails
+      # the lane before the suite starts.
+      - name: Pull the test image
+        run: .github/scripts/pull-image.sh "${{ steps.docker.outputs.IMAGE }}" "${{ steps.docker.outputs.PLATFORM }}"
       # Each ARCH installs on its own runner (aarch64 included), so pnpm
       # fetches those platform-specific optional deps natively. LIBC is the
       # exception: the musl lane installs on this glibc host and runs the suite
@@ -410,7 +415,7 @@ jobs:
           set -euo pipefail
           image="public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}"
           platform=${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }}
-          docker pull --quiet --platform "$platform" "$image" >/dev/null
+          .github/scripts/pull-image.sh "$image" "$platform" >/dev/null
           version=$(docker run --rm --entrypoint /bin/sh --platform "$platform" "$image" -c 'node --version')
           digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
           {
@@ -744,7 +749,8 @@ jobs:
         with:
           toolchain: stable
       - name: Install hyperfine
-        run: sudo apt update && sudo apt install -y hyperfine
+        # Acquire::Retries: an apt mirror hiccup should cost seconds, not the job
+        run: sudo apt -o Acquire::Retries=3 update && sudo apt -o Acquire::Retries=3 install -y hyperfine
       - name: Build head
         run: pnpm install && pnpm build && pnpm build:packages
       - name: Build base (PR A/B)
