@@ -87,9 +87,15 @@ export const inputDescription =
 //                     Buffer.concat), which is what the runtime shell ships.
 // Inputs: 1.8 KB is @smithy/core's real dist-es client.js; 42 KB is the same
 // file padded to its dist-cjs bundle's size.
-export const cases: { label: string; run: () => void }[] = [
+//
+// `mechanism: true` marks one representative case per tool — the same
+// per-module analysis/transform on the same 1.8 KB file — for the
+// apples-to-apples cross-tool chart. Everything else is engine detail
+// (plumbing, tiers, input sizes) and only charts within oxc/acorn.
+export const cases: { label: string; run: () => void; mechanism?: boolean }[] = [
   {
     label: 'oxc tap: ESM parse + validate (1.8 KB)',
+    mechanism: true,
     run: () => exportsTap(esmSource, TAP, false, true),
   },
   {
@@ -132,6 +138,7 @@ export const cases: { label: string; run: () => void }[] = [
     // the same parse+validate through the pure-JS engine: what the tap costs
     // with no Rust in the loop (acorn parse instead of oxc-across-napi)
     label: 'acorn tap: ESM parse + validate (1.8 KB)',
+    mechanism: true,
     run: () => acornEngine.exportsTap(esmSource, TAP, false, true),
   },
   {
@@ -159,14 +166,17 @@ export const cases: { label: string; run: () => void }[] = [
     // comparison for our parse+validate. Its full per-module cost additionally
     // includes generating and evaluating a facade module per interception.
     label: 'iitm: lexEsm analysis step (1.8 KB)',
+    mechanism: true,
     run: () => lexEsm(esmSource),
   },
   {
     label: 'orchestrion: Client#send body rewrite, stock (1.8 KB)',
+    mechanism: true,
     run: () => orchestrion.transform(esmSource, 'esm'),
   },
   {
     label: 'orchestrion: Client#send body rewrite, cached selector (1.8 KB)',
+    mechanism: true,
     run: () => {
       esquery.parse = (selector: string) => {
         let parsed = parseCache.get(selector)

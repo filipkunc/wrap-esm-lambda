@@ -25,18 +25,20 @@ in-process, amortized over many calls — `pnpm bench` for the table,
 `pnpm bench:chart` for the charts. The input is not a toy: it is
 `@smithy/core`'s client submodule, the file every `@aws-sdk/client-*`
 `send()` funnels through, both as the 1.8 KB `dist-es` file and padded to
-the 42 KB of the real `dist-cjs` bundle. The fastest and slowest approaches
-are ~2 orders of magnitude apart, so one linear axis squashes the fast
-group into slivers and a log axis understates the gaps that matter; instead
-there are two linear charts with the exact value printed on each bar. The
-first zooms into the approaches under 150 µs, where all the interesting
-differences live:
+the 42 KB of the real `dist-cjs` bundle. Two charts, split by what they
+compare — not by speed — with the exact value printed on each bar.
 
-![Transform latency chart, fast approaches](../hooks/transformChart.svg 'Exports tap latency, approaches under 150 µs')
+The first is the **mechanism comparison**, apples to apples: one bar per
+tool, each doing its per-module analysis/transform of the same 1.8 KB
+file. The ~100x spread is the story, so the axis stays linear:
 
-The second shows the whole field for scale:
+![Per-module transform cost, one bar per tool](../hooks/tapMechanismChart.svg 'Per-module transform cost — one bar per tool, same 1.8 KB module')
 
-![Transform latency chart, all approaches](../hooks/transformChartAll.svg 'Exports tap latency, all approaches')
+The second is **this package's two engines in detail** — the tiers,
+string-vs-buffer plumbing and input sizes that only make sense compared
+within oxc/acorn:
+
+![The two engines in detail](../hooks/tapEngineChart.svg 'The two engines in detail — tiers, plumbing, input sizes')
 
 Every bar label reads **`tool: operation (input size)`** (cases in
 [benchmark/tap-cases.ts](../benchmark/tap-cases.ts)). The tools are `oxc`

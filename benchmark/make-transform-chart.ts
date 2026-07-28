@@ -6,21 +6,25 @@ import type { Chart, Plugin } from 'chart.js'
 import { cases, inputDescription, measureUs } from './tap-cases.js'
 
 // Charts for the tap transform-latency comparison (the same cases `pnpm
-// bench` prints as a table — see tap-cases.ts).
+// bench` prints as a table — see tap-cases.ts). Two charts, split by what
+// they compare rather than by speed:
+// - the MECHANISM chart is apples-to-apples across tools: one bar per tool,
+//   all doing their per-module analysis/transform of the same 1.8 KB file;
+// - the ENGINE chart is this package's two engines in detail — tiers,
+//   string-vs-buffer plumbing, input sizes — where variants within one tool
+//   are the meaningful comparison.
+// Both are linear with the exact value printed on each bar: on the
+// mechanism chart the ~100x gap IS the story, and a log axis would
+// visually understate it.
 
 console.log(inputDescription + '\n')
-const results = cases.map(({ label, run }) => ({ label, us: measureUs(run) })).sort((a, b) => a.us - b.us)
+const results = cases
+  .map(({ label, run, mechanism }) => ({ label, mechanism: mechanism === true, us: measureUs(run) }))
+  .sort((a, b) => a.us - b.us)
 
 for (const { label, us } of results) {
   console.log(`${label.padEnd(55)} ${us.toFixed(1).padStart(9)} µs`)
 }
-
-// The fastest and slowest approaches are ~3 orders of magnitude apart: one
-// linear chart squashes the fast group into slivers, and a log chart visually
-// understates the differences that matter. So render two linear charts — one
-// zoomed into the fast approaches where the interesting gaps live, one with
-// the whole field for scale — with the exact value printed on each bar.
-const FAST_LIMIT_US = 150
 
 const canvas = new ChartJSNodeCanvas({ width: 1000, height: 500, backgroundColour: '#333333', type: 'svg' })
 
@@ -88,8 +92,12 @@ function renderChart(subset: { label: string; us: number }[], title: string, out
 
 console.log()
 renderChart(
-  results.filter((r) => r.us < FAST_LIMIT_US),
-  `Exports tap latency [µs], approaches under ${FAST_LIMIT_US} µs (lower is better)`,
-  'transformChart.svg',
+  results.filter((r) => r.mechanism),
+  'Per-module transform cost [µs] — one bar per tool, same 1.8 KB module (lower is better)',
+  'tapMechanismChart.svg',
 )
-renderChart(results, 'Exports tap latency [µs], all approaches (lower is better)', 'transformChartAll.svg')
+renderChart(
+  results.filter((r) => r.label.startsWith('oxc') || r.label.startsWith('acorn')),
+  'The two engines in detail [µs] — tiers, plumbing, input sizes (lower is better)',
+  'tapEngineChart.svg',
+)
