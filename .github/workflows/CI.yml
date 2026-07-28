@@ -704,16 +704,26 @@ jobs:
         shell: bash
   benchmark:
     name: Benchmark
-    # Not in publish's `needs`, and not in the publish job any more: a release
-    # should not hinge on an apt install of hyperfine succeeding, and numbers
-    # measured on whichever shared runner happened to pick up the job were
-    # never worth gating on. The committed hooks/benchTable.md — refreshed
-    # deliberately with `pnpm bench` and update-bench-table.mjs — is what the
-    # release body carries; this job is the regression signal, on main only.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Not in publish's `needs`: a release should not hinge on an apt install
+    # of hyperfine succeeding, and numbers from whichever shared runner picked
+    # up the job were never worth gating on. Two modes:
+    # - a push to main runs the harness once and posts the tables — the
+    #   longitudinal signal;
+    # - a pull request builds BASE and HEAD side by side on the same runner
+    #   and interleaves them in one hyperfine invocation, so "does this PR
+    #   improve things" has an answer that cross-run noise cannot fake.
+    #   Cross-runner comparisons are meaningless on shared runners; same-run
+    #   A/B is the only honest one.
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Checkout base (PR A/B)
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
       - name: Setup pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - name: Setup node
@@ -725,16 +735,64 @@ jobs:
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           toolchain: stable
-      - name: Install dependencies
-        run: pnpm install
-      - name: Build addon
-        run: pnpm build
       - name: Install hyperfine
         run: sudo apt update && sudo apt install -y hyperfine
-      - name: Benchmark
+      - name: Build head
+        run: pnpm install && pnpm build && pnpm build:packages
+      - name: Build base (PR A/B)
+        if: github.event_name == 'pull_request'
+        working-directory: base
+        run: pnpm install && pnpm build && pnpm build:packages
+      - name: Benchmark (main)
+        if: github.event_name == 'push'
         run: |
           cd hooks && ./bench_hooks.sh && cd ..
           cat hooks/benchTable.md >> $GITHUB_STEP_SUMMARY
+      - name: Benchmark base vs head (PR)
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          # Cold start, base and head interleaved in ONE hyperfine run. The
+          # command set mirrors hooks/bench_hooks.sh; if the base commit
+          # predates this harness, fall back to a head-only run.
+          if [ -f base/hooks/register-tap-oxc.mjs ]; then
+            hyperfine --warmup 5 --export-markdown coldCompare.md \
+              -n 'base: baseline' 'cd base/hooks && node runtime.mjs' \
+              -n 'head: baseline' 'cd hooks && node runtime.mjs' \
+              -n 'base: noop hook' 'cd base/hooks && node --import ./sync-hooks-noop.mjs runtime.mjs' \
+              -n 'head: noop hook' 'cd hooks && node --import ./sync-hooks-noop.mjs runtime.mjs' \
+              -n 'base: tap oxc' 'cd base/hooks && node --import ./register-tap-oxc.mjs runtime.mjs' \
+              -n 'head: tap oxc' 'cd hooks && node --import ./register-tap-oxc.mjs runtime.mjs' \
+              -n 'base: tap acorn' 'cd base/hooks && node --import ./register-tap-acorn.mjs runtime.mjs' \
+              -n 'head: tap acorn' 'cd hooks && node --import ./register-tap-acorn.mjs runtime.mjs'
+          else
+            echo '_base commit predates the cold-start harness — head only:_' > coldCompare.md
+            hyperfine --warmup 5 --export-markdown /dev/stdout \
+              -n 'head: baseline' 'cd hooks && node runtime.mjs' \
+              -n 'head: tap oxc' 'cd hooks && node --import ./register-tap-oxc.mjs runtime.mjs' \
+              -n 'head: tap acorn' 'cd hooks && node --import ./register-tap-acorn.mjs runtime.mjs' >> coldCompare.md
+          fi
+          {
+            echo '## Cold start — base vs head (same runner, interleaved)'
+            cat coldCompare.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Transform latency + in-process cold-start medians, per tree.
+          {
+            echo ''
+            echo '## Transform latency — head'
+            echo '```'
+            pnpm --silent bench
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f base/benchmark/bench.ts ]; then
+            {
+              echo ''
+              echo '## Transform latency — base'
+              echo '```'
+              cd base && pnpm --silent bench && cd ..
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -826,15 +884,38 @@ jobs:
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'publish'
         run: |
           echo "Dry run only. To release: run this workflow manually with publish=publish." >> $GITHUB_STEP_SUMMARY
+      - name: Assemble release body
+        if: github.ref_type == 'tag'
+        # The overview page a release deserves, assembled from what the repo
+        # already maintains: the per-release notes (docs/releases/<tag>.md,
+        # written when the version is bumped), then the committed cold-start
+        # table. GitHub's auto-generated notes (the merged-PR list) are
+        # appended by the release action itself.
+        run: |
+          set -euo pipefail
+          notes="docs/releases/${GITHUB_REF_NAME}.md"
+          if [ -f "$notes" ]; then
+            cat "$notes" > release-body.md
+          else
+            echo "_No release notes file at $notes — see CHANGELOG.md._" > release-body.md
+          fi
+          {
+            echo ''
+            echo '## Cold start (hyperfine, committed table)'
+            echo ''
+            cat hooks/benchTable.md
+          } >> release-body.md
       - name: Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          append_body: true
-          body_path: hooks/benchTable.md
+          body_path: release-body.md
+          generate_release_notes: true
           files: |
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm
             hooks/benchChart.svg
+            hooks/tapMechanismChart.svg
+            hooks/tapEngineChart.svg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,7 +1,7 @@
 {
   "name": "wrap-esm-lambda",
-  "version": "0.1.3",
-  "description": "Native Node.js addon to wrap AWS Lambda handler written in ESM.",
+  "version": "0.2.0",
+  "description": "Declarative patching for Node.js modules — ESM, CJS, dual packages and core builtins — via a generic exports tap, delivered at runtime or build time from one config.",
   "main": "index.js",
   "repository": {
     "type": "git",
