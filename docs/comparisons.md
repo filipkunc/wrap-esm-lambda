@@ -17,7 +17,7 @@ query over the identical `@smithy/core` file and demonstrates the capability
 split: orchestrion rewrites the method body into `tracingChannel` publishes —
 subscribers _observe_ start/end/asyncEnd events but the return value is
 untouchable — while the exports tap hands the class to user code that can
-wrap, short-circuit, or rebind. `pnpm bench:patch` measures the transform on
+wrap, short-circuit, or rebind. `pnpm bench` measures the transform on
 that real file:
 
 | transform (same `@smithy/core` client file)         |  latency |
@@ -56,7 +56,7 @@ the few-hundred-byte _snippet_ as a napi external Buffer costs a fixed ~3 µs
 the source side is proportional to module size: the complete hook operation
 is a wash on the 1.8 KB `dist-es` file and a few percent ahead on a
 42 KB module even before counting the string path's deferred rope flatten
-and the retired UTF-16 allocation (`pnpm bench:patch` measures both paths,
+and the retired UTF-16 allocation (`pnpm bench` measures both paths,
 small and large).
 
 The ~100x gap is architectural, not incidental: the tap's oxc parse only
@@ -102,7 +102,7 @@ hand-rolled top-level scanner could match the lexer's scan speed natively,
 but was rejected as the wrong trade: several hundred lines of
 regex-heuristic lexing to shave microseconds off a once-per-matched-file
 cost. The honest like-for-like comparison is whole processes — the
-cold-start section of `pnpm bench:patch` on the fixture app (median of 9,
+cold-start section of `pnpm bench` on the fixture app (median of 9,
 Node 24):
 
 | setup                                   | cold start |    overhead |

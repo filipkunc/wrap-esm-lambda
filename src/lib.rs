@@ -19,92 +19,10 @@ use std::sync::OnceLock;
 /// an addon that will not load at all.
 #[napi]
 pub fn tap_contract_version() -> u32 {
-  // 2: the wrap transform left the engine contract — core drives the tap
-  // only. The `transform_lambda*` exports below remain as standalone
-  // functions (the project's original transform and the benchmark
-  // comparison subject), outside the contract.
+  // 2: the wrap transform left the addon — the surface IS the tap contract.
+  // The original handler-wrap lives on only in the project's history
+  // (docs/history.md, the research-phase presentations).
   2
-}
-
-/// The original standalone handler-wrap transform. Not part of the engine
-/// contract core binds to — the declarative surface covers this shape via
-/// the exports tap — but kept as a direct API and as the subject the
-/// benchmark comparisons (Babel/acorn/swc/orchestrion) are written against.
-#[napi]
-pub fn transform_lambda(input: String, handler: String, wrapper: String) -> String {
-  transform::transform_lambda_source(&input, handler, wrapper)
-}
-
-/// Buffer-input variant of `transformLambda` for `registerHooks` load hooks:
-/// `nextLoad` already delivers the module source as UTF-8 bytes, so a Buffer
-/// argument crosses napi zero-copy and oxc parses the UTF-8 directly —
-/// skipping both the `source.toString()` decode the hook would need and the
-/// O(n) UTF-16 -> UTF-8 conversion of a napi string argument. The output
-/// stays a string on purpose: Node compiles from a UTF-16 string either way,
-/// so returning one costs the same single conversion while an external
-/// napi buffer would add a fixed ~3 µs of creation overhead and leave the
-/// decode to Node. Throws if `input` is not valid UTF-8.
-#[napi]
-pub fn transform_lambda_from_buffer(
-  input: Buffer,
-  handler: String,
-  wrapper: String,
-) -> napi::Result<String> {
-  let source = std::str::from_utf8(&input)
-    .map_err(|err| napi::Error::from_reason(format!("module source is not valid UTF-8: {err}")))?;
-  Ok(transform::transform_lambda_source(source, handler, wrapper))
-}
-
-#[napi]
-pub fn transform_lambda_with_map(
-  input: String,
-  handler: String,
-  wrapper: String,
-  filename: String,
-) -> String {
-  transform::transform_lambda_source_with_map(input, handler, wrapper, filename)
-}
-
-#[napi(object)]
-pub struct TransformResult {
-  pub code: String,
-  pub map: Option<String>,
-}
-
-/// Returns the transformed code and the raw v3 source map JSON separately, so a
-/// caller can compose the map with an upstream `.ts` -> `.js` map (e.g. from
-/// `tsc`) before attaching it.
-#[napi]
-pub fn transform_lambda_with_map_object(
-  input: String,
-  handler: String,
-  wrapper: String,
-  filename: String,
-) -> TransformResult {
-  let (code, map) =
-    transform::transform_lambda_source_with_map_json(input, handler, wrapper, filename);
-  TransformResult { code, map }
-}
-
-/// Like `transformLambdaWithMap`, but chains the wrap map through
-/// `upstreamMap` (the `filename -> original` map, e.g. tsc's `handler.js ->
-/// handler.ts` map) inside Rust via `oxc_sourcemap`, so the inlined map
-/// already reaches the original source — no `@ampproject/remapping` needed.
-#[napi]
-pub fn transform_lambda_with_chained_map(
-  input: String,
-  handler: String,
-  wrapper: String,
-  filename: String,
-  upstream_map: String,
-) -> String {
-  transform::transform_lambda_source_with_chained_map(
-    input,
-    handler,
-    wrapper,
-    filename,
-    upstream_map,
-  )
 }
 
 /// One patch entry's inputs to the exports tap — mirrors the JS config entry.
@@ -313,24 +231,4 @@ pub fn exports_tap_from_buffer(
     code: out.code,
     map: out.map,
   })
-}
-
-/// Like `transformLambdaWithChainedMap`, but returns the code and the chained
-/// v3 map JSON separately (no inline URL appended).
-#[napi]
-pub fn transform_lambda_with_chained_map_object(
-  input: String,
-  handler: String,
-  wrapper: String,
-  filename: String,
-  upstream_map: String,
-) -> TransformResult {
-  let (code, map) = transform::transform_lambda_source_with_chained_map_json(
-    input,
-    handler,
-    wrapper,
-    filename,
-    upstream_map,
-  );
-  TransformResult { code, map }
 }
