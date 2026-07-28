@@ -28,6 +28,29 @@ for (let i = 0; i < benchTableLines.length; ++i) {
 
 const canvas = new ChartJSNodeCanvas({ width: 800, height: 500, backgroundColour: '#333333', type: 'svg' })
 
+// A static SVG has no tooltips, so print each bar's value at its right end —
+// the same treatment the transform-latency charts give their bars. One label
+// per bar, unit taken from the dataset it belongs to.
+const UNITS = ['ms', 'MB']
+const barValueLabels = {
+  id: 'barValueLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart
+    ctx.save()
+    ctx.fillStyle = '#f2f0f0ff'
+    ctx.font = '11px sans-serif'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'middle'
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const meta = chart.getDatasetMeta(datasetIndex)
+      for (const [i, bar] of meta.data.entries()) {
+        ctx.fillText(`${dataset.data[i].toFixed(1)} ${UNITS[datasetIndex] ?? ''}`, bar.x + 5, bar.y)
+      }
+    })
+    ctx.restore()
+  },
+}
+
 /** @type { import("chart.js").ChartConfiguration } */
 const config = {
   type: 'bar',
@@ -51,6 +74,8 @@ const config = {
     animation: false,
     responsive: false,
     maintainAspectRatio: false,
+    // keep the longest bar's value label inside the canvas
+    layout: { padding: { right: 70 } },
     scales: {
       x: {
         grid: {
@@ -78,6 +103,7 @@ const config = {
       },
     },
   },
+  plugins: [barValueLabels],
 }
 
 const buffer = canvas.renderToBufferSync(config)
