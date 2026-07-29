@@ -50,6 +50,17 @@ const SEVERITY_ORDER = ['critical', 'high', 'moderate', 'low', 'info']
 const escapeData = (value) => String(value).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A')
 const escapeProperty = (value) => escapeData(value).replace(/:/g, '%3A').replace(/,/g, '%2C')
 
+// A markdown table row ends at a newline and its cells are split on `|`, and
+// every value in one of these tables comes from an advisory feed rather than
+// from here. Backslashes have to be escaped *first*: escaping the pipe first
+// and the backslash second would escape the escape, handing the `|` back its
+// meaning and splitting the row — the exact thing the escaping was for.
+//
+// Backticks do not help. A `|` inside a code span still ends the cell, and npm
+// patched ranges really do contain them (`>=4.17.24 || >=5.0.0`), so the
+// version columns need this as much as the prose does.
+const markdownCell = (value) => String(value).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ')
+
 function annotate(level, { file, line, title, message }) {
   const props = []
   if (file) props.push(`file=${escapeProperty(file)}`)
@@ -263,15 +274,15 @@ function parsePnpm(report, { scope, dev }) {
       helpUri: advisory.url,
       help: `${advisory.title}\n\nAffected: ${advisory.vulnerable_versions}\nFixed in: ${fix ?? 'no fix available'}\nPath: ${primaryPath}`,
       helpMarkdown: [
-        `**${advisory.title}**`,
+        `**${markdownCell(advisory.title)}**`,
         '',
         `| | |`,
         `| --- | --- |`,
-        `| Package | \`${advisory.module_name}\` |`,
-        `| Affected | \`${advisory.vulnerable_versions}\` |`,
-        `| Fixed in | ${fix ? `\`${fix}\`` : '_no fix available_'} |`,
-        `| Path | \`${primaryPath}\` |`,
-        `| Advisory | ${advisory.url} |`,
+        `| Package | \`${markdownCell(advisory.module_name)}\` |`,
+        `| Affected | \`${markdownCell(advisory.vulnerable_versions)}\` |`,
+        `| Fixed in | ${fix ? `\`${markdownCell(fix)}\`` : '_no fix available_'} |`,
+        `| Path | \`${markdownCell(primaryPath)}\` |`,
+        `| Advisory | ${markdownCell(advisory.url)} |`,
       ].join('\n'),
       tags: ['security', 'dependency', scope === 'prod' ? 'published-dependency' : 'dev-dependency'],
       file: PNPM_LOCK,
@@ -323,13 +334,13 @@ function parseCargo(report) {
       helpUri: rustsecUrl(advisory),
       help: `${advisory.title ?? ''}\n\nFixed in: ${fix ?? 'no patched release'}`,
       helpMarkdown: [
-        `**${advisory.title ?? 'Vulnerable crate'}**`,
+        `**${markdownCell(advisory.title ?? 'Vulnerable crate')}**`,
         '',
         `| | |`,
         `| --- | --- |`,
-        `| Crate | \`${pkg.name} ${pkg.version}\` |`,
-        `| Fixed in | ${fix ? `\`${fix}\`` : '_no patched release_'} |`,
-        `| Advisory | ${rustsecUrl(advisory)} |`,
+        `| Crate | \`${markdownCell(`${pkg.name} ${pkg.version}`)}\` |`,
+        `| Fixed in | ${fix ? `\`${markdownCell(fix)}\`` : '_no patched release_'} |`,
+        `| Advisory | ${markdownCell(rustsecUrl(advisory))} |`,
       ].join('\n'),
       tags: ['security', 'dependency', 'rust'],
       file: CARGO_LOCK,
@@ -363,7 +374,7 @@ function parseCargo(report) {
         url: rustsecUrl(advisory),
         helpUri: rustsecUrl(advisory),
         help: title,
-        helpMarkdown: `**${title}**\n\nCrate: \`${pkg.name} ${pkg.version}\``,
+        helpMarkdown: `**${markdownCell(title)}**\n\nCrate: \`${markdownCell(`${pkg.name} ${pkg.version}`)}\``,
         tags: ['security', 'dependency', 'rust', kind],
         file: CARGO_LOCK,
         line: cargoLockLine(pkg.name, pkg.version),
@@ -439,10 +450,11 @@ function renderTable(findings, firstColumn) {
   const columns = [firstColumn, 'Package', 'Advisory', 'Fixed in', 'Reference']
   const rows = [`| ${columns.join(' | ')} |`, `| ${columns.map(() => '---').join(' | ')} |`]
   for (const finding of findings) {
-    const advisory = finding.url ? `[${finding.ruleId}](${finding.url})` : finding.ruleId
-    const pkg = `${finding.module}${finding.version ? `@${finding.version}` : ''}`
-    const title = finding.title.replace(/\|/g, '\\|')
-    const fix = finding.fix ? `\`${finding.fix}\`` : '—'
+    const reference = markdownCell(finding.ruleId)
+    const advisory = finding.url ? `[${reference}](${encodeURI(finding.url)})` : reference
+    const pkg = markdownCell(`${finding.module}${finding.version ? `@${finding.version}` : ''}`)
+    const title = markdownCell(finding.title)
+    const fix = finding.fix ? `\`${markdownCell(finding.fix)}\`` : '—'
     rows.push(`| ${finding.severity ?? finding.kind} | \`${pkg}\` | ${title} | ${fix} | ${advisory} |`)
   }
   return rows.join('\n')
