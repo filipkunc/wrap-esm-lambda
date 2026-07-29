@@ -1,0 +1,92 @@
+name: Security audit
+# Called by CI so a release still cannot happen over a vulnerable published
+# tree, and run on its own schedule so an advisory published against code
+# nobody touched is noticed anyway. That second trigger is the one the old
+# in-CI job could not have: audits only ran when something was pushed, so a
+# new advisory against a dependency sat unreported until the next commit
+# happened to land.
+'on':
+  workflow_call: null
+  schedule:
+    # Nightly, off the hour. Scheduled workflows only ever run on the default
+    # branch, which is exactly the tree a release is cut from.
+    - cron: '23 5 * * *'
+  workflow_dispatch: null
+permissions:
+  contents: read
+jobs:
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Uploading SARIF to code scanning. Everything else stays read-only.
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6
+      - name: Setup node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          tool: cargo-audit
+      # Each audit writes a report and is not allowed to end the job, because a
+      # step that dies here takes the summary, the annotations and the SARIF
+      # upload down with it — the reader would be left with the bare "Process
+      # completed with exit code 1" this whole job exists to replace. Nothing is
+      # being swallowed: audit-report.mjs reads all three reports and is the one
+      # thing that decides whether the job passes, and a report it cannot parse
+      # fails the job rather than reading as clean.
+      #
+      # --prod is the gate, and that distinction is not a dodge. Everything
+      # this repository publishes depends on four things — acorn,
+      # magic-string, @jridgewell/remapping and unplugin — and that tree is
+      # clean. The full dev tree is not: bundlers, the benchmark chart
+      # generator and test helpers currently drag in a pile of advisories
+      # (tar-fs, picomatch, lodash-es, js-yaml…) that no consumer of this
+      # package is exposed to. Gating on those would paint the workflow red
+      # for reasons nobody can act on, and a gate that is always red is a
+      # gate everybody learns to ignore. They are reported as warnings instead,
+      # which is visible without being a wall nobody can climb.
+      - name: pnpm audit - published dependencies
+        run: |
+          mkdir -p reports
+          pnpm audit --prod --json > reports/pnpm-prod.json || true
+      - name: pnpm audit - full dev tree
+        run: pnpm audit --json > reports/pnpm-dev.json || true
+      # The Rust tree has no dev/prod split to make — every crate in
+      # Cargo.lock is linked into the addon that ships. `cargo audit` reports
+      # vulnerabilities and, separately, unmaintained/yanked/unsound crates;
+      # the first blocks, the rest warn, which is the right severity line.
+      - name: Cargo audit
+        run: cargo audit --json > reports/cargo.json || true
+      # Annotations, job summary and SARIF, and the pass/fail decision.
+      - name: Report
+        run: |
+          node .github/scripts/audit-report.mjs \
+            --pnpm-prod reports/pnpm-prod.json \
+            --pnpm-dev reports/pnpm-dev.json \
+            --cargo reports/cargo.json \
+            --sarif-dir sarif
+      # Runs even when the report step failed — a failing audit is precisely
+      # when the alerts are worth having. Skipped for pull requests from forks,
+      # where the token has no security-events scope and the upload could only
+      # fail; the annotations and the summary still land there.
+      - name: Upload SARIF to code scanning
+        if: >-
+          always() && hashFiles('sarif/*.sarif') != '' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@adfda868f108ac4222129de456ea554034a27db7 # v4
+        with:
+          sarif_file: sarif
+          category: security-audit

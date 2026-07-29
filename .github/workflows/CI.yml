@@ -102,48 +102,15 @@ jobs:
           toolchain: '1.95'
       - name: Cargo check on 1.95
         run: cargo check --all-targets --locked
+  # Lives in its own file so the same definition can also run on a nightly
+  # schedule — an advisory published against a dependency nobody touched needs
+  # to surface without waiting for the next push. `publish` still gates on it
+  # through `needs`, so a release cannot go out over a vulnerable tree.
   audit:
-    name: Security audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Setup pnpm
-        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6
-      - name: Setup node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install
-      # --prod is the gate, and that distinction is not a dodge. Everything
-      # this repository publishes depends on four things — acorn,
-      # magic-string, @jridgewell/remapping and unplugin — and that tree is
-      # clean. The full dev tree is not: bundlers, the benchmark chart
-      # generator and test helpers currently drag in a pile of advisories
-      # (tar-fs, picomatch, lodash-es, js-yaml…) that no consumer of this
-      # package is exposed to. Gating on those would paint the workflow red
-      # for reasons nobody can act on, and a gate that is always red is a
-      # gate everybody learns to ignore.
-      - name: pnpm audit - published dependencies
-        run: pnpm audit --prod
-      # Reported, never blocking: worth seeing when it changes, not worth
-      # stopping a release for.
-      - name: pnpm audit - full dev tree (informational)
-        continue-on-error: true
-        run: pnpm audit
-      - name: Install cargo-audit
-        uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          tool: cargo-audit
-      # The Rust tree has no dev/prod split to make — every crate in
-      # Cargo.lock is linked into the addon that ships. Plain `cargo audit`
-      # fails on vulnerabilities and merely reports unmaintained/yanked
-      # crates, which is the right severity line for a gate.
-      - name: Cargo audit
-        run: cargo audit
+    permissions:
+      contents: read
+      security-events: write
+    uses: ./.github/workflows/security-audit.yml
   build:
     strategy:
       fail-fast: false
@@ -217,6 +184,11 @@ jobs:
             .cargo-cache
             target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
+      # Every musl build logs "Node.js 20 is deprecated" against this action.
+      # The pin is already the newest release (v2.2.1) and that release still
+      # declares `using: node20`, so there is nothing to bump to — the fix has
+      # to land upstream. Left alone deliberately rather than pinned to an
+      # unreleased branch to silence a warning.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
         if: ${{ contains(matrix.settings.target, 'musl') }}
         with:
