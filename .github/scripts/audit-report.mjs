@@ -41,6 +41,24 @@ const NPM_SEVERITY = {
 
 const SEVERITY_ORDER = ['critical', 'high', 'moderate', 'low', 'info']
 
+// A code scanning check run fails a pull request that *introduces* an alert at
+// or above the repository's threshold — "High or higher" by default, meaning
+// `security-severity` >= 7.0. Dev-only advisories are filed against
+// pnpm-lock.yaml, so the first dependency bump to touch that file and pull in a
+// high-severity dev advisory would have failed the check, which is exactly the
+// veto this tool is built to avoid handing them.
+//
+// Clamping them to the top of the medium band (7.0 is where high starts) keeps
+// the alert, keeps it tracked, keeps it dismissable — and drops the veto. No
+// information is lost: the real word is still the first thing in the
+// annotation, the summary table and the alert title.
+const DEV_ALERT_CEILING = '6.9'
+
+const clampDevAlert = (finding) =>
+  Number(finding.score) < Number(DEV_ALERT_CEILING)
+    ? finding
+    : { ...finding, score: DEV_ALERT_CEILING, level: 'warning' }
+
 // ---------------------------------------------------------------------------
 // Workflow command plumbing
 // ---------------------------------------------------------------------------
@@ -553,7 +571,7 @@ function main() {
 
   if (devOnly.length) {
     summary(
-      '> Dev-only advisories do not fail the build. They reach bundlers, the benchmark chart generator and test helpers — nothing a consumer of this package installs.',
+      '> Dev-only advisories do not fail the build. They reach bundlers, the benchmark chart generator and test helpers — nothing a consumer of this package installs. Their code scanning alerts are filed in the medium band regardless of the severity above, so that a lockfile change can never fail a check on one.',
     )
     summary('')
   }
@@ -571,7 +589,11 @@ function main() {
     sarifRun({
       toolName: 'pnpm audit (dev tree)',
       informationUri: 'https://pnpm.io/cli/audit',
-      findings: devOnly,
+      // Clamped here rather than in parsePnpm: the parser reports what the
+      // advisory feed says, and the decision to file dev findings below the
+      // blocking threshold is policy, which belongs where the other
+      // blocks-or-warns decisions are made.
+      findings: devOnly.map(clampDevAlert),
     }),
   )
   writeSarif(

@@ -34,6 +34,13 @@ inline on a pull request's diff), as a table in the job summary, and as code
 scanning alerts, which is the only one of the three that survives the run and
 can be dismissed with a reason.
 
+Dev-only advisories are deliberately filed as medium-severity alerts whatever
+the feed calls them, because a code scanning check fails a pull request that
+introduces an alert above the repository's threshold and these are attached to
+`pnpm-lock.yaml` — left alone, the next dependency bump would have been blocked
+by an advisory no consumer of this package is exposed to. The real severity is
+in the annotation, the alert title and the job summary.
+
 Renovate raises dependency updates. Vulnerability fixes are exempted from the
 usual grouping and scheduling so a security bump gets its own pull request
 immediately rather than waiting for the next batch.
