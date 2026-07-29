@@ -1,0 +1,33 @@
+name: Retry transient failures
+# One automatic re-run of a failed CI run's failed jobs. Two real incidents
+# motivated this: a Docker Hub TLS handshake timeout and a DNS failure
+# reaching GitHub's own artifact service — different endpoints, different
+# runner OSes, same outcome: a red run over thirty seconds of infrastructure
+# weather, waiting for a human to press "Re-run failed jobs". This workflow
+# is that press.
+#
+# The attempt cap is the design: a genuine regression fails attempt 1, gets
+# exactly one free retry, fails attempt 2 and STAYS red — transients heal,
+# real breakage still surfaces. Only the failed jobs re-run, so a retry
+# costs one lane, not the matrix. No code from the triggering run is checked
+# out or executed here; the job is a single API call, and the token's only
+# grant is actions: write.
+#
+# workflow_run executes from the default branch, so protection begins once
+# this file is on main.
+'on':
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+permissions:
+  actions: write
+jobs:
+  rerun:
+    name: Re-run failed jobs (attempt 1 only)
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-run failed jobs
+        run: gh api -X POST "repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/rerun-failed-jobs"
+        env:
+          GH_TOKEN: ${{ github.token }}
