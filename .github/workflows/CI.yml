@@ -551,6 +551,23 @@ jobs:
           }
           invoke handler.handler 9101
           invoke handler-cjs/handler.handler 9102
+      # The practical composition, on the platform's own image: a Hono app
+      # behind hono/aws-lambda's handle(), instrumented from one config with
+      # zero app changes — the handler discovered from _HANDLER (wall time
+      # and RSS from inside the process), hono's matched route template, and
+      # every AWS SDK operation intercepted at @smithy/core's Client#send
+      # before credentials or network exist (which is why no LocalStack).
+      # The script answers the example's two API Gateway events through the
+      # emulator, requires every layer to have spoken in the logs, and reads
+      # the platform's own accounting — the REPORT line's billed
+      # milliseconds and memory — onto the job summary next to the patch's
+      # in-process numbers.
+      - name: Invoke the Hono example through the real RIC, and read the bill
+        run: |
+          .github/scripts/hono-lambda-rie.sh \
+            "public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}" \
+            ${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }} \
+            "$GITHUB_STEP_SUMMARY"
   test-native-platform:
     name: Test ${{ matrix.settings.target }} - node@${{ matrix.node }}
     needs:

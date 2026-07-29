@@ -1,0 +1,78 @@
+# `example-hono-lambda`
+
+A [Hono](https://hono.dev/) app on AWS Lambda, instrumented from one config
+with **zero app changes** — the practical composition of everything the
+toolkit does, on the platform this repo was born on:
+
+| layer               | entry                                                                                                                                                             | what the logs gain                                                                          |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| the handler itself  | [`aws-lambda` preset](../../packages/hooks/src/aws-lambda.mts) — nothing about the handler is written down; `_HANDLER` and `LAMBDA_TASK_ROOT` are read at preload | `invocation = 5.9 ms, rss = 93 MB` — wall time and RSS from inside the process              |
+| the framework       | `hono`'s ESM defining module, `Hono` rebound to a subclass that injects a first middleware                                                                        | `http.route = GET /quotes/:id -> 200` — the matched route **template**, OTel's `http.route` |
+| the AWS SDK beneath | `@smithy/core`'s client submodule — every `@aws-sdk/client-*` operation funnels through one `Client#send`                                                         | `aws.operation = PutObjectCommand` — and the call never reaches credentials or the network  |
+
+[`app.mjs`](app.mjs) is written exactly the way production code is written:
+`export const handler = handle(app)` from `hono/aws-lambda`, an `S3Client`
+configured by the execution environment, no imports from this toolkit. The
+three patches live in [`patches/`](patches), the config in
+[`wrap.config.mjs`](wrap.config.mjs), and activation is the usual runtime
+flag, which Lambda accepts through `NODE_OPTIONS`.
+
+## Run it
+
+Locally, through the RIC's exact load sequence
+([`invoke-local.mjs`](invoke-local.mjs)) answering the two API Gateway v2
+events under [`events/`](events):
+
+```sh
+pnpm --filter example-hono-lambda start
+```
+
+```
+http.route = GET /quotes/:id -> 200
+invocation = 5.9 ms, rss = 93 MB
+GET /quotes/42 -> 200 {"id":"42","quote":"Simplicity is prerequisite for reliability."}
+aws.operation = PutObjectCommand
+http.route = POST /quotes -> 201
+invocation = 1.6 ms, rss = 93 MB
+POST /quotes -> 201 {"stored":"7"}
+```
+
+On the platform's own runtime image — AWS's real runtime interface client
+booted by the image's own entrypoint, driven over HTTP through the runtime
+interface emulator the base images ship:
+
+```sh
+.github/scripts/hono-lambda-rie.sh public.ecr.aws/lambda/nodejs:22 linux/amd64
+```
+
+The CI Lambda lane runs exactly that on every push (both architectures, both
+runtimes) and reads the platform's own accounting back off the container
+logs onto the job summary:
+
+```
+REPORT RequestId: …  Duration: 417.64 ms  Billed Duration: 418 ms  Memory Size: 512 MB  Max Memory Used: 512 MB
+REPORT RequestId: …  Duration: 5.66 ms    Billed Duration: 6 ms    Memory Size: 512 MB  Max Memory Used: 512 MB
+```
+
+The REPORT duration and billed milliseconds are the emulator's real
+measurements (note the cold start on the first line); its `Max Memory Used`
+merely echoes the configured size — the emulator does not meter memory, an
+actual Lambda does — which is exactly why the patch's in-process `rss` line
+is worth having next to it.
+
+## Why there is no LocalStack here
+
+The `POST /quotes` route really calls `S3Client#send` on the real AWS SDK.
+The patch intercepts at the one place every SDK operation passes through —
+`Client#send` in `@smithy/core` — **before** the middleware stack builds, so
+no credentials are resolved and nothing reaches the wire. The same
+interception point that instruments the SDK is the one that makes an AWS
+stand-in unnecessary for testing: the assertion moves from "what arrived at
+a fake S3" to "what the app asked the SDK to do", with no emulator to
+license, start, or keep compatible. A forwarding APM patch would keep the
+original `send` and time around `original.call(this, command, ...rest)`
+instead of returning a stub — the interception point is the same.
+
+[`__test__/hono-lambda.spec.ts`](../../__test__/hono-lambda.spec.ts) drives
+this example on every CI lane; the Lambda lane additionally runs it through
+the real RIC as above.

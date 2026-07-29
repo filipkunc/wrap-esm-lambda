@@ -1,0 +1,30 @@
+{
+  "version": "2.0",
+  "routeKey": "$default",
+  "rawPath": "/quotes",
+  "rawQueryString": "",
+  "headers": {
+    "accept": "application/json",
+    "content-type": "application/json"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "local",
+    "domainName": "example.com",
+    "domainPrefix": "local",
+    "http": {
+      "method": "POST",
+      "path": "/quotes",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "invoke-local"
+    },
+    "requestId": "post-quote",
+    "routeKey": "$default",
+    "stage": "$default",
+    "time": "29/Jul/2026:00:00:00 +0000",
+    "timeEpoch": 0
+  },
+  "body": "{\"id\":\"7\",\"quote\":\"Make it work, make it right, make it fast.\"}",
+  "isBase64Encoded": false
+}

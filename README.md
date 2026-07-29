@@ -386,6 +386,16 @@ same fixture through AWS's real runtime interface client on the real
 `public.ecr.aws/lambda/nodejs` images, both module systems, answering real
 invocations.
 
+The practical composition of all of it is a runnable example:
+[examples/hono-lambda](examples/hono-lambda) — a [Hono](https://hono.dev/)
+app behind `hono/aws-lambda`'s `handle()`, its handler timed by the preset
+entry, its routes labeled with `http.route`, and the real AWS SDK beneath it
+intercepted at `@smithy/core` before credentials or network exist (which is
+also why testing it needs no LocalStack). The CI Lambda lane answers real
+API Gateway events against it on the runtime image and reads billed
+milliseconds and memory off the platform's own `REPORT` line onto the job
+summary.
+
 The dedicated transform this repo started with is gone — everything runs on
 the tap, and the handler shape rides its rewrite path. Stack traces survive:
 the rewrite emits a source map, chained all the way back to an original
