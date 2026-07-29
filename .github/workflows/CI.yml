@@ -184,15 +184,32 @@ jobs:
             .cargo-cache
             target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
-      # Every musl build logs "Node.js 20 is deprecated" against this action.
-      # The pin is already the newest release (v2.2.1) and that release still
-      # declares `using: node20`, so there is nothing to bump to — the fix has
-      # to land upstream. Left alone deliberately rather than pinned to an
-      # unreleased branch to silence a warning.
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2
+      # Zig is the linker for the musl cross-builds, and it comes from PyPI
+      # rather than from a setup action. That is the path cargo-zigbuild
+      # prefers — its `find_zig` looks for `python -m ziglang` before it looks
+      # for a `zig` binary — and it removes the last thing in this workflow
+      # carrying a deprecated Node 20 runtime. Every setup-zig action still
+      # declares `using: node20`, mlugg's included, and its GitHub repository
+      # is a read-only mirror of a Codeberg project, so a pinned digest there
+      # is a weaker guarantee than it looks. A plain install step has no
+      # runtime to deprecate and nothing to mirror.
+      #
+      # The venv keeps the install off the system Python (PEP 668), and the
+      # shim puts a real `zig` on PATH so anything probing for the binary
+      # rather than the Python module finds it too. Roughly ten seconds on a
+      # cold runner; the zig cache the action used to keep is worth about five
+      # seconds on top of a musl link, which does not pay for storing 38 MB.
+      - name: Install zig
         if: ${{ contains(matrix.settings.target, 'musl') }}
-        with:
-          version: 0.14.1
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zig-venv"
+          "$RUNNER_TEMP/zig-venv/bin/pip" install --quiet 'ziglang==0.14.1'
+          mkdir -p "$RUNNER_TEMP/zig-bin"
+          printf '#!/usr/bin/env bash\nexec "%s" -m ziglang "$@"\n' \
+            "$RUNNER_TEMP/zig-venv/bin/python" > "$RUNNER_TEMP/zig-bin/zig"
+          chmod +x "$RUNNER_TEMP/zig-bin/zig"
+          echo "$RUNNER_TEMP/zig-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/zig-bin/zig" version
       - name: Install cargo-zigbuild
         uses: taiki-e/install-action@41049aa56687c35e0afa74eed4f09cec4f9afabf # v2
         if: ${{ contains(matrix.settings.target, 'musl') }}

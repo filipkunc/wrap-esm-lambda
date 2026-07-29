@@ -23,6 +23,16 @@
   "commitMessageAction": "bump up",
   "commitMessageTopic": "{{depName}} version",
   "ignoreDeps": [],
+  "customManagers": [
+    {
+      "description": "Zig is pinned inside a run step, where no manager would look for it. Without this the pin quietly rots while every other dependency stays current.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.yml$/"],
+      "matchStrings": ["ziglang==(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)"],
+      "depNameTemplate": "ziglang",
+      "datasourceTemplate": "pypi"
+    }
+  ],
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "enabled": true,
