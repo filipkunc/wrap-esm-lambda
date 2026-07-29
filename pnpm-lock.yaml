@@ -168,6 +168,21 @@ importers:
         specifier: workspace:^
         version: link:../quotes
 
+  examples/hono-lambda:
+    dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1090.0
+        version: 3.1090.0
+      '@wrap-esm-lambda/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@wrap-esm-lambda/hooks':
+        specifier: workspace:^
+        version: link:../../packages/hooks
+      hono:
+        specifier: ^4.12.31
+        version: 4.12.31
+
   examples/quotes: {}
 
   packages/core:
