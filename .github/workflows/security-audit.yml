@@ -49,14 +49,23 @@ jobs:
       #
       # --prod is the gate, and that distinction is not a dodge. Everything
       # this repository publishes depends on four things — acorn,
-      # magic-string, @jridgewell/remapping and unplugin — and that tree is
-      # clean. The full dev tree is not: bundlers, the benchmark chart
-      # generator and test helpers currently drag in a pile of advisories
-      # (tar-fs, picomatch, lodash-es, js-yaml…) that no consumer of this
-      # package is exposed to. Gating on those would paint the workflow red
-      # for reasons nobody can act on, and a gate that is always red is a
-      # gate everybody learns to ignore. They are reported as warnings instead,
-      # which is visible without being a wall nobody can climb.
+      # magic-string, @jridgewell/remapping and unplugin — so that tree is
+      # small, and it is expected to stay clean. The dev tree is the one that
+      # collects advisories: bundlers, the benchmark chart generator, the
+      # release tooling and test helpers, none of which a consumer of this
+      # package is exposed to. Both trees are clean as of this writing, and
+      # the split is about what happens when the dev tree stops being clean —
+      # gating on a bundler's transitive dependency would paint the workflow
+      # red for a reason nobody downstream can act on, and a gate that is
+      # always red is a gate everybody learns to ignore. Dev findings are
+      # reported as warnings instead: visible, but not a wall.
+      #
+      # Warned is not the same as ignored. Every dev advisory this repository
+      # has collected so far turned out to be fixable — usually by a dependency
+      # bump, sometimes by nothing more than letting the lockfile re-resolve a
+      # transitive dependency onto a patch release already inside the declared
+      # range. The warning is what makes that possible; it is not a place to
+      # let findings settle.
       - name: pnpm audit - published dependencies
         run: |
           mkdir -p reports

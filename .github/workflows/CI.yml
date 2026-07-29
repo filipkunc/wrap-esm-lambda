@@ -663,7 +663,17 @@ jobs:
       - name: Test bindings
         run: pnpm test
         env:
-          NAPI_RS_FORCE_WASI: 1
+          # 'error', not '1'. The loader @napi-rs/cli generates reads this as a
+          # tri-state: only 'true' and 'error' select WASI, and everything else
+          # — including the '1' that used to work, back when any non-empty
+          # string was truthy — leaves native preferred with WASI as a mere
+          # fallback. This lane downloads no native artifact, so '1' would still
+          # have landed on the wasi binding, by accident rather than by
+          # instruction, and would have stopped testing wasi the moment one
+          # appeared. 'error' is the value that matches what this lane is for:
+          # require the wasi binding and throw if it cannot be loaded, with no
+          # native fallback to soften the landing.
+          NAPI_RS_FORCE_WASI: error
           # explicit, like the native lane: a wasi binding that fails to load
           # must fail this job, not quietly become an acorn run
           WRAP_ESM_LAMBDA_ENGINE: oxc
