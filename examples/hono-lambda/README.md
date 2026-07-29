@@ -52,13 +52,18 @@ logs onto the job summary:
 ```
 REPORT RequestId: …  Duration: 417.64 ms  Billed Duration: 418 ms  Memory Size: 512 MB  Max Memory Used: 512 MB
 REPORT RequestId: …  Duration: 5.66 ms    Billed Duration: 6 ms    Memory Size: 512 MB  Max Memory Used: 512 MB
+container cgroup peak: 121 MB
 ```
 
 The REPORT duration and billed milliseconds are the emulator's real
-measurements (note the cold start on the first line); its `Max Memory Used`
-merely echoes the configured size — the emulator does not meter memory, an
-actual Lambda does — which is exactly why the patch's in-process `rss` line
-is worth having next to it.
+measurements (note the cold start on the first line). Its `Max Memory
+Used`, despite appearances, is an echo of the configured size: vary
+`AWS_LAMBDA_FUNCTION_MEMORY_SIZE` and the field tracks it exactly, whatever
+the process actually used — the emulator meters time, not memory (on an
+actual Lambda the same field is a genuine measurement). So the script reads
+the genuine local number from the container's own cgroup (`memory.peak`, or
+`memory.max_usage_in_bytes` on a v1 hierarchy) and reports it alongside —
+the container-level max next to the patch's in-process `rss`.
 
 ## Why there is no LocalStack here
 
