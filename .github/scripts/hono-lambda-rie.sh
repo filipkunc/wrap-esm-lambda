@@ -48,6 +48,20 @@ invoke() {
 get=$(invoke get-quote)
 post=$(invoke post-quote)
 
+# The REPORT line's Max Memory Used is an echo of the configured size: the
+# emulator meters time, not memory (vary AWS_LAMBDA_FUNCTION_MEMORY_SIZE and
+# the field tracks it exactly, whatever the process actually used). A real
+# Lambda reports genuine peak memory in the same field. Locally the genuine
+# number lives in the container's own cgroup — read it while the container
+# still runs, either hierarchy flavor.
+peak_bytes=$(docker exec "$name" sh -c \
+  'cat /sys/fs/cgroup/memory.peak 2>/dev/null || cat /sys/fs/cgroup/memory/memory.max_usage_in_bytes 2>/dev/null' \
+  2>/dev/null || true)
+case "$peak_bytes" in
+  '' | *[!0-9]*) peak='unavailable' ;;
+  *) peak="$((peak_bytes / 1024 / 1024)) MB" ;;
+esac
+
 ok=1
 case "$get" in *'Simplicity is prerequisite for reliability.'*) ;; *) ok=0 ;; esac
 case "$post" in *'"stored":"7"'*) ;; *) ok=0 ;; esac
@@ -75,13 +89,14 @@ fi
 
 echo "GET  -> $get"
 echo "POST -> $post"
+echo "container cgroup peak: $peak"
 printf '%s\n' "$logs" | grep -E 'REPORT|invocation = |http\.route = |aws\.operation = ' || true
 
-# The two views of the same invocations, side by side. The REPORT duration
-# and billed milliseconds are the emulator's real measurements; its "Max
-# Memory Used" merely echoes the configured size (the emulator does not
-# meter memory — an actual Lambda does), which is exactly why the patch's
-# in-process RSS line is worth having.
+# Three views of the same invocations, side by side: the emulator's REPORT
+# (duration and billed milliseconds are real measurements; Max Memory Used
+# is the configured-size echo explained above), the container's cgroup peak
+# (the genuine max-memory number, the one an actual Lambda would have put in
+# the REPORT), and the patch's in-process wall time and RSS.
 {
   echo "### Hono on Lambda — \`$image\` ($platform)"
   echo
@@ -90,6 +105,7 @@ printf '%s\n' "$logs" | grep -E 'REPORT|invocation = |http\.route = |aws\.operat
   printf '%s\n' "$logs" | grep 'REPORT RequestId' | tr '\t' ' ' | while IFS= read -r line; do
     printf '| platform REPORT | `%s` |\n' "$line"
   done
+  printf '| container cgroup peak | `%s` |\n' "$peak"
   printf '%s\n' "$logs" | grep 'invocation = ' | while IFS= read -r line; do
     printf '| in-process | `%s` |\n' "$line"
   done
