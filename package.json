@@ -69,7 +69,7 @@
     "@emnapi/runtime": "^1.4.5",
     "@jridgewell/remapping": "^2.3.5",
     "@jridgewell/trace-mapping": "^0.3.25",
-    "@napi-rs/cli": "^3.0.3",
+    "@napi-rs/cli": "^3.8.0",
     "@napi-rs/wasm-runtime": "^1.0.1",
     "@oxc-node/core": "^0.0.30",
     "@rollup/plugin-commonjs": "^28.0.9",
