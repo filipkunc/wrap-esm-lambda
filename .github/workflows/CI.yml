@@ -660,20 +660,41 @@ jobs:
       - name: List packages
         run: ls -R .
         shell: bash
+      # This lane used to pass NAPI_RS_FORCE_WASI=1 and cannot any more, for two
+      # independent reasons that only became visible together.
+      #
+      # The flag is a tri-state in the loader @napi-rs/cli now generates: only
+      # 'true' and 'error' select WASI, and every other value — '1' included —
+      # leaves native preferred. So '1' stopped meaning what it said.
+      #
+      # And 'error', the value that does say it, cannot be used either, because
+      # the variable is read by *every* napi-rs binding in the process, not just
+      # this package's. rolldown and rspack are napi-rs packages and the suite
+      # runs them; ordering them to require a WASI binding they do not ship
+      # fails them outright. The old '1' was quietly correct on both counts at
+      # once — forcing WASI here under the truthy loader of the day, while
+      # reading as "not forced" to the newer loaders those bundlers ship.
+      #
+      # Nothing needs to be forced. This job downloads only the wasm artifact,
+      # so there is no native binding to prefer and the loader reaches WASI on
+      # its own. What the flag was really buying was the guarantee that a lane
+      # named "Test WASI target" is testing WASI, and that is worth keeping — so
+      # it is asserted directly, against the module registry, instead of being
+      # implied by an environment variable that means different things to
+      # different packages.
+      - name: Prove the WASI binding is the one under test
+        run: |
+          node -e "
+            require('./index.js')
+            if (!(require.resolve('./wrap-esm-lambda.wasi.cjs') in require.cache)) {
+              console.error('index.js did not load the wasi binding — this lane is testing something else')
+              process.exit(1)
+            }
+            console.log('wasi binding confirmed')
+          "
       - name: Test bindings
         run: pnpm test
         env:
-          # 'error', not '1'. The loader @napi-rs/cli generates reads this as a
-          # tri-state: only 'true' and 'error' select WASI, and everything else
-          # — including the '1' that used to work, back when any non-empty
-          # string was truthy — leaves native preferred with WASI as a mere
-          # fallback. This lane downloads no native artifact, so '1' would still
-          # have landed on the wasi binding, by accident rather than by
-          # instruction, and would have stopped testing wasi the moment one
-          # appeared. 'error' is the value that matches what this lane is for:
-          # require the wasi binding and throw if it cannot be loaded, with no
-          # native fallback to soften the landing.
-          NAPI_RS_FORCE_WASI: error
           # explicit, like the native lane: a wasi binding that fails to load
           # must fail this job, not quietly become an acorn run
           WRAP_ESM_LAMBDA_ENGINE: oxc
