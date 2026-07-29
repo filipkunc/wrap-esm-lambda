@@ -15,6 +15,11 @@
       "groupName": "napi-rs"
     },
     {
+      "description": "@napi-rs/cli 3.8.0 moved its own emnapi dependency to 2.0.0-alpha.3, and its setWasiEnv refuses to build when emnapi, @emnapi/core and @emnapi/runtime disagree on a version. Taking it means moving this repository's whole emnapi family onto a prerelease, which is the runtime behind the published wasi binding. 3.7.4 is the last release on the emnapi 1.x line and is not missing anything: it carries the same es-toolkit, js-yaml and @inquirer/prompts that the security fixes needed. Lift this once emnapi 2.x is stable and @emnapi/core and @emnapi/runtime have matching stable releases.",
+      "matchPackageNames": ["@napi-rs/cli"],
+      "allowedVersions": "<3.8.0"
+    },
+    {
       "matchPackagePatterns": ["^eslint", "^@typescript-eslint"],
       "groupName": "linter"
     }

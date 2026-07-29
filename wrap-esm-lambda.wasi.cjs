@@ -39,7 +39,7 @@ if (__nodeFs.existsSync(__wasmDebugFilePath)) {
   __wasmFilePath = __wasmDebugFilePath
 } else if (!__nodeFs.existsSync(__wasmFilePath)) {
   try {
-    __wasmFilePath = __nodePath.resolve('wrap-esm-lambda-wasm32-wasi')
+    __wasmFilePath = require.resolve('wrap-esm-lambda-wasm32-wasi/wrap-esm-lambda.wasm32-wasi.wasm')
   } catch {
     throw new Error('Cannot find wrap-esm-lambda.wasm32-wasi.wasm file, and wrap-esm-lambda-wasm32-wasi package is not installed.')
   }
