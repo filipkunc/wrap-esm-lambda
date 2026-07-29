@@ -22,5 +22,14 @@
   "commitMessagePrefix": "chore: ",
   "commitMessageAction": "bump up",
   "commitMessageTopic": "{{depName}} version",
-  "ignoreDeps": []
+  "ignoreDeps": [],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["dependencies", "security"],
+    "commitMessagePrefix": "fix: ",
+    "groupName": null,
+    "minimumReleaseAge": null,
+    "schedule": []
+  }
 }

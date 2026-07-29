@@ -14,6 +14,41 @@ There are no maintained release branches yet.
 Node.js: the versions CI runs — 22, 24 and 26. `@wrap-esm-lambda/hooks`
 additionally requires >= 22.15, where `module.registerHooks` arrived.
 
+## How this repository audits itself
+
+[`security-audit.yml`](.github/workflows/security-audit.yml) runs on every push
+and pull request — CI calls it, and `publish` waits on it — and again nightly,
+so an advisory published against a dependency nobody touched surfaces without
+waiting for the next commit.
+
+| Check                    | On a finding                                           |
+| ------------------------ | ------------------------------------------------------ |
+| `pnpm audit --prod`      | Fails the build. Nothing published may be vulnerable   |
+| `pnpm audit` (full tree) | Warns. Dev-only, no consumer is exposed                |
+| `cargo audit`            | Vulnerabilities fail; unmaintained/yanked/unsound warn |
+| CodeQL (JS/TS)           | Opens a code scanning alert                            |
+
+Findings are reported three ways: as check-run annotations on the run itself
+(anchored to the offending `pnpm-lock.yaml` / `Cargo.lock` line, so they render
+inline on a pull request's diff), as a table in the job summary, and as code
+scanning alerts, which is the only one of the three that survives the run and
+can be dismissed with a reason.
+
+Renovate raises dependency updates. Vulnerability fixes are exempted from the
+usual grouping and scheduling so a security bump gets its own pull request
+immediately rather than waiting for the next batch.
+
+Three things cannot be configured from this repository and have to be switched
+on in the repository's own settings — if you are maintaining a fork, they are
+worth checking:
+
+- **Dependabot alerts**, which back Renovate's vulnerability pull requests.
+  (Renovate also reads the OSV database directly, so this is redundancy rather
+  than a hard dependency.)
+- **Private vulnerability reporting**, without which the reporting link at the
+  top of this file does not work.
+- **Secret scanning and push protection.**
+
 ## What this project's threat model is
 
 This toolkit **rewrites the source of modules as they load, or as they are
