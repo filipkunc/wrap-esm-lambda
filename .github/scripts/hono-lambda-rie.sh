@@ -98,11 +98,20 @@ esac
 boot "$name_consumer" "$port_consumer" "$example" consumer.handler 1
 sqs=$(invoke "$port_consumer" sqs-batch)
 
-# Build-time delivery of the same instrumentation: bundle on the host with
-# the lane's engine, then boot the bundle with NOTHING — the difference
-# between the two app containers' cold starts is what the runtime delivery
-# costs on this image.
-(cd "$example" && node build.mjs >/dev/null)
+# Build-time delivery of the same instrumentation: bundle, then boot the
+# bundle with NOTHING — the difference between the two app containers' cold
+# starts is what the runtime delivery costs on this image. The build runs
+# INSIDE the image, not on the host: a prior in-container suite run may have
+# left a root-owned dist/ on the mounted workspace that the runner user
+# cannot overwrite — and the image's own node is the more honest builder
+# anyway.
+docker run --rm \
+  --platform "$platform" \
+  --entrypoint /bin/sh \
+  -v "$workspace:$workspace" \
+  -w "$example" \
+  -e WRAP_ESM_LAMBDA_ENGINE="${WRAP_ESM_LAMBDA_ENGINE:-oxc}" \
+  "$image" -c 'node build.mjs' >/dev/null
 boot "$name_built" "$port_built" "$example/dist" app.handler
 built_get=$(invoke "$port_built" get-quote)
 built_post=$(invoke "$port_built" post-quote)
