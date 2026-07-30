@@ -115,14 +115,20 @@ bundle carries the patches itself), and puts the two deliveries' cold
 starts side by side on the job summary:
 
 ```
-Cold start, billed: runtime hook 260 ms vs esbuild bundle 176 ms
+Cold start, billed: runtime hook 269 ms vs esbuild bundle 166 ms
 ```
 
-That difference — measured by the platform's own REPORT line on the
-platform's own image — is what runtime delivery costs: the preload, the
-config evaluation, the engine binding and the on-load transforms, none of
-which exist in the bundle. The trade is the usual one: build-time delivery
-is zero-cost at runtime but fixed at build time; runtime delivery patches
+![Cold start and RSS by delivery — the same app, the same patches](coldStartChart.svg)
+
+The committed numbers behind the chart live in
+[`coldStartTable.md`](coldStartTable.md) (median of five emulator boots per
+delivery, provenance included; `node make-chart.mjs` regenerates the SVG
+after re-measuring — the job summary carries the live per-image numbers).
+The difference — billed by the platform's own REPORT line on the platform's
+own image — is what runtime delivery costs: the preload, the config
+evaluation, the engine binding and the on-load transforms, none of which
+exist in the bundle. The trade is the usual one: build-time delivery is
+zero-cost at runtime but fixed at build time; runtime delivery patches
 whatever the deployed function actually loads, with no build step at all.
 
 ## Why there is no LocalStack here

@@ -964,6 +964,24 @@ jobs:
             echo ''
             cat hooks/benchTable.md
           } >> release-body.md
+          # The charts, VISIBLE on the release page rather than only linked
+          # as assets: embedded via raw URLs pinned to this tag, so every
+          # release shows the charts as of its own commit — including the
+          # release notes that forget to embed them by hand.
+          {
+            echo ''
+            echo '## Charts'
+            echo ''
+            for chart in \
+              hooks/tapMechanismChart.svg \
+              hooks/tapEngineChart.svg \
+              hooks/benchChart.svg \
+              examples/hono-lambda/coldStartChart.svg; do
+              [ -f "$chart" ] || continue
+              echo "![${chart}](https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/${chart})"
+              echo ''
+            done
+          } >> release-body.md
       - name: Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
@@ -976,5 +994,6 @@ jobs:
             hooks/benchChart.svg
             hooks/tapMechanismChart.svg
             hooks/tapEngineChart.svg
+            examples/hono-lambda/coldStartChart.svg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
