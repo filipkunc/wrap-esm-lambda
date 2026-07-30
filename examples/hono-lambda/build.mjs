@@ -4,6 +4,13 @@
 // runtime the bundle is just JavaScript: no hook, no config, no engine, no
 // preload. dist/ then boots on the Lambda image with nothing but
 // LAMBDA_TASK_ROOT pointed at it.
+//
+// The transform engine applies at BUILD time only, selected the usual way:
+// WRAP_ESM_LAMBDA_ENGINE, defaulting to the native oxc addon with acorn as
+// the unavailable-addon fallback (CI pins oxc explicitly so a broken addon
+// fails the build instead of degrading). Both engines emit byte-identical
+// snippets, so the produced bundle — and its cold start — is the same
+// either way; the choice only moves build latency.
 import { build } from 'esbuild'
 import { fileURLToPath } from 'node:url'
 import { esbuildPlugin } from '@wrap-esm-lambda/unplugin'

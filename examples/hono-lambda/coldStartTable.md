@@ -21,7 +21,12 @@ The orchestrion leg is
 `@apm-js-collab/code-transformer` instrumenting the same `@smithy/core`
 `Client#send` the smithy entry taps, no subscriber attached (the
 [hooks bench](../../hooks/benchTable.md) makes the same choice and prices
-subscribers separately).
+subscribers separately). Both bundle legs were built with
+`WRAP_ESM_LAMBDA_ENGINE=oxc` — the engine exists only at build time for
+the unplugin delivery, and both engines emit byte-identical snippets
+(engine-parity.spec.ts), so the bundles' runtime numbers are
+engine-independent; the choice is recorded here because provenance should
+not have to be inferred.
 
 | leg                                            | cold start, billed (median) | in-process RSS (median) |
 | ---------------------------------------------- | --------------------------- | ----------------------- |

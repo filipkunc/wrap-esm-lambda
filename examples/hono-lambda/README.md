@@ -109,6 +109,11 @@ pnpm --filter example-hono-lambda start:built            # same output, plain no
 pnpm --filter example-hono-lambda start:built:consumer
 ```
 
+The transform engine is a build-time detail here: `build.mjs` honors the
+usual `WRAP_ESM_LAMBDA_ENGINE` selection (CI and the committed measurement
+pin `oxc`; the acorn fallback produces byte-identical snippets), and
+nothing of it ships — the bundle's runtime cost is engine-independent.
+
 **The two deliveries are not substitutes**, so the honest cost question is
 per deployment, each delivery against its own uninstrumented control on the
 same artifact. Bundling erases the module boundaries the runtime hook's
