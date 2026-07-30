@@ -109,27 +109,38 @@ pnpm --filter example-hono-lambda start:built            # same output, plain no
 pnpm --filter example-hono-lambda start:built:consumer
 ```
 
-The CI Lambda lane boots `dist/` in a third container with nothing but
-`LAMBDA_TASK_ROOT` set, asserts the same instrumentation lines appear (the
-bundle carries the patches itself), and puts the two deliveries' cold
-starts side by side on the job summary:
+**The two deliveries are not substitutes**, so the honest cost question is
+per deployment, each delivery against its own uninstrumented control on the
+same artifact. Bundling erases the module boundaries the runtime hook's
+package entries match — inside a bundle, `hono/dist/hono.js` and
+`@smithy/core`'s client never load as modules, so only the handler's own
+path entry survives; and an unbundled deployment gives the unplugin no
+build to ride. The CI Lambda lane measures both contrasts live (five
+containers: uninstrumented app, hooked app, SQS consumer, plain bundle,
+patched bundle), asserts the instrumented logs speak and the
+uninstrumented controls stay silent, and puts both deltas on the job
+summary:
 
 ```
-Cold start, billed: runtime hook 269 ms vs esbuild bundle 166 ms
+unbundled: no instrumentation 264 ms -> runtime hook 315 ms (hook cost +51 ms)
+bundled:   no patches 194 ms -> patches baked 188 ms (unplugin cost -6 ms)
 ```
 
-![Cold start and RSS by delivery — the same app, the same patches](coldStartChart.svg)
+![Cold start by deployment and mechanism — the same app, the same patches](coldStartChart.svg)
 
-The committed numbers behind the chart live in
-[`coldStartTable.md`](coldStartTable.md) (median of five emulator boots per
-delivery, provenance included; `node make-chart.mjs` regenerates the SVG
-after re-measuring — the job summary carries the live per-image numbers).
-The difference — billed by the platform's own REPORT line on the platform's
-own image — is what runtime delivery costs: the preload, the config
-evaluation, the engine binding and the on-load transforms, none of which
-exist in the bundle. The trade is the usual one: build-time delivery is
-zero-cost at runtime but fixed at build time; runtime delivery patches
-whatever the deployed function actually loads, with no build step at all.
+The committed reference behind the chart lives in
+[`coldStartTable.md`](coldStartTable.md) — one session, five emulator
+boots per leg, both engines (oxc and acorn) plus
+[orchestrion](orchestrion-register.mjs) instrumenting the same
+`@smithy/core` `Client#send` as the comparison mechanism; `node
+make-chart.mjs` regenerates the SVG after re-measuring. What it says:
+**the runtime hook costs ~45–50 ms at cold start on either engine
+(orchestrion: ~80 ms on the same target), and the baked patches cost
+nothing measurable.** Bundling itself is worth about −70 ms — but that
+saving belongs to the packaging choice, whichever delivery you use. The
+trade is the usual one: build-time delivery is zero-cost at runtime but
+fixed at build time; runtime delivery patches whatever the deployed
+function actually loads, with no build step at all.
 
 ## Why there is no LocalStack here
 

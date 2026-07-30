@@ -564,11 +564,13 @@ jobs:
       # before credentials or network exist (which is why no LocalStack).
       # The script answers the example's two API Gateway events and its SQS
       # batch (consumer.handler in a second container — SQS in, SNS publish
-      # out, same config) through the emulator, then the delivery contrast:
-      # the same app bundled by esbuild through the unplugin, booted from
-      # dist/ with no hook, no config and no engine — the two cold starts
-      # side by side are what runtime delivery costs on this image. It
-      # requires every layer to have spoken in the logs, and puts
+      # out, same config) through the emulator, then measures each
+      # delivery's cost WITHIN its own artifact — no-instrumentation vs
+      # runtime hook on the unbundled app, plain bundle vs patches baked on
+      # the bundled one — because the deliveries are not substitutes:
+      # bundling erases the module boundaries the runtime hook's package
+      # entries match. It requires every layer to have spoken in the logs
+      # (and the uninstrumented controls to have stayed silent), and puts
       # three views of the same invocations on the job summary: the REPORT
       # line (real duration and billed milliseconds; its Max Memory Used
       # echoes the configured size — the emulator meters time, not memory),
@@ -605,7 +607,9 @@ jobs:
           # the ephemeral merge commit, whose raw URLs rot after the merge
           # ref is recomputed or collected
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUNTIME_COLD: ${{ steps.rie.outputs.runtime_cold }}
+          BASELINE_COLD: ${{ steps.rie.outputs.baseline_cold }}
+          HOOK_COLD: ${{ steps.rie.outputs.hook_cold }}
+          PLAIN_COLD: ${{ steps.rie.outputs.plain_cold }}
           BUILT_COLD: ${{ steps.rie.outputs.built_cold }}
           IMAGE: public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}
           PLATFORM: linux/amd64

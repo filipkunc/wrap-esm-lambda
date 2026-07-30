@@ -4,6 +4,31 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
+## Unreleased
+
+### Fixed — the cold-start comparison measured the wrong thing
+
+- v0.2.2's "runtime hook vs esbuild bundle" contrast compared two
+  different deployments and called the whole gap the cost of runtime
+  delivery. It isn't: the two deliveries are not substitutes (bundling
+  erases the module boundaries the runtime hook's package entries match;
+  an unbundled deployment gives the unplugin no build to ride), and about
+  half that gap was the bundling win itself. The measurement now prices
+  each delivery against its own uninstrumented control on the same
+  artifact: `coldStartTable.md` carries a same-session six-leg reference —
+  baseline, the runtime hook on both engines, orchestrion instrumenting
+  the same `@smithy/core` `Client#send`
+  (`examples/hono-lambda/orchestrion-register.mjs`), and plain vs patched
+  bundle. Headline: the hook costs ~45–50 ms at cold start on either
+  engine (orchestrion ~80 ms on the same target), baked patches cost
+  nothing measurable, and bundling's own ~70 ms saving is a packaging
+  fact, not an instrumentation one.
+- The CI Lambda lane measures both within-artifact contrasts live (five
+  containers, with the uninstrumented controls asserted silent), prints
+  both deltas on the job summary and the sticky PR comment, and captions
+  the embedded chart as the committed reference so live and reference
+  numbers can no longer be mistaken for each other.
+
 ## 0.2.2 (2026-07-30)
 
 ### Added

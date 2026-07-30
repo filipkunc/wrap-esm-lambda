@@ -25,7 +25,7 @@ for (const line of tableLines) {
   rss.push(Number.parseFloat(cells[2]))
 }
 
-const canvas = new ChartJSNodeCanvas({ width: 800, height: 300, backgroundColour: '#333333', type: 'svg' })
+const canvas = new ChartJSNodeCanvas({ width: 800, height: 500, backgroundColour: '#333333', type: 'svg' })
 
 const UNITS = ['ms', 'MB']
 const barValueLabels = {

@@ -1,13 +1,15 @@
 #!/bin/sh
-# Put the delivery contrast where the conversation happens: a sticky PR
-# comment with this run's billed cold starts as a mermaid chart (GitHub
-# renders it in comments — no image hosting involved) and the committed
+# Put the delivery-cost story where the conversation happens: a sticky PR
+# comment with this run's billed cold starts compared WITHIN each artifact
+# (the two deliveries are not substitutes — bundling erases the module
+# boundaries the runtime hook's package entries match), and the committed
 # reference chart under it. One marker, one comment, PATCHed in place on
 # every push instead of piling up. Environment: GITHUB_TOKEN,
-# GITHUB_REPOSITORY, HEAD_SHA, PR_NUMBER, RUNTIME_COLD, BUILT_COLD,
-# IMAGE, PLATFORM. HEAD_SHA must be the PR's head commit — the default
-# GITHUB_SHA on pull_request events is the ephemeral merge commit, whose
-# raw URLs rot once the merge ref is recomputed or collected.
+# GITHUB_REPOSITORY, HEAD_SHA, PR_NUMBER, BASELINE_COLD, HOOK_COLD,
+# PLAIN_COLD, BUILT_COLD, IMAGE, PLATFORM. HEAD_SHA must be the PR's head
+# commit — the default GITHUB_SHA on pull_request events is the ephemeral
+# merge commit, whose raw URLs rot once the merge ref is recomputed or
+# collected.
 set -eu
 : "${GITHUB_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${HEAD_SHA:?}" "${PR_NUMBER:?}"
 
@@ -17,21 +19,37 @@ body_file=$(mktemp)
 
 is_num() { case "$1" in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 
+delta() {
+  if is_num "$1" && is_num "$2"; then
+    d=$(($2 - $1))
+    case "$d" in -*) printf '%s ms' "$d" ;; *) printf '+%s ms' "$d" ;; esac
+  else
+    printf '?'
+  fi
+}
+
 {
   echo "$marker"
   echo '### Cold start by delivery — live from this run'
   echo
-  echo "\`${IMAGE:-the Lambda runtime image}\` (${PLATFORM:-}), billed by the emulator's REPORT line, cold boot of \`app.handler\` at $HEAD_SHA:"
+  echo "\`${IMAGE:-the Lambda runtime image}\` (${PLATFORM:-}), billed by the emulator's REPORT line, cold boot of \`app.handler\` at $HEAD_SHA — each delivery priced against its own uninstrumented control:"
   echo
-  if is_num "${RUNTIME_COLD:-}" && is_num "${BUILT_COLD:-}"; then
-    echo "**Live from this run: runtime hook $RUNTIME_COLD ms vs esbuild bundle $BUILT_COLD ms.**"
+  if is_num "${BASELINE_COLD:-}" && is_num "${HOOK_COLD:-}"; then
+    echo "- **unbundled**: no instrumentation $BASELINE_COLD ms → runtime hook $HOOK_COLD ms (**hook cost $(delta "$BASELINE_COLD" "$HOOK_COLD")**)"
   else
-    echo '_No numbers made it out of this run — see the Lambda lane job summary._'
+    echo '- unbundled: numbers missing this run — see the Lambda lane job summary'
+  fi
+  if is_num "${PLAIN_COLD:-}" && is_num "${BUILT_COLD:-}"; then
+    echo "- **bundled**: no patches $PLAIN_COLD ms → patches baked $BUILT_COLD ms (**unplugin cost $(delta "$PLAIN_COLD" "$BUILT_COLD")**)"
+  else
+    echo '- bundled: numbers missing this run — see the Lambda lane job summary'
   fi
   echo
-  echo "The committed reference measurement ([table](https://github.com/$GITHUB_REPOSITORY/blob/$HEAD_SHA/examples/hono-lambda/coldStartTable.md); the job summary carries every image/architecture's live numbers):"
+  echo "The deliveries are not substitutes — bundling erases the module boundaries the runtime hook's package entries match, and an unbundled deployment gives the unplugin no build to ride; the bundled-vs-unbundled gap is the packaging choice, not an instrumentation cost."
   echo
-  echo "![Cold start by delivery](https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$HEAD_SHA/examples/hono-lambda/coldStartChart.svg)"
+  echo "The committed reference measurement, oxc + acorn + orchestrion on the same legs ([table](https://github.com/$GITHUB_REPOSITORY/blob/$HEAD_SHA/examples/hono-lambda/coldStartTable.md); the job summary carries every image/architecture's live numbers):"
+  echo
+  echo "![Cold start by deployment and mechanism](https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$HEAD_SHA/examples/hono-lambda/coldStartChart.svg)"
 } > "$body_file"
 
 auth="Authorization: Bearer $GITHUB_TOKEN"
