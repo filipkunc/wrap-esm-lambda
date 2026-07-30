@@ -6,7 +6,10 @@
   "description": "Runnable example: a Hono app on AWS Lambda instrumented from one config — handler timing, http.route, and the AWS SDK — with zero app changes.",
   "scripts": {
     "start": "_HANDLER=app.handler LAMBDA_TASK_ROOT=. WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs node --import @wrap-esm-lambda/hooks/register invoke-local.mjs",
-    "start:consumer": "_HANDLER=consumer.handler LAMBDA_TASK_ROOT=. WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs node --import @wrap-esm-lambda/hooks/register invoke-local.mjs sqs-batch"
+    "start:consumer": "_HANDLER=consumer.handler LAMBDA_TASK_ROOT=. WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs node --import @wrap-esm-lambda/hooks/register invoke-local.mjs sqs-batch",
+    "build": "node build.mjs",
+    "start:built": "_HANDLER=app.handler LAMBDA_TASK_ROOT=./dist node invoke-local.mjs",
+    "start:built:consumer": "_HANDLER=consumer.handler LAMBDA_TASK_ROOT=./dist node invoke-local.mjs sqs-batch"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1090.0",
@@ -14,5 +17,9 @@
     "@wrap-esm-lambda/core": "workspace:^",
     "@wrap-esm-lambda/hooks": "workspace:^",
     "hono": "^4.12.31"
+  },
+  "devDependencies": {
+    "@wrap-esm-lambda/unplugin": "workspace:^",
+    "esbuild": "^0.28.1"
   }
 }

@@ -185,6 +185,13 @@ importers:
       hono:
         specifier: ^4.12.31
         version: 4.12.31
+    devDependencies:
+      '@wrap-esm-lambda/unplugin':
+        specifier: workspace:^
+        version: link:../../packages/unplugin
+      esbuild:
+        specifier: ^0.28.1
+        version: 0.28.1
 
   examples/quotes: {}
 

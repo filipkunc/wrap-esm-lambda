@@ -559,8 +559,11 @@ jobs:
       # before credentials or network exist (which is why no LocalStack).
       # The script answers the example's two API Gateway events and its SQS
       # batch (consumer.handler in a second container — SQS in, SNS publish
-      # out, same config) through the emulator, requires every layer to have
-      # spoken in the logs, and puts
+      # out, same config) through the emulator, then the delivery contrast:
+      # the same app bundled by esbuild through the unplugin, booted from
+      # dist/ with no hook, no config and no engine — the two cold starts
+      # side by side are what runtime delivery costs on this image. It
+      # requires every layer to have spoken in the logs, and puts
       # three views of the same invocations on the job summary: the REPORT
       # line (real duration and billed milliseconds; its Max Memory Used
       # echoes the configured size — the emulator meters time, not memory),
