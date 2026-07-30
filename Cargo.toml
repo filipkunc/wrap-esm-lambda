@@ -7,7 +7,7 @@ name    = "wrap_esm_lambda"
 # dependency-level error rather than "upgrade your toolchain". CI floats on
 # stable; this is the floor a contributor's stable has to clear.
 rust-version = "1.95"
-version      = "0.2.1"
+version      = "0.2.2"
 
 [lib]
 crate-type = ["cdylib"]

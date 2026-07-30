@@ -1,6 +1,6 @@
 {
   "name": "@wrap-esm-lambda/hooks",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Runtime instrumentation for wrap-esm-lambda: wraps matched modules at load time via module.registerHooks. The zero-build-changes half of the hybrid setup.",
   "type": "module",
   "exports": {

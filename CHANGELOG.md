@@ -4,7 +4,7 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
-## Unreleased
+## 0.2.2 (2026-07-30)
 
 ### Added
 
