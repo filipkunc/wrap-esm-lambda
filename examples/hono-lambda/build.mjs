@@ -11,6 +11,13 @@ import config from './wrap.config.build.mjs'
 
 const here = (path) => fileURLToPath(new URL(path, import.meta.url))
 
+// --plain builds the measurement control: the identical bundle without the
+// plugin, so the bundled deployment's delivery cost is patched-vs-plain on
+// the same artifact — not bundled-vs-unbundled, which prices the bundling
+// itself.
+const plain = process.argv.includes('--plain')
+const outDir = plain ? 'dist-plain' : 'dist'
+
 for (const entry of ['app.mjs', 'consumer.mjs']) {
   await build({
     entryPoints: [here(entry)],
@@ -19,9 +26,11 @@ for (const entry of ['app.mjs', 'consumer.mjs']) {
     platform: 'node',
     mainFields: ['module', 'main'],
     sourcemap: true,
-    outfile: here(`dist/${entry}`),
-    plugins: [esbuildPlugin(config)],
+    outfile: here(`${outDir}/${entry}`),
+    plugins: plain ? [] : [esbuildPlugin(config)],
     logLevel: 'silent',
   })
 }
-console.log('built dist/app.mjs and dist/consumer.mjs with the patches baked in')
+console.log(
+  `built ${outDir}/app.mjs and ${outDir}/consumer.mjs${plain ? ' without patches' : ' with the patches baked in'}`,
+)
