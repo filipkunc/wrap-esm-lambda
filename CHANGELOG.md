@@ -15,13 +15,16 @@ would break a consumer.
   an unbundled deployment gives the unplugin no build to ride), and about
   half that gap was the bundling win itself. The measurement now prices
   each delivery against its own uninstrumented control on the same
-  artifact: `coldStartTable.md` carries a same-session six-leg reference —
+  artifact: `coldStartTable.md` carries a six-leg reference measured
+  interleaved round-robin (sequential legs inherit each other's warm page
+  cache — the first cut measured exactly that, showing the engines tied) —
   baseline, the runtime hook on both engines, orchestrion instrumenting
   the same `@smithy/core` `Client#send`
   (`examples/hono-lambda/orchestrion-register.mjs`), and plain vs patched
-  bundle. Headline: the hook costs ~45–50 ms at cold start on either
-  engine (orchestrion ~80 ms on the same target), baked patches cost
-  nothing measurable, and bundling's own ~70 ms saving is a packaging
+  bundle. Headline: the hook costs +40 ms at cold start with the oxc
+  engine and +60 ms with acorn (the gap is the pure-JS engine parsing its
+  own parser; orchestrion +96 ms on the same target), baked patches cost
+  nothing measurable, and bundling's own ~66 ms saving is a packaging
   fact, not an instrumentation one.
 - The CI Lambda lane measures both within-artifact contrasts live (five
   containers, with the uninstrumented controls asserted silent), prints

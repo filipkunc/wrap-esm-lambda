@@ -122,25 +122,26 @@ uninstrumented controls stay silent, and puts both deltas on the job
 summary:
 
 ```
-unbundled: no instrumentation 264 ms -> runtime hook 315 ms (hook cost +51 ms)
-bundled:   no patches 194 ms -> patches baked 188 ms (unplugin cost -6 ms)
+unbundled: no instrumentation 248 ms -> runtime hook 288 ms (hook cost +40 ms)
+bundled:   no patches 182 ms -> patches baked 183 ms (unplugin cost +1 ms)
 ```
 
 ![Cold start by deployment and mechanism — the same app, the same patches](coldStartChart.svg)
 
 The committed reference behind the chart lives in
-[`coldStartTable.md`](coldStartTable.md) — one session, five emulator
-boots per leg, both engines (oxc and acorn) plus
-[orchestrion](orchestrion-register.mjs) instrumenting the same
-`@smithy/core` `Client#send` as the comparison mechanism; `node
-make-chart.mjs` regenerates the SVG after re-measuring. What it says:
-**the runtime hook costs ~45–50 ms at cold start on either engine
-(orchestrion: ~80 ms on the same target), and the baked patches cost
-nothing measurable.** Bundling itself is worth about −70 ms — but that
-saving belongs to the packaging choice, whichever delivery you use. The
-trade is the usual one: build-time delivery is zero-cost at runtime but
-fixed at build time; runtime delivery patches whatever the deployed
-function actually loads, with no build step at all.
+[`coldStartTable.md`](coldStartTable.md) — five emulator boots per leg,
+interleaved round-robin so no leg inherits a warmer page cache, both
+engines (oxc and acorn) plus [orchestrion](orchestrion-register.mjs)
+instrumenting the same `@smithy/core` `Client#send` as the comparison
+mechanism; `node make-chart.mjs` regenerates the SVG after re-measuring.
+What it says: **the runtime hook costs +40 ms at cold start with the
+native oxc engine and +60 ms with the pure-JS acorn engine (orchestrion:
++96 ms on the same target), and the baked patches cost nothing
+measurable.** Bundling itself is worth about −66 ms — but that saving
+belongs to the packaging choice, whichever delivery you use. The trade is
+the usual one: build-time delivery is zero-cost at runtime but fixed at
+build time; runtime delivery patches whatever the deployed function
+actually loads, with no build step at all.
 
 ## Why there is no LocalStack here
 
