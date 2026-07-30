@@ -65,6 +65,31 @@ the genuine local number from the container's own cgroup (`memory.peak`, or
 `memory.max_usage_in_bytes` on a v1 hierarchy) and reports it alongside —
 the container-level max next to the patch's in-process `rss`.
 
+## SQS in, SNS out — the same config
+
+The example's second handler, [`consumer.mjs`](consumer.mjs), is the other
+Lambda shape: an SQS batch in, an SNS `PublishCommand` per record out, and
+the partial-batch contract back to the platform (`batchItemFailures` names
+the records to redrive — the fixture's deliberately malformed third record
+exercises it). Nothing in `wrap.config.mjs` changes: `_HANDLER` now says
+`consumer.handler`, so the aws-lambda preset derives its entry for this
+file instead, and the smithy entry sees SNS the way it saw S3 — every
+`@aws-sdk/client-*` operation funnels through the same `Client#send`.
+
+```sh
+pnpm --filter example-hono-lambda start:consumer
+```
+
+```
+aws.operation = PublishCommand
+aws.operation = PublishCommand
+invocation = 0.8 ms, rss = 79 MB
+SQS batch of 3 -> {"batchItemFailures":[{"itemIdentifier":"broken-3"}]}
+```
+
+The CI Lambda lane boots this handler in a second container (one container
+boots one handler) and drives the same SQS event through the real RIC.
+
 ## Why there is no LocalStack here
 
 The `POST /quotes` route really calls `S3Client#send` on the real AWS SDK.

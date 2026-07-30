@@ -51,6 +51,32 @@ testRuntime('runtime mode: the RIC load sequence gets the fully instrumented Hon
   assert.strictEqual(invocations?.length, 2)
 })
 
+testRuntime('SQS batch in, SNS publish out — the same config instruments the other handler shape', async () => {
+  // _HANDLER now names consumer.handler: the preset derives a different
+  // entry from the same config file, the smithy entry sees PublishCommand
+  // instead of PutObjectCommand, and the hono entry simply never matches —
+  // nothing about SQS or SNS is written down anywhere
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--import', '@wrap-esm-lambda/hooks/register', join(exampleRoot, 'invoke-local.mjs'), 'sqs-batch'],
+    {
+      cwd: exampleRoot,
+      env: {
+        ...process.env,
+        WRAP_ESM_LAMBDA_CONFIG: join(exampleRoot, 'wrap.config.mjs'),
+        _HANDLER: 'consumer.handler',
+        LAMBDA_TASK_ROOT: exampleRoot,
+      },
+    },
+  )
+  // both parseable records published to SNS through the intercepted SDK
+  assert.strictEqual(stdout.match(/aws\.operation = PublishCommand/g)?.length, 2)
+  // the malformed record went back to the platform for redrive, not to SNS
+  assert.match(stdout, /SQS batch of 3 -> \{"batchItemFailures":\[\{"itemIdentifier":"broken-3"\}\]\}/)
+  // the preset-derived entry timed the consumer the way it timed the app
+  assert.match(stdout, /invocation = [\d.]+ ms, rss = \d+ MB/)
+})
+
 testRuntime('outside Lambda the preset entry is inert, the package entries still apply', async () => {
   // no _HANDLER/LAMBDA_TASK_ROOT: invoke-local falls back to its defaults to
   // FIND the handler, the preset sees a bare environment and emits no entry,
