@@ -1,0 +1,52 @@
+{
+  "Records": [
+    {
+      "messageId": "msg-1",
+      "receiptHandle": "AQEBmsg1",
+      "body": "{\"id\":\"7\",\"quote\":\"Make it work, make it right, make it fast.\"}",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1753747200000",
+        "SenderId": "AIDAEXAMPLE",
+        "ApproximateFirstReceiveTimestamp": "1753747200000"
+      },
+      "messageAttributes": {},
+      "md5OfBody": "0",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:quotes-inbox",
+      "awsRegion": "us-east-1"
+    },
+    {
+      "messageId": "msg-2",
+      "receiptHandle": "AQEBmsg2",
+      "body": "{\"id\":\"8\",\"quote\":\"Deleted code is debugged code.\"}",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1753747201000",
+        "SenderId": "AIDAEXAMPLE",
+        "ApproximateFirstReceiveTimestamp": "1753747201000"
+      },
+      "messageAttributes": {},
+      "md5OfBody": "0",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:quotes-inbox",
+      "awsRegion": "us-east-1"
+    },
+    {
+      "messageId": "broken-3",
+      "receiptHandle": "AQEBbroken3",
+      "body": "not json at all",
+      "attributes": {
+        "ApproximateReceiveCount": "1",
+        "SentTimestamp": "1753747202000",
+        "SenderId": "AIDAEXAMPLE",
+        "ApproximateFirstReceiveTimestamp": "1753747202000"
+      },
+      "messageAttributes": {},
+      "md5OfBody": "0",
+      "eventSource": "aws:sqs",
+      "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:quotes-inbox",
+      "awsRegion": "us-east-1"
+    }
+  ]
+}

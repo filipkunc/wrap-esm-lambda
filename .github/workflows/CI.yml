@@ -557,8 +557,10 @@ jobs:
       # and RSS from inside the process), hono's matched route template, and
       # every AWS SDK operation intercepted at @smithy/core's Client#send
       # before credentials or network exist (which is why no LocalStack).
-      # The script answers the example's two API Gateway events through the
-      # emulator, requires every layer to have spoken in the logs, and puts
+      # The script answers the example's two API Gateway events and its SQS
+      # batch (consumer.handler in a second container — SQS in, SNS publish
+      # out, same config) through the emulator, requires every layer to have
+      # spoken in the logs, and puts
       # three views of the same invocations on the job summary: the REPORT
       # line (real duration and billed milliseconds; its Max Memory Used
       # echoes the configured size — the emulator meters time, not memory),
