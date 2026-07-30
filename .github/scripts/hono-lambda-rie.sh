@@ -217,23 +217,15 @@ printf '%s\n%s\n%s\n' "$logs" "$consumer_logs" "$built_logs" |
   echo
 } >> "$summary"
 
-# The same numbers as a chart, not only a table: GitHub renders mermaid in
-# job summaries (and PR comments), so the LIVE run charts itself with no
-# image hosting involved. Guarded: a malformed extraction degrades to the
-# table above, never to a broken block.
-is_num() { case "$1" in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
-if is_num "${runtime_cold:-}" && is_num "${built_cold:-}"; then
-  max=$runtime_cold
-  [ "$built_cold" -gt "$max" ] && max=$built_cold
-  limit=$(((max * 12 + 9) / 10))
+# A chart under the table: the committed reference SVG, pinned to the
+# commit this run tested (HEAD_SHA, provided by the workflow). Not mermaid:
+# GitHub overlays its pan/zoom controls exactly on the bar being read, and
+# labels no values — the rendered SVG does both better. The bold line above
+# carries this run's live numbers; the chart carries the committed
+# reference measurement.
+if [ -n "${HEAD_SHA:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
   {
-    echo '```mermaid'
-    echo 'xychart-beta'
-    echo "  title \"Cold start, billed (ms) — $image\""
-    echo '  x-axis ["runtime hook", "esbuild bundle"]'
-    echo "  y-axis \"ms\" 0 --> $limit"
-    echo "  bar [$runtime_cold, $built_cold]"
-    echo '```'
+    echo "![Cold start by delivery — committed reference measurement](https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$HEAD_SHA/examples/hono-lambda/coldStartChart.svg)"
     echo
   } >> "$summary"
 fi
