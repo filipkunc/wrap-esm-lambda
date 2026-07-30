@@ -90,6 +90,41 @@ SQS batch of 3 -> {"batchItemFailures":[{"itemIdentifier":"broken-3"}]}
 The CI Lambda lane boots this handler in a second container (one container
 boots one handler) and drives the same SQS event through the real RIC.
 
+## The contrast: the same patches at build time, and what that buys
+
+Everything above delivers the instrumentation at runtime — the hook rides
+`NODE_OPTIONS`, the config is read at preload, an engine transforms modules
+as they load. [`build.mjs`](build.mjs) delivers the SAME patches the other
+way: esbuild bundles each handler with the
+[unplugin](../../packages/unplugin) adapter and
+[`wrap.config.build.mjs`](wrap.config.build.mjs) — the runtime config's
+package entries reused verbatim, plus the handler entries written down
+explicitly, because on a build machine there is no `_HANDLER` to discover
+them from. The result under `dist/` is just JavaScript: no hook, no config,
+no engine in the process.
+
+```sh
+pnpm --filter example-hono-lambda build
+pnpm --filter example-hono-lambda start:built            # same output, plain node
+pnpm --filter example-hono-lambda start:built:consumer
+```
+
+The CI Lambda lane boots `dist/` in a third container with nothing but
+`LAMBDA_TASK_ROOT` set, asserts the same instrumentation lines appear (the
+bundle carries the patches itself), and puts the two deliveries' cold
+starts side by side on the job summary:
+
+```
+Cold start, billed: runtime hook 260 ms vs esbuild bundle 176 ms
+```
+
+That difference — measured by the platform's own REPORT line on the
+platform's own image — is what runtime delivery costs: the preload, the
+config evaluation, the engine binding and the on-load transforms, none of
+which exist in the bundle. The trade is the usual one: build-time delivery
+is zero-cost at runtime but fixed at build time; runtime delivery patches
+whatever the deployed function actually loads, with no build step at all.
+
 ## Why there is no LocalStack here
 
 The `POST /quotes` route really calls `S3Client#send` on the real AWS SDK.
