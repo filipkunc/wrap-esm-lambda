@@ -4,6 +4,22 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
+## Unreleased
+
+### Added
+
+- **`pnpm publish:rehearsal`** — a full-dress rehearsal of the npm publish
+  against a throwaway local Verdaccio, because the public registry has no
+  draft state and a published version's number is burned forever. It runs
+  the real `pnpm publish -r` for the workspace packages, publishes the
+  host's napi platform package and the root addon (replicating the
+  `optionalDependencies` injection `napi prepublish` performs — a gap the
+  rehearsal itself caught: without it the installed root package cannot
+  find its binding), then installs everything into a scratch consumer from
+  the rehearsal registry and runs the runtime hook end to end on the oxc
+  engine. Deliberately not rehearsed: the nine-platform `napi prepublish`
+  orchestration (CI artifacts only) and npm provenance.
+
 ## 0.2.3 (2026-07-30)
 
 ### Fixed — the cold-start comparison measured the wrong thing
