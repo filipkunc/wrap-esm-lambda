@@ -347,6 +347,11 @@ jobs:
     name: Test lambda/nodejs:${{ matrix.runtime }} - ${{ matrix.target }}
     needs:
       - build
+    # contents stays read; pull-requests: write is for the sticky
+    # cold-start-chart comment one matrix cell posts on same-repo PRs
+    permissions:
+      contents: read
+      pull-requests: write
     # The lanes above run node:N-slim and node:N-alpine — reasonable proxies.
     # This one is not a proxy: it is the image an actual Lambda function runs
     # on. Amazon Linux 2023, AWS's own Node build, and a managed minor that
@@ -571,11 +576,31 @@ jobs:
       # Lambda would have reported), and the patch's in-process wall time
       # and RSS.
       - name: Invoke the Hono example through the real RIC, and read the bill
+        id: rie
         run: |
           .github/scripts/hono-lambda-rie.sh \
             "public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}" \
             ${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }} \
             "$GITHUB_STEP_SUMMARY"
+      # The same contrast, visible where the conversation happens: a sticky
+      # PR comment charting THIS run's billed cold starts (mermaid renders
+      # in comments — no image hosting involved) with the committed
+      # reference chart under it. One matrix cell posts it, PATCHing the
+      # same comment on every push instead of piling up. Same-repo PRs
+      # only: a fork's token cannot write comments.
+      - name: Chart the delivery contrast on the PR
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          matrix.runtime == '22' && !contains(matrix.target, 'aarch64')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUNTIME_COLD: ${{ steps.rie.outputs.runtime_cold }}
+          BUILT_COLD: ${{ steps.rie.outputs.built_cold }}
+          IMAGE: public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}
+          PLATFORM: linux/amd64
+        run: .github/scripts/pr-cold-start-comment.sh
   test-native-platform:
     name: Test ${{ matrix.settings.target }} - node@${{ matrix.node }}
     needs:
