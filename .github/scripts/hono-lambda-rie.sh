@@ -62,9 +62,14 @@ case "$peak_bytes" in
   *) peak="$((peak_bytes / 1024 / 1024)) MB" ;;
 esac
 
+# The handler's body arrives JSON-escaped inside the invocation envelope
+# ({\"stored\":\"7\"}), so quoted-key needles can never match there — assert
+# on quote-free body fragments and the envelope's own unescaped statusCode.
 ok=1
-case "$get" in *'Simplicity is prerequisite for reliability.'*) ;; *) ok=0 ;; esac
-case "$post" in *'"stored":"7"'*) ;; *) ok=0 ;; esac
+case "$get" in *'Simplicity is prerequisite for reliability.'*) ;; *) echo 'GET body missing the quote'; ok=0 ;; esac
+case "$get" in *'"statusCode":200'*) ;; *) echo 'GET did not return 200'; ok=0 ;; esac
+case "$post" in *stored*) ;; *) echo 'POST body missing stored'; ok=0 ;; esac
+case "$post" in *'"statusCode":201'*) ;; *) echo 'POST did not return 201'; ok=0 ;; esac
 
 logs=$(docker logs "$name" 2>&1)
 
