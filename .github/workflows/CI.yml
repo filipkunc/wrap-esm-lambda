@@ -596,6 +596,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          # the head commit, NOT github.sha: on pull_request events that is
+          # the ephemeral merge commit, whose raw URLs rot after the merge
+          # ref is recomputed or collected
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           RUNTIME_COLD: ${{ steps.rie.outputs.runtime_cold }}
           BUILT_COLD: ${{ steps.rie.outputs.built_cold }}
           IMAGE: public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}

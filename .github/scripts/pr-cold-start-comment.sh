@@ -4,10 +4,12 @@
 # renders it in comments — no image hosting involved) and the committed
 # reference chart under it. One marker, one comment, PATCHed in place on
 # every push instead of piling up. Environment: GITHUB_TOKEN,
-# GITHUB_REPOSITORY, GITHUB_SHA, PR_NUMBER, RUNTIME_COLD, BUILT_COLD,
-# IMAGE, PLATFORM.
+# GITHUB_REPOSITORY, HEAD_SHA, PR_NUMBER, RUNTIME_COLD, BUILT_COLD,
+# IMAGE, PLATFORM. HEAD_SHA must be the PR's head commit — the default
+# GITHUB_SHA on pull_request events is the ephemeral merge commit, whose
+# raw URLs rot once the merge ref is recomputed or collected.
 set -eu
-: "${GITHUB_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${GITHUB_SHA:?}" "${PR_NUMBER:?}"
+: "${GITHUB_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${HEAD_SHA:?}" "${PR_NUMBER:?}"
 
 marker='<!-- hono-lambda-cold-start -->'
 api="https://api.github.com/repos/$GITHUB_REPOSITORY"
@@ -19,7 +21,7 @@ is_num() { case "$1" in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
   echo "$marker"
   echo '### Cold start by delivery — live from this run'
   echo
-  echo "\`${IMAGE:-the Lambda runtime image}\` (${PLATFORM:-}), billed by the emulator's REPORT line, cold boot of \`app.handler\` at $GITHUB_SHA:"
+  echo "\`${IMAGE:-the Lambda runtime image}\` (${PLATFORM:-}), billed by the emulator's REPORT line, cold boot of \`app.handler\` at $HEAD_SHA:"
   echo
   if is_num "${RUNTIME_COLD:-}" && is_num "${BUILT_COLD:-}"; then
     max=$RUNTIME_COLD
@@ -36,9 +38,9 @@ is_num() { case "$1" in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
     echo '_No numbers made it out of this run — see the Lambda lane job summary._'
   fi
   echo
-  echo "The committed reference measurement ([table](https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/examples/hono-lambda/coldStartTable.md)):"
+  echo "The committed reference measurement ([table](https://github.com/$GITHUB_REPOSITORY/blob/$HEAD_SHA/examples/hono-lambda/coldStartTable.md)):"
   echo
-  echo "![Cold start by delivery](https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$GITHUB_SHA/examples/hono-lambda/coldStartChart.svg)"
+  echo "![Cold start by delivery](https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$HEAD_SHA/examples/hono-lambda/coldStartChart.svg)"
 } > "$body_file"
 
 auth="Authorization: Bearer $GITHUB_TOKEN"
