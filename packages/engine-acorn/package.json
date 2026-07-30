@@ -1,6 +1,6 @@
 {
   "name": "@wrap-esm-lambda/engine-acorn",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Pure-JavaScript engine for wrap-esm-lambda: the same transform surface as the native oxc addon, built on acorn + magic-string. Lets the hybrid instrumentation run JS-only, and benchmarks the JS-vs-Rust trade-off.",
   "type": "module",
   "exports": {
