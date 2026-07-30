@@ -4,6 +4,33 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
+## Unreleased
+
+### Added
+
+- **Build-time delivery joins the hono-lambda example.** `build.mjs`
+  bundles both handlers with the unplugin's esbuild adapter and
+  `wrap.config.build.mjs` — the runtime config's package entries reused
+  verbatim, plus the handler entries written down explicitly (a build
+  machine has no `_HANDLER` to discover them from). The `dist/` output
+  runs on plain node with no hook, no config and no engine in the
+  process; `start:built` / `start:built:consumer` drive it through the
+  RIC's load sequence locally.
+- **The delivery contrast, billed by the platform.** The CI Lambda lane
+  boots the bundle in a third container with nothing but
+  `LAMBDA_TASK_ROOT` set and puts the two deliveries' cold starts side by
+  side on the job summary — what runtime delivery costs (preload, config
+  evaluation, engine binding, on-load transforms) against the bundle's
+  zero. A committed measurement (`coldStartTable.md`, five emulator boots
+  per delivery) feeds `coldStartChart.svg`, embedded in the example
+  README and on the release page.
+
+### CI
+
+- Release pages now embed the benchmark charts inline — raw URLs pinned
+  to the release's own tag — instead of only attaching them as assets;
+  the hono-lambda cold-start chart joins the attached set.
+
 ## 0.2.1 (2026-07-30)
 
 No changes to the published packages — this release is the practical
