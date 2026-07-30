@@ -55,7 +55,7 @@ testRuntime('outside Lambda the preset entry is inert, the package entries still
   // no _HANDLER/LAMBDA_TASK_ROOT: invoke-local falls back to its defaults to
   // FIND the handler, the preset sees a bare environment and emits no entry,
   // so no invocation lines — while hono and the SDK stay instrumented
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     WRAP_ESM_LAMBDA_CONFIG: join(exampleRoot, 'wrap.config.mjs'),
   }
