@@ -4,6 +4,45 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
+## 0.2.1 (2026-07-30)
+
+No changes to the published packages — this release is the practical
+proof-of-composition and the platform accounting to go with it.
+
+### Added
+
+- **`examples/hono-lambda`** — a [Hono](https://hono.dev/) app on AWS
+  Lambda instrumented from one config with zero app changes, covering both
+  Lambda shapes: HTTP through `hono/aws-lambda`'s `handle()` (the handler
+  discovered from `_HANDLER` by the aws-lambda preset and timed per
+  invocation, the matched route template captured as OTel's `http.route`
+  by a `Hono` subclass rebind), and event-driven (an SQS batch in, an SNS
+  publish per record out, the partial-batch `batchItemFailures` contract
+  back to the platform) — the SAME `wrap.config.mjs` covers both handlers.
+- **The AWS SDK without a LocalStack.** One entry on `@smithy/core`'s
+  `Client#send` sees every `@aws-sdk/client-*` operation (S3 under the
+  HTTP handler, SNS under the SQS consumer) and short-circuits before
+  credentials or network exist — the interception point that instruments
+  the SDK is the one that makes an AWS stand-in unnecessary for testing.
+- `__test__/hono-lambda.spec.ts` drives the example through the RIC's
+  load sequence on every lane, both handler shapes plus the
+  inert-outside-Lambda leg.
+
+### CI
+
+- The Lambda lane boots the example on the real
+  `public.ecr.aws/lambda/nodejs` images through the runtime interface
+  emulator (`.github/scripts/hono-lambda-rie.sh`) — API Gateway events
+  against `app.handler`, the SQS batch against `consumer.handler` in a
+  second container — and requires every instrumentation layer to have
+  spoken in the logs.
+- The job summary gains the platform accounting, three views per
+  invocation: the REPORT line (real duration and billed milliseconds; its
+  `Max Memory Used` merely echoes the configured size — the emulator
+  meters time, not memory), the container's cgroup peak (the genuine
+  max-memory number a real Lambda would have reported), and the patch's
+  in-process wall time and RSS.
+
 ## 0.2.0 (2026-07-28)
 
 ### Removed — the config surface is tap-only (breaking)

@@ -1,6 +1,6 @@
 {
   "name": "wrap-esm-lambda",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Declarative patching for Node.js modules — ESM, CJS, dual packages and core builtins — via a generic exports tap, delivered at runtime or build time from one config.",
   "main": "index.js",
   "repository": {
