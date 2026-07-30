@@ -24,21 +24,12 @@ is_num() { case "$1" in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
   echo "\`${IMAGE:-the Lambda runtime image}\` (${PLATFORM:-}), billed by the emulator's REPORT line, cold boot of \`app.handler\` at $HEAD_SHA:"
   echo
   if is_num "${RUNTIME_COLD:-}" && is_num "${BUILT_COLD:-}"; then
-    max=$RUNTIME_COLD
-    [ "$BUILT_COLD" -gt "$max" ] && max=$BUILT_COLD
-    limit=$(((max * 12 + 9) / 10))
-    echo '```mermaid'
-    echo 'xychart-beta'
-    echo '  title "Cold start, billed (ms)"'
-    echo '  x-axis ["runtime hook", "esbuild bundle"]'
-    echo "  y-axis \"ms\" 0 --> $limit"
-    echo "  bar [$RUNTIME_COLD, $BUILT_COLD]"
-    echo '```'
+    echo "**Live from this run: runtime hook $RUNTIME_COLD ms vs esbuild bundle $BUILT_COLD ms.**"
   else
     echo '_No numbers made it out of this run — see the Lambda lane job summary._'
   fi
   echo
-  echo "The committed reference measurement ([table](https://github.com/$GITHUB_REPOSITORY/blob/$HEAD_SHA/examples/hono-lambda/coldStartTable.md)):"
+  echo "The committed reference measurement ([table](https://github.com/$GITHUB_REPOSITORY/blob/$HEAD_SHA/examples/hono-lambda/coldStartTable.md); the job summary carries every image/architecture's live numbers):"
   echo
   echo "![Cold start by delivery](https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$HEAD_SHA/examples/hono-lambda/coldStartChart.svg)"
 } > "$body_file"

@@ -577,6 +577,11 @@ jobs:
       # and RSS.
       - name: Invoke the Hono example through the real RIC, and read the bill
         id: rie
+        env:
+          # for the summary's reference-chart embed: the PR's head commit
+          # (github.sha on pull_request events is the ephemeral merge
+          # commit), or the pushed commit itself on push events
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           .github/scripts/hono-lambda-rie.sh \
             "public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}" \
