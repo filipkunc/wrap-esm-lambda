@@ -69,11 +69,15 @@ async function waitReady(getOutput, timeoutMs = 180_000) {
   throw new Error(`func start not answering on ${baseUrl} after ${timeoutMs}ms; output so far:\n${getOutput()}`)
 }
 
+// the host relays worker console lines through its own logger — strip any
+// coloring so a marker's JSON payload parses whatever the log formatting does
+const stripAnsi = (text) => text.replace(/\[[0-9;]*m/g, '')
+
 function parseMarkers(output, prefix) {
-  return output
+  return stripAnsi(output)
     .split('\n')
     .filter((line) => line.includes(prefix))
-    .map((line) => JSON.parse(line.slice(line.indexOf(prefix) + prefix.length)))
+    .map((line) => JSON.parse(line.slice(line.indexOf(prefix) + prefix.length).trim()))
 }
 
 async function runMode(mode, env) {
