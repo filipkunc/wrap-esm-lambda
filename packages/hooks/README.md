@@ -54,6 +54,36 @@ the platform goes through `NODE_OPTIONS=--import` — see
 the whole arrangement on the real `public.ecr.aws/lambda/nodejs` images
 through AWS's real runtime interface client.
 
+## Azure Functions
+
+On Azure the v4 model's own `preInvocation`/`postInvocation` pipeline is the
+target, and its registry — `@azure/functions-core` — is a module the worker
+serves from a `require()` proxy, never a file, so no file transform can reach
+it. The `azure-functions` preset instead registers its hooks at the earliest
+instant the platform allows and patches `registerHook` in place on the shared
+core object: every later registration (any `@azure/functions` copy's
+`app.hook.*`, Application Insights' direct core usage) is observed, timed per
+invocation, attributed to its registering package, and the preset's closing
+hooks are re-appended behind it — the bracket stays first and last, and each
+invocation's report separates handler time from foreign wrapper and hook
+time:
+
+```js
+import { azureFunctionsEntries } from '@wrap-esm-lambda/hooks/azure-functions'
+
+export default definePatches([...azureFunctionsEntries({ onReport, onRegistration })], import.meta.url)
+```
+
+Outside an Azure worker (no `FUNCTIONS_WORKER_RUNTIME`) the config is inert.
+For the `package.json` `"main"` prelude delivery, skip the config and call
+`activateAzureFunctions(options)` directly — the worker is already set up
+before any user module loads, so it activates immediately with no load hooks
+at all. `armAzureFunctions(options)` is the preload half: it retries
+activation at each module load event until the worker serves the core module,
+which is still before the first line of user code runs. See
+[examples/azure-functions](../../examples/azure-functions) for both shapes
+under Core Tools' `func start`.
+
 Sources already instrumented at build time (sentinel present) are passed
 through untouched, so layering this on an instrumented bundle is safe.
 

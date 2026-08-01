@@ -396,6 +396,51 @@ API Gateway events against it on the runtime image and reads billed
 milliseconds and memory off the platform's own `REPORT` line onto the job
 summary.
 
+## Bracketing Azure Functions — the platform's hooks, first and last
+
+Azure's v4 Node model needs no handler transform at all: the platform ships
+an extension pipeline — `preInvocation`/`postInvocation` hooks that may
+replace the function callback, the inputs, the result and the error, executed
+by the worker **strictly in registration order**. Array position is the whole
+ordering contract, and every registration funnels through one function:
+`registerHook` on `@azure/functions-core` — a module the worker serves from a
+`require()` proxy, which **never exists as a file**. That is the one target
+the exports tap fundamentally cannot reach, so the `azure-functions` preset
+handles it the way the `aws-lambda` preset handles `_HANDLER`: by reading the
+platform's own contract. It registers at the earliest instant the platform
+allows (nothing can register before worker setup — the module isn't served
+yet), patches `registerHook` in place on the shared core object, and from
+that choke point keeps its bracket true: its opening hook stays first, its
+closing hooks are re-appended to the tail whenever anyone registers behind
+them — a coexisting APM's hooks (Application Insights registers through this
+exact module), even one registered mid-invocation, execute inside the
+bracket, individually timed and attributed:
+
+```js
+// wrap.config.mjs — nothing to name here either: the pipeline is the target
+import { definePatches } from '@wrap-esm-lambda/core'
+import { azureFunctionsEntries } from '@wrap-esm-lambda/hooks/azure-functions'
+
+export default definePatches([...azureFunctionsEntries({ onReport: (report) => console.log(report) })], import.meta.url)
+```
+
+Each invocation reports the full nesting: `totalMs` (first pre hook → last
+post hook), `callbackMs` (outermost callback wrapper — applied by the
+preset's _last_ pre hook, so it contains every foreign wrapper), `handlerMs`
+(innermost — applied by its _first_ pre hook, nothing between it and user
+code), per-hook timings for every foreign hook, and flags for anything that
+swapped the inputs, replaced the callback, bypassed the handler, or mutated
+the result or error on the way out. Outside an Azure worker the same config
+is inert. Delivery is either the worker-arguments preload (the
+`NODE_OPTIONS` analog) or a `package.json` `"main"` prelude — Azure's own
+recommended agent delivery, which keeps prewarmed workers usable;
+[examples/azure-functions](examples/azure-functions) runs both shapes under
+Core Tools' `func start` (the real host, the real worker), against a fake
+coexisting agent, and the CI Azure lane asserts the whole story on every
+push. The worker-side mechanics are replayed line-for-line in
+[`__test__/azure-functions.spec.ts`](__test__/azure-functions.spec.ts);
+platform details and caveats in [docs/serverless.md](docs/serverless.md).
+
 The dedicated transform this repo started with is gone — everything runs on
 the tap, and the handler shape rides its rewrite path. Stack traces survive:
 the rewrite emits a source map, chained all the way back to an original
