@@ -1,0 +1,97 @@
+# The ecosystem corpus (corpus/): popular packages curated by artifact
+# shape, run through the identity-patch battery on every relevant push/PR at
+# the versions pinned in pnpm-lock.yaml — deterministic, an ordinary red
+# check when a transform regression lands.
+#
+# The nightly schedule is the other half (the oxc-monitor analog): bump the
+# corpus dependencies to LATEST first, then run. A red nightly is the
+# product working — a package release changed its emitted artifact shape,
+# caught here before a user hits it. Nothing is pushed; the run's log and
+# the uploaded matrix.md are the report.
+name: Corpus
+'on':
+  push:
+    branches:
+      - main
+    paths:
+      - corpus/**
+      - packages/**
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+      - pnpm-lock.yaml
+      - .github/workflows/corpus.yml
+  pull_request:
+    paths:
+      - corpus/**
+      - packages/**
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+      - pnpm-lock.yaml
+      - .github/workflows/corpus.yml
+  schedule:
+    # nightly, off the top of the hour to be polite to the scheduler
+    - cron: '37 3 * * *'
+  workflow_dispatch:
+    inputs:
+      latest:
+        description: 'Set to "latest" to bump corpus deps to latest before running (the nightly mode).'
+        required: false
+        default: 'pinned'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  corpus:
+    name: Corpus (${{ github.event_name == 'schedule' && 'latest' || inputs.latest || 'pinned' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6
+      - name: Setup node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          # setup-node resolves the latest 22.x, which is past the
+          # nodejs/node#59929 fix train the corpus runner requires (it
+          # refuses pre-fix minors with an explanation)
+          node-version: 22
+          cache: pnpm
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - name: Cache cargo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: corpus-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: corpus-cargo-
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Bump corpus to latest (nightly mode)
+        if: github.event_name == 'schedule' || inputs.latest == 'latest'
+        run: |
+          pnpm --dir corpus up --latest
+          pnpm install --no-frozen-lockfile
+      - name: Build addon
+        run: pnpm build
+      - name: Build packages
+        run: pnpm build:packages
+      - name: Run corpus
+        run: node corpus/run.mjs
+      - name: Upload matrix
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: corpus-matrix
+          path: corpus/matrix.md
+          if-no-files-found: ignore

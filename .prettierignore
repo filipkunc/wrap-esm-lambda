@@ -20,3 +20,8 @@ hooks/sourcemap-demo/handler-throws.mjs
 # these, so reformatting them here just means the next run undoes it.
 hooks/benchTable.md
 hooks/interplay-matrix/matrix.md
+# Corpus scratch output (gitignored) and the generated corpus results table —
+# corpus/run.mjs writes matrix.md, so reformatting it means the next run
+# undoes it.
+corpus/.scratch
+corpus/matrix.md

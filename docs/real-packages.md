@@ -4,6 +4,11 @@ Field notes from pointing the declarative exports tap at real packages — one
 per module-system shape. Each section is backed by a spec that runs the real
 package.
 
+(The one-per-shape specs below are the deep end; the wide end is the
+[ecosystem corpus](../corpus) — ~27 popular packages curated by artifact
+shape, run through an identity-patch battery on every push and against
+latest versions nightly, results in [corpus/matrix.md](../corpus/matrix.md).)
+
 ## The AWS SDK (`@smithy/core`)
 
 [`__test__/aws.spec.ts`](../__test__/aws.spec.ts) proves the tap against the
