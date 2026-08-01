@@ -844,9 +844,11 @@ jobs:
         run: pnpm build:packages
       # Not a workspace dependency on purpose: its postinstall downloads the
       # host binaries from cdn.functions.azure.com, and a restricted network
-      # must not lose `pnpm install` over an example's tooling.
+      # must not lose `pnpm install` over an example's tooling. Pinned exactly
+      # because a global npm install is the one dependency the lockfile cannot
+      # cover — bump it here, deliberately, the way Renovate bumps the rest.
       - name: Install Azure Functions Core Tools
-        run: npm i -g azure-functions-core-tools@4
+        run: npm i -g azure-functions-core-tools@4.12.1
       - name: Record versions
         run: |
           echo "### Azure Functions Core Tools" >> $GITHUB_STEP_SUMMARY
