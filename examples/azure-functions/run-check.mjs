@@ -71,7 +71,7 @@ async function waitReady(getOutput, timeoutMs = 180_000) {
 
 // the host relays worker console lines through its own logger — strip any
 // coloring so a marker's JSON payload parses whatever the log formatting does
-const stripAnsi = (text) => text.replace(/\[[0-9;]*m/g, '')
+const stripAnsi = (text) => text.replace(/\u001b\[[0-9;]*m/g, '')
 
 function parseMarkers(output, prefix) {
   return stripAnsi(output)
