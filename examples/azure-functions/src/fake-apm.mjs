@@ -29,8 +29,9 @@ if (core === undefined) {
     console.log('FAKEAPM:pre')
     await sleep(5)
     const chain = context.functionCallback
-    context.functionCallback = (...args) => {
+    context.functionCallback = async (...args) => {
       console.log('FAKEAPM:wrap')
+      await sleep(5) // wrapper cost, distinct from hook-body cost: the report separates them
       return chain(...args)
     }
     if (!latePostRegistered) {
