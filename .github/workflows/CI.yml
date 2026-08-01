@@ -38,6 +38,11 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    # A hung job never fails, so retry.yml never heals it — only a human
+    # pressing cancel does. The ceiling converts a hang (one stuck pnpm
+    # fetch has held a run for half an hour) into a failure the retry
+    # workflow re-runs automatically. Slowest healthy job observed: ~5 min.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm
@@ -82,6 +87,7 @@ jobs:
   msrv:
     name: MSRV - rustc 1.95
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # `rust-version = "1.95"` in Cargo.toml is a promise to contributors, and
     # until now nothing kept it: every other Rust job floats on stable, so a
     # dependency raising the real floor would surface as somebody's build
@@ -159,6 +165,7 @@ jobs:
             build: pnpm build --target wasm32-wasip1-threads
     name: stable - ${{ matrix.settings.target }} - node@22
     runs-on: ${{ matrix.settings.host }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm
@@ -267,6 +274,7 @@ jobs:
           - '24'
           - '26'
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm
@@ -374,6 +382,7 @@ jobs:
           - '22'
           - '24'
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm
@@ -646,6 +655,7 @@ jobs:
           - '24'
           - '26'
     runs-on: ${{ matrix.settings.host }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm
@@ -702,6 +712,7 @@ jobs:
           - '24'
           - '26'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm
@@ -776,6 +787,7 @@ jobs:
           - '24'
           - '26'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm
@@ -856,6 +868,7 @@ jobs:
     #   A/B is the only honest one.
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Checkout base (PR A/B)
@@ -937,6 +950,7 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Pull requests must never reach this job. Until now it was reached on
     # every PR and only ever skipped because one of its `needs` had failed —
     # so the first fully green PR ran it, and the one thing standing between a
