@@ -89,3 +89,66 @@ the risk budget is zero, the build-time shell
 ([`@wrap-esm-lambda/unplugin`](../packages/unplugin)) delivers byte-identical
 instrumentation with no runtime loader machinery at all — the hybrid design
 is itself the mitigation for the next loader regression.
+
+## Azure Functions: the hook pipeline, first and last
+
+For Azure the delivery question above is only half the story, because the
+platform ships something Lambda does not: an extension pipeline of its own.
+What the worker actually does (v4 programming model;
+`Azure/azure-functions-nodejs-worker`, mirrored line-for-line by
+[`__test__/azure-functions.spec.ts`](../__test__/azure-functions.spec.ts)):
+
+- **Hooks execute strictly in registration order** — a plain array, pushed by
+  `registerHook`, iterated as a sequential awaited loop. There is no priority
+  API; disposal splices; re-registering pushes to the tail. Array position is
+  the entire ordering contract.
+- **Pre hooks own the invocation's shape**: the worker reads `inputs` and
+  `functionCallback` back off the pre-hook context after the chain runs, so
+  any pre hook may wrap — or replace — the handler. **Post hooks own the
+  outcome**: `result` and `error` are read back the same way, so a post hook
+  can mutate the response or suppress the error.
+- **The registry is not a file.** `@azure/functions-core` is served from a
+  `Module.prototype.require` proxy the worker installs at setup. Before that
+  instant the specifier resolves nowhere — which has two consequences. A
+  `--require`/`--import` preload cannot register hooks (this is why agents
+  register from app code on Azure), and a copy of `@azure/functions` loaded
+  at preload is permanently broken: its `tryGetCoreApiLazy` caches the miss
+  forever and every later `app.hook.*`/`app.http()` call becomes a
+  console.warn no-op. Do not import the library from a config.
+
+The `azure-functions` preset (`@wrap-esm-lambda/hooks/azure-functions`) turns
+those mechanics into a bracket. "First" is won by timing: nobody can register
+before worker setup, and a load event fires before its module's body runs, so
+activating at the first post-setup load event beats the first line of user
+code. "Last" cannot be won by timing — anyone may register later — so the
+preset patches `registerHook` in place on the shared object the require proxy
+hands out: the one choke point every registration path funnels through, the
+`app.hook.*` of every library copy and Application Insights' direct core
+usage alike. Each foreign registration is attributed (nearest stack frame
+outside the preset and the library, mapped to its `node_modules` package),
+its pre/post callbacks are wrapped for per-invocation timing, and the
+preset's closing hooks are disposed and re-pushed so the tail keeps holding —
+against late registrations too, including mid-invocation ones. That property
+assignment is this repo's one deliberate step outside file transforms, and it
+is the same move the aws-lambda preset makes with `_HANDLER`: reading the
+platform's own extension contract (the module loader is never touched). The
+honest limit: an agent that captured a reference to `registerHook` _before_
+activation and calls it later would bypass the choke point — on Azure that
+window is worker boot only, where no third-party code runs.
+
+Delivery, then, has two shapes. The worker-arguments preload
+(`languageWorkers__node__arguments = --import @wrap-esm-lambda/hooks/register`,
+the config arming the preset) is the Lambda-like route and additionally
+covers file taps on modules the worker itself loads — but Azure documents
+that custom worker arguments forfeit prewarmed workers, a real cold-start
+cost. The `package.json` `"main"` prelude (call `activateAzureFunctions()`
+first thing) is the platform's own recommendation for agents, keeps prewarm,
+and loses nothing hook-wise — the worker is set up before any user module
+loads, and being first in `"main"` is being first among user code. The only
+thing the prelude cannot do is out-run _another preloaded agent's_ file taps.
+[examples/azure-functions](../examples/azure-functions) runs both shapes
+under Core Tools' `func start` — the real host spawning the real worker, so
+the pipeline is the production one, not an emulation of it — against a fake
+coexisting agent that registers through both funnels and once mid-invocation;
+the CI Azure lane (`test-azure-functions`) asserts the ordering, the timings
+and the attribution on Node 22 and 24.

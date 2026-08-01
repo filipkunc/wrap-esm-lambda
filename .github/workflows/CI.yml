@@ -798,6 +798,50 @@ jobs:
           echo "$SPECS"
           OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test $SPECS
         shell: bash
+  test-azure-functions:
+    name: Test Azure Functions (Core Tools) - node@${{ matrix.node }}
+    # Core Tools' `func start` is the platform's own emulation: the real host
+    # process spawning the real Node worker, so the hook pipeline the
+    # azure-functions preset brackets is the production one, not a replica
+    # (the replica lives in azure-functions.spec.ts and runs on every lane).
+    # No artifact download and no Rust: the preset emits no patch entries, so
+    # the runtime shell never binds the transform engine — this lane proves
+    # the bracket, not the tap. The driver runs both delivery shapes: the
+    # languageWorkers__node__arguments preload and the package.json "main"
+    # prelude.
+    strategy:
+      fail-fast: false
+      matrix:
+        node:
+          - '22'
+          - '24'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6
+      - name: Setup node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build packages
+        run: pnpm build:packages
+      # Not a workspace dependency on purpose: its postinstall downloads the
+      # host binaries from cdn.functions.azure.com, and a restricted network
+      # must not lose `pnpm install` over an example's tooling.
+      - name: Install Azure Functions Core Tools
+        run: npm i -g azure-functions-core-tools@4
+      - name: Record versions
+        run: |
+          echo "### Azure Functions Core Tools" >> $GITHUB_STEP_SUMMARY
+          echo "\`func --version\`: $(func --version)" >> $GITHUB_STEP_SUMMARY
+          echo "\`node --version\`: $(node --version)" >> $GITHUB_STEP_SUMMARY
+      - name: Drive func start through both delivery shapes
+        run: pnpm --filter example-azure-functions check
   benchmark:
     name: Benchmark
     # Not in publish's `needs`: a release should not hinge on an apt install
@@ -915,6 +959,7 @@ jobs:
       - test-native-platform
       - test-wasi
       - test-js-only
+      - test-azure-functions
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm

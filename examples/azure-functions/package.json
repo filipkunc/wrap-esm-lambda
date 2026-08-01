@@ -1,0 +1,17 @@
+{
+  "name": "example-azure-functions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runnable example: an Azure Functions v4 app under Core Tools' func start, bracketed first-and-last from the platform's own hook pipeline — every other agent's pre/post invocation hook observed, timed, and attributed.",
+  "main": "src/main.mjs",
+  "scripts": {
+    "start": "func start",
+    "check": "node run-check.mjs"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.16.2",
+    "@wrap-esm-lambda/core": "workspace:^",
+    "@wrap-esm-lambda/hooks": "workspace:^"
+  }
+}

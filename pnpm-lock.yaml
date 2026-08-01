@@ -135,6 +135,18 @@ importers:
         specifier: ^5.109.0
         version: 5.109.0(esbuild@0.28.1)
 
+  examples/azure-functions:
+    dependencies:
+      '@azure/functions':
+        specifier: ^4.16.2
+        version: 4.16.2
+      '@wrap-esm-lambda/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@wrap-esm-lambda/hooks':
+        specifier: workspace:^
+        version: link:../../packages/hooks
+
   examples/express-route:
     dependencies:
       '@wrap-esm-lambda/core':
@@ -393,6 +405,14 @@ packages:
   '@aws/lambda-invoke-store@0.3.0':
     resolution: {integrity: sha512-sl4Bm6yiMNYrZKkqqDFWN0UfnWhlS8ivKxrYl+6t0gCLrqr8y3B2IqZZbFRkfaVVp7C/baApyh71P+LeE1A2sQ==}
     engines: {node: '>=18.0.0'}
+
+  '@azure/functions-extensions-base@0.3.0':
+    resolution: {integrity: sha512-Cux0hLu5ZXlC/Kb+yvJVhRLIdkfFwui2HeT5oGZL00r/GCUUkhGTzRfZUjRN4Bq729mPv3okPucz2z7SMQLStA==}
+    engines: {node: '>=18.0'}
+
+  '@azure/functions@4.16.2':
+    resolution: {integrity: sha512-6uq0Z7e3njy8fHpgCVIJWDtbkZz+BYXc6L8fQjisf8+hPdnauM5yZ70j9YC8xas6zvL1dFA+EfLuZcNYyuWLTg==}
+    engines: {node: '>=20.0'}
 
   '@emnapi/core@1.11.2':
     resolution: {integrity: sha512-TC8MkTuZUtcTSiFeuC0ksCh9QIJ5+F21MvZ4Wn4ORfYaFJ/0dsiudv5tVkejgwZlwQ39jL9WWDe2lz8x0WglOA==}
@@ -3251,6 +3271,13 @@ snapshots:
       tslib: 2.8.1
 
   '@aws/lambda-invoke-store@0.3.0': {}
+
+  '@azure/functions-extensions-base@0.3.0': {}
+
+  '@azure/functions@4.16.2':
+    dependencies:
+      '@azure/functions-extensions-base': 0.3.0
+      cookie: 0.7.2
 
   '@emnapi/core@1.11.2':
     dependencies:
