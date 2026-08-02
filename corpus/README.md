@@ -72,7 +72,7 @@ deliberate JavaScript: `lib/consumer-require.cjs` (see finding 5).
 
 ## Findings so far
 
-Shipping the corpus produced six immediately, which is the point of it:
+Shipping the corpus produced seven immediately, which is the point of it:
 
 1. **require(esm) of a hook-transformed module, pre-fix-train** — on Node
    22.22.2 / 24.10.0, `require()` of an ESM module whose source a sync load
@@ -126,6 +126,20 @@ module not been linked`); fixed exactly at the
    class, here shipping inside the most popular framework there is. Fixed
    territory on 24.11.1+ (both host scenarios pass on 24.18.0); the host
    harness skips loudly on older Nodes and the corpus CI job runs Node 24.
+7. **A quadratic star walk** (found by this benchmark, then **fixed in
+   core**) — date-fns' generated barrel is 245 `export * from` statements
+   and no own exports, and the corpus taps all 250 forwarded bindings.
+   `resolveStarBindings` asked "which source provides this name?" once per
+   name, re-walking the whole graph each time: ~61k provider probes,
+   **~90ms of a ~99ms transform**, over files the parse cache had already
+   read. (The first write-up of this table called that row "fs-bound";
+   measuring it showed reading and parsing all 245 sources is only ~9ms.)
+   The walk now indexes the graph once into name → providers, which is
+   O(sources + names): the row went **98.7ms → 9.2ms** and stopped scaling
+   with the binding count (250 bindings cost about what 1 does). Only
+   configs that tap a bare-`export *` barrel paid it, and the corpus's
+   whole-surface tap is the pathological case — a normal 1–3 binding entry
+   paid ~6ms — which is exactly why it took a corpus to surface.
 
 ## Hosts: Next.js (SSR and the dev server)
 
@@ -167,14 +181,15 @@ shared-runner allocation jitter was observed turning an 8.8MB
 `Buffer.concat` into anything from 2ms to 578ms, so a median of few samples
 is noise). Two headline results from the pinned corpus:
 
-- **ESM (the engine comparison): acorn ~4.6× slower geomean** — parse,
-  per-binding validation and the rewrite tier are where the engines
-  genuinely differ, and the biggest rewrite gaps run 4–8× (nanoid, execa,
-  chalk, uuid, pg's esm wrapper). The outlier the other way is the
-  date-fns barrel, whose cost is the star walk's file reads — fs-bound, so
-  the engines converge there. This is consistent with the ~6× figure in
+- **ESM (the engine comparison): acorn ~5.2× slower geomean, 3.1× summed**
+  — parse, per-binding validation and the rewrite tier are where the
+  engines genuinely differ, and the biggest rewrite gaps run 4–8× (nanoid,
+  execa, chalk, uuid, pg's esm wrapper). Consistent with the ~6× figure in
   [docs/benchmarks.md](../docs/benchmarks.md): the native edge lives where
-  parsing lives.
+  parsing lives. The engines converge on the date-fns barrel, whose cost is
+  dominated by reading and parsing its 245 star sources rather than by the
+  tap itself — but see finding 7 for how much of that row used to be
+  something else entirely.
 - **CJS (plumbing sanity): geomean ~1.0×, the expected tie** — no parse
   happens in CJS mode, so these rows verify the shared byte pipeline
   rather than race the engines; a gap here would be a plumbing bug.
@@ -205,9 +220,20 @@ Two schedules in CI ([corpus.yml](../.github/workflows/corpus.yml)):
   oxc-monitor analog; a red run means the ecosystem moved (a bundler release
   emitting a new exports shape) and the corpus caught it before a user did.
 
-The committed [matrix.md](matrix.md) is a snapshot from a pinned run;
-regenerate it when the corpus or the transform changes. Timing columns vary
-by machine — treat them as relative, and watch the typescript row.
+**Where results show up.** The committed [matrix.md](matrix.md),
+[engines.md](engines.md) and [engines.svg](engines.svg) are snapshots: they
+change only when somebody runs the commands and commits, which is right for
+files people read in the repo but says nothing about a given run. So every
+run ALSO appends its report to the GitHub job summary when one exists
+(`$GITHUB_STEP_SUMMARY`, see [lib/publish.mts](lib/publish.mts)) — the
+tables render on the workflow run page of every PR that touches the corpus,
+with no commit, no bot comment, and no per-runner timing noise in the diff.
+The chart is not inlinable there, so the summary copy points at the run's
+`corpus-results` artifact, which carries both tables and the SVG.
+
+Regenerate the committed snapshots when the corpus or the transform
+changes. Timing columns vary by machine — treat them as relative, and watch
+the typescript and date-fns rows.
 
 ## Dependencies are fixtures, not shipped code
 

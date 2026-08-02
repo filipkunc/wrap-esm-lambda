@@ -30,6 +30,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { packages, keyFor } from './manifest.mts'
 import { nextJsHost } from './lib/hosts.mts'
+import { publishReport } from './lib/publish.mts'
 import type { HostResult } from './lib/hosts.mts'
 import type { CellName, CorpusEntry } from './manifest.mts'
 import type { EnumerateReport, EnumeratedTarget } from './lib/enumerate.mts'
@@ -530,12 +531,12 @@ const md = [
     : []),
 ].join('\n')
 
-if (only.length === 0) {
-  writeFileSync(join(here, 'matrix.md'), md)
-  console.error(`written to ${join(here, 'matrix.md')}`)
-} else {
-  console.log(md)
-}
+publishReport({
+  file: join(here, 'matrix.md'),
+  markdown: md,
+  summaryTitle: 'Corpus results',
+  writeSnapshot: only.length === 0,
+})
 
 if (deviations.length > 0) {
   console.error(`\n${deviations.length} deviation(s) from expected outcomes:`)
