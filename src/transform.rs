@@ -1553,7 +1553,11 @@ mod tests {
       vec!["./x.js".to_string()],
       "only the bare star is a walk source"
     );
-    assert_eq!(reexports.len(), 1, "only the namespace re-export has provenance");
+    assert_eq!(
+      reexports.len(),
+      1,
+      "only the namespace re-export has provenance"
+    );
     assert_eq!(reexports[0].exported, "ns");
     assert_eq!(reexports[0].imported, "*");
     assert_eq!(reexports[0].source, "./y.js");
