@@ -160,6 +160,29 @@ struct NamedInfo {
   source: Option<String>,
 }
 
+/// Where an imported local binding comes from: the module specifier and the
+/// name imported from it (`*` for a namespace import, `default` for a
+/// default import). Recorded so `esm_module_exports` can report the true
+/// origin of import-backed list exports — `import { x } from "m"; export
+/// { x }` resolves to m's `x` per ResolveExport, exactly like `export { x }
+/// from "m"` does.
+struct ImportOrigin {
+  source: String,
+  imported: String,
+}
+
+/// One re-exported name with its provenance, as `esm_module_exports`
+/// reports it: `exported` reaches this module's consumers, `imported` is
+/// the name taken from `source` (`*` for a namespace re-export). The
+/// building block for the caller's same-binding comparison of star
+/// providers (ECMA ResolveExport dedupes identical resolutions; a walk that
+/// only counts providers cannot).
+pub struct ReexportInfo {
+  pub exported: String,
+  pub imported: String,
+  pub source: String,
+}
+
 enum DefaultInfo {
   /// `export default function f() {}` / `class C {}` — the default export is
   /// a live alias of the mutable local binding `f`/`C`; append-only works.
@@ -175,7 +198,7 @@ enum DefaultInfo {
 struct ExportIndex {
   named: Vec<NamedInfo>,
   default: Option<DefaultInfo>,
-  import_locals: std::collections::HashSet<String>,
+  import_locals: std::collections::HashMap<String, ImportOrigin>,
   /// top-level `const` declarations (exported directly or not) by name →
   /// statement index, for demotion of list-exported consts
   top_const: std::collections::HashMap<String, usize>,
@@ -189,7 +212,7 @@ fn build_export_index(program: &Program) -> ExportIndex {
   let mut index = ExportIndex {
     named: Vec::new(),
     default: None,
-    import_locals: std::collections::HashSet::new(),
+    import_locals: std::collections::HashMap::new(),
     top_const: std::collections::HashMap::new(),
     star_sources: Vec::new(),
   };
@@ -198,7 +221,20 @@ fn build_export_index(program: &Program) -> ExportIndex {
       Statement::ImportDeclaration(import) => {
         if let Some(specifiers) = &import.specifiers {
           for spec in specifiers {
-            index.import_locals.insert(spec.local().name.to_string());
+            let imported = match spec {
+              ImportDeclarationSpecifier::ImportSpecifier(named) => {
+                named.imported.name().to_string()
+              }
+              ImportDeclarationSpecifier::ImportDefaultSpecifier(_) => "default".to_string(),
+              ImportDeclarationSpecifier::ImportNamespaceSpecifier(_) => "*".to_string(),
+            };
+            index.import_locals.insert(
+              spec.local().name.to_string(),
+              ImportOrigin {
+                source: import.source.value.to_string(),
+                imported,
+              },
+            );
           }
         }
       }
@@ -424,7 +460,7 @@ fn resolve_binding(
         info.local.clone()
       }
       NamedKind::ListLocal => {
-        if index.import_locals.contains(&info.local) {
+        if index.import_locals.contains_key(&info.local) {
           // import bindings can never be reassigned — snapshot into a `let`
           split_local(ops, fresh, info)
         } else {
@@ -1157,7 +1193,7 @@ pub fn has_module_syntax(source_text: &str) -> bool {
 /// star-graph walk: every exported name (including `default` and
 /// `export * as ns` names) plus the specifiers of bare `export * from`
 /// statements, whose forwarded names require reading those sources.
-pub fn esm_module_exports(source_text: &str) -> (Vec<String>, Vec<String>) {
+pub fn esm_module_exports(source_text: &str) -> (Vec<String>, Vec<String>, Vec<ReexportInfo>) {
   let allocator = Allocator::default();
   let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
   let index = build_export_index(&parsed.program);
@@ -1169,7 +1205,43 @@ pub fn esm_module_exports(source_text: &str) -> (Vec<String>, Vec<String>) {
   if index.default.is_some() {
     names.push("default".to_string());
   }
-  (names, index.star_sources)
+  // provenance of every export that resolves into another module, so the
+  // caller's star walk can compare origins the way ResolveExport does:
+  // explicit re-exports, namespace re-exports, and list exports of
+  // import-backed locals (`import { x } from "m"; export { x }` — the
+  // binding is m's, exactly as if written `export { x } from "m"`)
+  let reexports: Vec<ReexportInfo> = index
+    .named
+    .iter()
+    .filter_map(|info| match info.kind {
+      NamedKind::ReExport => Some(ReexportInfo {
+        exported: info.exported.clone(),
+        imported: info.local.clone(),
+        source: info
+          .source
+          .clone()
+          .expect("ReExport always carries a source"),
+      }),
+      NamedKind::ReExportAll => Some(ReexportInfo {
+        exported: info.exported.clone(),
+        imported: "*".to_string(),
+        source: info
+          .source
+          .clone()
+          .expect("ReExportAll always carries a source"),
+      }),
+      NamedKind::ListLocal => index
+        .import_locals
+        .get(&info.local)
+        .map(|origin| ReexportInfo {
+          exported: info.exported.clone(),
+          imported: origin.imported.clone(),
+          source: origin.source.clone(),
+        }),
+      _ => None,
+    })
+    .collect();
+  (names, index.star_sources, reexports)
 }
 
 #[cfg(test)]

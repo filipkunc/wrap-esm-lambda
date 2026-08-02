@@ -76,11 +76,16 @@ module not been linked`); fixed exactly at the
    pins for the `Module._load` corridors. Reproduced through five real
    packages (nanoid, chalk, p-limit, execa, lodash-es). The runner now
    requires a post-fix Node and says why.
-2. **Same-binding star dedup** — date-fns forwards `longFormatters` through
-   two `export *` sources that resolve to the _same_ origin binding. Node
-   links it (ResolveExport dedupes identical bindings); the static star walk
-   refuses it as ambiguous by provider count. Tracked as an excluded binding
-   in the manifest until the walk compares resolved origins.
+2. **Same-binding star dedup** (found, then **fixed**) — date-fns forwards
+   `longFormatters` through two `export *` sources that resolve to the
+   _same_ origin binding. Node links it (ResolveExport dedupes identical
+   resolutions); the static star walk refused it as ambiguous by provider
+   count. Both engines now report re-export provenance (explicit
+   re-exports, namespace re-exports, import-backed list exports) and the
+   walk compares providers by transitive origin — same binding resolves,
+   genuinely different origins stay a loud refusal naming both origins.
+   Pinned by `__test__/stars-dedup.spec.ts` under both engines; date-fns
+   runs at full surface in the corpus again.
 3. **`export *` from a CJS file as a package's entire import condition** —
    vue's `index.mjs` is one line: `export * from './index.js'` (CJS). A star
    into CJS is statically invisible (documented loud limit), and vue shows

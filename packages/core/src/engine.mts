@@ -77,13 +77,28 @@ export interface TapResult {
   map?: string | null
 }
 
+/** One re-exported name with its provenance: `exported` is the
+ * consumer-visible name, `imported` the name taken from `source` (`*` for a
+ * namespace re-export, `default` for a default import). Emitted for
+ * explicit re-exports, namespace re-exports and list exports of
+ * import-backed locals — the shapes whose binding lives in another module. */
+export interface EsmReexport {
+  exported: string
+  imported: string
+  source: string
+}
+
 /**
  * The statically visible surface of an ESM module: every exported name plus
- * the specifiers of bare `export * from` statements.
+ * the specifiers of bare `export * from` statements, and the provenance of
+ * every export that resolves into another module. `reexports` is optional
+ * only for engine-version tolerance (an older prebuilt addon omits it);
+ * without it the star walk keeps its conservative provider-count refusal.
  */
 export interface EsmExportsInfo {
   names: string[]
   starSources: string[]
+  reexports?: EsmReexport[]
 }
 
 /** The optional trailing arguments both tap variants share. */

@@ -2,17 +2,38 @@
 /* eslint-disable */
 /**
  * The statically visible surface of an ESM module: every exported name
- * (including `default` and `export * as ns` names) plus the specifiers of
- * bare `export * from` statements. The building block for resolving
- * star-forwarded names: walk the star sources' files with this, then pass
- * the found provenance to `exportsTap` as `starResolutions`.
+ * (including `default` and `export * as ns` names), the specifiers of
+ * bare `export * from` statements, plus the provenance of every export
+ * that resolves into another module (`reexports`). The building block for
+ * resolving star-forwarded names: walk the star sources' files with this,
+ * compare providers by transitive origin, then pass the found provenance
+ * to `exportsTap` as `starResolutions`.
  */
 export interface EsmExportsInfo {
   names: Array<string>
   starSources: Array<string>
+  reexports: Array<EsmReexport>
 }
 
 export declare function esmModuleExports(input: string): EsmExportsInfo
+
+/**
+ * One re-exported name with its provenance: `exported` is the name this
+ * module's consumers see, `imported` the name taken from `source` (`*`
+ * for a namespace re-export, `default` for a default import). Covers
+ * explicit re-exports (`export { a as b } from "m"`), namespace
+ * re-exports (`export * as ns from "m"`) and list exports of
+ * import-backed locals (`import { x } from "m"; export { x }`) — the
+ * shapes whose binding lives in another module, which is what lets the
+ * star walk compare providers by resolved origin the way ECMA
+ * ResolveExport does (two `export *` sources forwarding the SAME origin
+ * binding are not ambiguous; date-fns ships exactly that shape).
+ */
+export interface EsmReexport {
+  exported: string
+  imported: string
+  source: string
+}
 
 /**
  * The generic "exports tap" behind declarative patches, for every patch
