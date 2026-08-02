@@ -1541,7 +1541,7 @@ mod tests {
   #[test]
   fn test_esm_module_exports_surface() {
     let source = "export const a = 1;\nexport * from \"./x.js\";\nexport * as ns from \"./y.js\";\nexport default 2;\n";
-    let (names, stars) = esm_module_exports(source);
+    let (names, stars, reexports) = esm_module_exports(source);
     assert!(names.contains(&"a".to_string()));
     assert!(
       names.contains(&"ns".to_string()),
@@ -1552,6 +1552,39 @@ mod tests {
       stars,
       vec!["./x.js".to_string()],
       "only the bare star is a walk source"
+    );
+    assert_eq!(reexports.len(), 1, "only the namespace re-export has provenance");
+    assert_eq!(reexports[0].exported, "ns");
+    assert_eq!(reexports[0].imported, "*");
+    assert_eq!(reexports[0].source, "./y.js");
+  }
+
+  #[test]
+  fn test_esm_module_exports_reexport_provenance() {
+    // the three shapes whose binding lives in another module, plus a local
+    // list export that must NOT gain provenance
+    let source = "import { x } from \"./m.js\";\nimport d from \"./m.js\";\nexport { x as y };\nexport { d };\nexport { a as b } from \"./n.js\";\nconst local = 1;\nexport { local };\n";
+    let (names, _, reexports) = esm_module_exports(source);
+    assert!(names.contains(&"local".to_string()));
+    let find = |exported: &str| {
+      reexports
+        .iter()
+        .find(|r| r.exported == exported)
+        .unwrap_or_else(|| panic!("no provenance for {exported}"))
+    };
+    let y = find("y");
+    assert_eq!((y.imported.as_str(), y.source.as_str()), ("x", "./m.js"));
+    let d = find("d");
+    assert_eq!(
+      (d.imported.as_str(), d.source.as_str()),
+      ("default", "./m.js"),
+      "default-import-backed list export resolves to the default binding"
+    );
+    let b = find("b");
+    assert_eq!((b.imported.as_str(), b.source.as_str()), ("a", "./n.js"));
+    assert!(
+      !reexports.iter().any(|r| r.exported == "local"),
+      "a genuinely local list export has no provenance"
     );
   }
 

@@ -5,7 +5,6 @@ import { promisify } from 'node:util'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import * as oxc from '../index.js'
 import * as acornEngine from '@wrap-esm-lambda/engine-acorn'
 import { applyMatched } from '@wrap-esm-lambda/core'
 
@@ -18,6 +17,18 @@ import { applyMatched } from '@wrap-esm-lambda/core'
 // genuinely ambiguous case that must stay a loud refusal. (Found by the
 // corpus: date-fns forwards `longFormatters` through ./format.js and
 // ./parse.js from one _lib module; see corpus/README.md.)
+//
+// The native addon is loaded dynamically so this spec also runs on the
+// JS-only fallback lane (no addon built): the acorn legs always run — that
+// lane is exactly where they matter — and the oxc legs skip with a reason.
+
+type Engine = typeof acornEngine
+let oxc: Engine | null = null
+try {
+  oxc = (await import('../index.js')) as unknown as Engine
+} catch {
+  // no native binding on this lane — acorn-only coverage below
+}
 
 const execFileAsync = promisify(execFile)
 const fixture = (name: string) => fileURLToPath(new URL(`./fixtures/stars/${name}`, import.meta.url))
@@ -33,26 +44,39 @@ const entryFor = (bindings: string[]) => [
   },
 ]
 
-test('both engines report identical re-export provenance, all three shapes', () => {
-  const sources = {
-    'import-backed list export + local': readFileSync(pkgFile('a.js'), 'utf8'),
-    'direct re-export + local': readFileSync(pkgFile('b.js'), 'utf8'),
-    'namespace re-export': 'export * as ns from "./m.js"\n',
-    'default-import-backed list export': 'import d from "./m.js"\nexport { d as thing }\n',
+const PROVENANCE_SHAPES: [string, string, { exported: string; imported: string; source: string }[]][] = [
+  [
+    'import-backed list export + local',
+    readFileSync(pkgFile('a.js'), 'utf8'),
+    [{ exported: 'shared', imported: 'shared', source: './origin.js' }],
+  ],
+  [
+    'direct re-export + local',
+    readFileSync(pkgFile('b.js'), 'utf8'),
+    [{ exported: 'shared', imported: 'shared', source: './origin.js' }],
+  ],
+  ['namespace re-export', 'export * as ns from "./m.js"\n', [{ exported: 'ns', imported: '*', source: './m.js' }]],
+  [
+    'default-import-backed list export',
+    'import d from "./m.js"\nexport { d as thing }\n',
+    [{ exported: 'thing', imported: 'default', source: './m.js' }],
+  ],
+]
+
+test('acorn reports the expected re-export provenance, all shapes', () => {
+  for (const [label, source, expected] of PROVENANCE_SHAPES) {
+    assert.deepStrictEqual(acornEngine.esmModuleExports(source).reexports, expected, label)
   }
-  for (const [label, source] of Object.entries(sources)) {
-    const fromOxc = oxc.esmModuleExports(source)
-    const fromAcorn = acornEngine.esmModuleExports(source)
-    assert.deepStrictEqual(fromAcorn.reexports, fromOxc.reexports, `${label}: provenance matches across engines`)
+})
+
+test('the engines agree on provenance', { skip: oxc === null ? 'native addon not built on this lane' : false }, () => {
+  for (const [label, source] of PROVENANCE_SHAPES) {
+    assert.deepStrictEqual(
+      oxc!.esmModuleExports(source).reexports,
+      acornEngine.esmModuleExports(source).reexports,
+      `${label}: provenance matches across engines`,
+    )
   }
-  // and the provenance itself is what the walk needs: a.js's `shared` is
-  // m's binding even though the export list carries no source
-  assert.deepStrictEqual(oxc.esmModuleExports(sources['import-backed list export + local']).reexports, [
-    { exported: 'shared', imported: 'shared', source: './origin.js' },
-  ])
-  assert.deepStrictEqual(oxc.esmModuleExports(sources['direct re-export + local']).reexports, [
-    { exported: 'shared', imported: 'shared', source: './origin.js' },
-  ])
 })
 
 test('two star providers forwarding the SAME origin binding resolve (the date-fns shape)', () => {
@@ -62,7 +86,6 @@ test('two star providers forwarding the SAME origin binding resolve (the date-fn
   })
   assert.notStrictEqual(applied, null)
   // the shadow export reroutes through the first provider
-  assert.match(String(applied!.code ?? '') + applied!.map, /./) // rewrite or append — either way it produced output
   assert.match(String(applied!.code ?? barrelSource), /\.\/a\.js/)
 })
 
@@ -84,19 +107,23 @@ test('two star providers with DIFFERENT origins stay a loud refusal, origins nam
 })
 
 for (const engine of ['oxc', 'acorn']) {
-  test(`end to end under the runtime hook (${engine}): the deduped star binding patches`, async () => {
-    const { stdout } = await execFileAsync(
-      process.execPath,
-      ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
-      {
-        env: {
-          ...process.env,
-          WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.mjs'),
-          WRAP_ESM_LAMBDA_STRICT: '1',
-          WRAP_ESM_LAMBDA_ENGINE: engine,
+  test(
+    `end to end under the runtime hook (${engine}): the deduped star binding patches`,
+    { skip: engine === 'oxc' && oxc === null ? 'native addon not built on this lane' : false },
+    async () => {
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
+        {
+          env: {
+            ...process.env,
+            WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.mjs'),
+            WRAP_ESM_LAMBDA_STRICT: '1',
+            WRAP_ESM_LAMBDA_ENGINE: engine,
+          },
         },
-      },
-    )
-    assert.strictEqual(stdout.trim(), 'patched:origin')
-  })
+      )
+      assert.strictEqual(stdout.trim(), 'patched:origin')
+    },
+  )
 }
