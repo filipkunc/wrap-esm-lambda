@@ -1,0 +1,5 @@
+{
+  "name": "corpus-host-nextjs",
+  "private": true,
+  "description": "Minimal pages-router Next.js app for the corpus HOST harness: Next is not a tap target — it owns its module graph — but its server side consumes ordinary node_modules dependencies, and those the runtime hook reaches via NODE_OPTIONS preload. Dependencies resolve from corpus/node_modules by directory walk-up."
+}

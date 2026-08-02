@@ -9,6 +9,9 @@ allowBuilds:
   '@swc/core': true
   canvas: true
   esbuild: true
+  # next's optional image-optimization dependency; the corpus host harness
+  # never touches images, so its native build stays off
+  sharp: false
 
 # The musl test lane installs on the glibc host and then runs the suite inside
 # an Alpine container against the same node_modules, so the platform-specific
