@@ -95,12 +95,40 @@ module not been linked`); fixed exactly at the
    real properties with correct values; consumers gain imports, lose
    nothing.
 
+## Engine benchmark
+
+[bench.mjs](bench.mjs) runs the same full-surface identity tap once per
+engine — native oxc vs pure-JS acorn, one process each because the engine
+binds process-wide — and writes [engines.md](engines.md). Timing is the
+**minimum** of repeated runs (the work is deterministic and CPU-bound;
+shared-runner allocation jitter was observed turning an 8.8MB
+`Buffer.concat` into anything from 2ms to 578ms, so a median of few samples
+is noise). Two headline results from the pinned corpus:
+
+- The engines are much closer on real packages than on parse-heavy
+  fixtures: **1.3× summed / 1.7× geomean** — because most real entries are
+  CJS append taps where neither engine parses anything, and the biggest
+  rows are fs-bound (the date-fns star walk) where the engine barely
+  matters. oxc's real edge is the **ESM rewrite path: 3–10×** (nanoid
+  10.4×, execa 9.0×, chalk 7.6×, lodash-es 3.9×). The ~6× figure in
+  [docs/benchmarks.md](../docs/benchmarks.md) is real, but it lives where
+  parsing lives.
+- The bench doubles as the widest **byte-parity check** available:
+  append-tier output (source + snippets, promised byte-identical) is
+  asserted hash-equal per entry and holds corpus-wide. Rewrite-tier output
+  is _engine-styled_ by construction — oxc regenerates through codegen
+  (normalized formatting), acorn edits via magic-string (original
+  formatting preserved) — so it is reported, not asserted; semantic parity
+  of the rewrite is covered by the identity battery, which passes under
+  either engine (`WRAP_ESM_LAMBDA_ENGINE=acorn node corpus/run.mjs`).
+
 ## Running it
 
 ```sh
 pnpm build && pnpm build:packages   # the addon and the TS packages
 node corpus/run.mjs                 # full corpus -> corpus/matrix.md
 node corpus/run.mjs zod rxjs        # a subset (prints, does not write)
+node corpus/bench.mjs               # engine shoot-out -> corpus/engines.md
 ```
 
 Two schedules in CI ([corpus.yml](../.github/workflows/corpus.yml)):
