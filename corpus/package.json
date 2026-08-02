@@ -5,7 +5,7 @@
   "description": "Ecosystem corpus for the exports tap: popular packages curated by artifact shape, run through an identity-patch battery. See README.md; results land in matrix.md.",
   "type": "module",
   "scripts": {
-    "corpus": "node run.mjs"
+    "corpus": "node run.mts"
   },
   "engines": {
     "node": ">=22.15.0"
@@ -46,5 +46,10 @@
     "uuid": "^11.0.0",
     "vue": "^3.5.0",
     "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/koa": "^2.15.0",
+    "@types/node": "^24.2.0",
+    "@types/pg": "^8.11.0"
   }
 }

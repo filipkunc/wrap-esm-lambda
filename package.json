@@ -45,8 +45,8 @@
     "artifacts": "napi artifacts",
     "bench": "node --import @oxc-node/core/register benchmark/bench.ts",
     "matrix": "node hooks/interplay-matrix/run.mjs",
-    "corpus": "node corpus/run.mjs",
-    "corpus:bench": "node corpus/bench.mjs",
+    "corpus": "node corpus/run.mts",
+    "corpus:bench": "node corpus/bench.mts",
     "bench:chart": "node --import @oxc-node/core/register benchmark/make-transform-chart.ts",
     "build:packages": "tsc -b packages/core packages/hooks packages/unplugin",
     "build": "napi build --platform --release",
@@ -63,7 +63,7 @@
     "version": "napi version",
     "prepare": "husky",
     "compile:bench": "tsc --project benchmark/tsconfig.json",
-    "typecheck": "pnpm build:packages && tsc --noEmit -p __test__/tsconfig.json"
+    "typecheck": "pnpm build:packages && tsc --noEmit -p __test__/tsconfig.json && tsc --noEmit -p corpus/tsconfig.json"
   },
   "devDependencies": {
     "@apm-js-collab/code-transformer": "^0.18.0",

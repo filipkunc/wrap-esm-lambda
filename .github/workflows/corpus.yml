@@ -86,13 +86,17 @@ jobs:
         run: pnpm build
       - name: Build packages
         run: pnpm build:packages
+      # the corpus is TypeScript running on Node's native type stripping;
+      # stripping does not typecheck, so tsc does, before anything runs
+      - name: Typecheck corpus
+        run: pnpm exec tsc --noEmit -p corpus/tsconfig.json
       - name: Run corpus
-        run: node corpus/run.mjs
+        run: node corpus/run.mts
       # the engine shoot-out doubles as the widest append-tier byte-parity
       # check available (asserted per entry); CI timings are informational —
       # runner noise is why the bench reports minimums
       - name: Engine bench (byte-parity + timings)
-        run: node corpus/bench.mjs
+        run: node corpus/bench.mts
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

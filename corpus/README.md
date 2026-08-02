@@ -15,7 +15,7 @@ Results: [matrix.md](matrix.md) (generated). Current corpus: ~27 packages,
 
 Raw top-N lists cluster by build tool — mostly redundant rollup/tsup output.
 Each corpus entry has to claim an **artifact shape** the table does not
-already cover; that is the admission rule ([manifest.mjs](manifest.mjs)),
+already cover; that is the admission rule ([manifest.mts](manifest.mts)),
 and it is what keeps the corpus small enough to run on every push:
 
 - **handwritten CJS** — lodash (one file, ~640 properties), debug/ms
@@ -42,7 +42,7 @@ excluded for install weight; native addons have no source to tap).
 
 ## The battery
 
-Every package gets the same cells ([run.mjs](run.mjs)):
+Every package gets the same cells ([run.mts](run.mts)):
 
 | cell          | asserts                                                                                                                                                                                                              |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -63,9 +63,16 @@ Deviations from the manifest's expected outcomes fail the run — a known,
 documented outcome is encoded in the manifest, so the matrix distinguishes
 "finding" from "regression".
 
+The corpus itself is TypeScript (`.mts`/`.cts`) running on Node's **native
+type stripping** — no loader, no build step; the runner's Node floor
+(>= 22.22.3, below) is past the 22.18 line where stripping is on by
+default, and `corpus/tsconfig.json` pins `erasableSyntaxOnly` so whatever
+typechecks is guaranteed runnable by stripping alone. One file is
+deliberate JavaScript: `lib/consumer-require.cjs` (see finding 5).
+
 ## Findings so far
 
-Shipping the corpus produced four immediately, which is the point of it:
+Shipping the corpus produced five immediately, which is the point of it:
 
 1. **require(esm) of a hook-transformed module, pre-fix-train** — on Node
    22.22.2 / 24.10.0, `require()` of an ESM module whose source a sync load
@@ -99,10 +106,20 @@ module not been linked`); fixed exactly at the
    namespace can _gain_ names under the tap (lodash: +307). The names are
    real properties with correct values; consumers gain imports, lose
    nothing.
+5. **Type-stripped entry × require(esm)-of-transformed** (found by this
+   corpus's own TypeScript conversion) — a **type-stripped CJS entry**
+   (`.cts`) that `require()`s a hook-transformed ESM module fails to link
+   (`request for X is from a module not been linked`) on the whole 22.x
+   line, **including 22.23.1, past the #59929 fix train**; fixed on
+   24.18.0 / 26.x. Only the _entry_ triggers it — a stripped `.cts` helper
+   under a plain `.cjs` entry works everywhere (which is why
+   `lib/fingerprint.cts` is TypeScript and `lib/consumer-require.cjs` is
+   not). A candidate scenario for the
+   [interplay matrix](../hooks/interplay-matrix).
 
 ## Engine benchmark
 
-[bench.mjs](bench.mjs) runs the same full-surface identity tap once per
+[bench.mts](bench.mts) runs the same full-surface identity tap once per
 engine — native oxc vs pure-JS acorn, one process each because the engine
 binds process-wide — and writes [engines.md](engines.md). Timing is the
 **minimum** of repeated runs (the work is deterministic and CPU-bound;
@@ -125,15 +142,16 @@ is noise). Two headline results from the pinned corpus:
   (normalized formatting), acorn edits via magic-string (original
   formatting preserved) — so it is reported, not asserted; semantic parity
   of the rewrite is covered by the identity battery, which passes under
-  either engine (`WRAP_ESM_LAMBDA_ENGINE=acorn node corpus/run.mjs`).
+  either engine (`WRAP_ESM_LAMBDA_ENGINE=acorn node corpus/run.mts`).
 
 ## Running it
 
 ```sh
 pnpm build && pnpm build:packages   # the addon and the TS packages
-node corpus/run.mjs                 # full corpus -> corpus/matrix.md
-node corpus/run.mjs zod rxjs        # a subset (prints, does not write)
-node corpus/bench.mjs               # engine shoot-out -> corpus/engines.md
+node corpus/run.mts                 # full corpus -> corpus/matrix.md
+node corpus/run.mts zod rxjs        # a subset (prints, does not write)
+node corpus/bench.mts               # engine shoot-out -> corpus/engines.md
+pnpm exec tsc --noEmit -p corpus/tsconfig.json   # typecheck (stripping does not)
 ```
 
 Two schedules in CI ([corpus.yml](../.github/workflows/corpus.yml)):
@@ -150,8 +168,8 @@ by machine — treat them as relative, and watch the typescript row.
 
 ## Extending
 
-Add a dependency to `corpus/package.json`, an entry to `manifest.mjs` whose
+Add a dependency to `corpus/package.json`, an entry to `manifest.mts` whose
 `notes` say which shape it claims, and (for instrumentation targets) a
-`probes/<key>.mjs` + `probes/<key>.config.mjs` + `patches/<key>.mjs` trio.
+`probes/<key>.mts` + `probes/<key>.config.mts` + `patches/<key>.mts` trio.
 If the package needs special handling, prefer a manifest knob with a comment
 over a special case in the runner — the manifest is the documentation.
