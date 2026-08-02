@@ -209,6 +209,23 @@ The committed [matrix.md](matrix.md) is a snapshot from a pinned run;
 regenerate it when the corpus or the transform changes. Timing columns vary
 by machine — treat them as relative, and watch the typescript row.
 
+## Dependencies are fixtures, not shipped code
+
+Every package the corpus lists lives in **`devDependencies`**, deliberately:
+`wrap-esm-lambda-corpus` is `private: true` and never published, so its
+packages are test fixtures rather than dependencies of anything a user
+installs. That classification is what keeps the repo's security gate
+meaningful — `pnpm audit --prod` blocks on the **published** tree, the dev
+tree only warns (see `.github/scripts/audit-report.mjs`). Filing fixtures as
+production dependencies would let any advisory in any corpus package veto an
+unrelated PR, and "a gate that is always red is a gate everybody learns to
+ignore."
+
+Fixtures still must not drag known-vulnerable code into a CI runner, so
+where a patched version exists inside the same major it is pinned in
+`pnpm-workspace.yaml`'s `overrides` (currently `postcss` and `sharp`, both
+reached only through Next's tree) rather than allowlisted.
+
 ## Extending
 
 Add a dependency to `corpus/package.json`, an entry to `manifest.mts` whose

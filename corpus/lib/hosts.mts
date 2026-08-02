@@ -124,7 +124,8 @@ export async function nextJsHost(corpusDir: string, hookEnv: Record<string, stri
     await execFileAsync(nextBin, ['build'], { cwd: hostDir, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 })
   } catch (err) {
     const failure = err as { stdout?: string; stderr?: string; message?: string }
-    const detail = short(`${failure.stdout ?? ''}\n${failure.stderr ?? ''}` || String(failure.message))
+    const streams = `${failure.stdout ?? ''}\n${failure.stderr ?? ''}`.trim()
+    const detail = short(streams || String(failure.message))
     return [
       { scenario: 'next start (SSR)', cell: `BUILD_ERROR(${detail})` },
       { scenario: 'next dev (SSR)', cell: '—' },

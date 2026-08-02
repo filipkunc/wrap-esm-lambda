@@ -10,15 +10,20 @@
   "engines": {
     "node": ">=22.15.0"
   },
-  "dependencies": {
+  "devDependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
+    "@types/koa": "^2.15.0",
+    "@types/node": "^24.2.0",
+    "@types/pg": "^8.11.0",
     "@wrap-esm-lambda/core": "workspace:^",
     "@wrap-esm-lambda/hooks": "workspace:^",
     "@wrap-esm-lambda/unplugin": "workspace:^",
     "axios": "^1.7.0",
     "chalk": "^5.4.0",
+    "chart.js": "^4.5.0",
+    "chartjs-node-canvas": "^5.0.0",
     "date-fns": "^4.1.0",
     "debug": "^4.4.0",
     "esbuild": "^0.28.1",
@@ -48,12 +53,5 @@
     "uuid": "^11.0.0",
     "vue": "^3.5.0",
     "zod": "^3.24.0"
-  },
-  "devDependencies": {
-    "@types/koa": "^2.15.0",
-    "@types/node": "^24.2.0",
-    "@types/pg": "^8.11.0",
-    "chart.js": "^4.5.0",
-    "chartjs-node-canvas": "^5.0.0"
   }
 }
