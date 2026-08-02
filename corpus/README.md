@@ -154,22 +154,30 @@ and the results land in matrix.md's Hosts table:
 [bench.mts](bench.mts) runs the same full-surface identity tap once per
 engine — native oxc vs pure-JS acorn, one process each because the engine
 binds process-wide — and writes [engines.md](engines.md) plus
-[engines.svg](engines.svg), a dumbbell dot plot (one row per entry, two
-dots on a log time axis — the gap between the paired dots is the ratio;
-series are double-encoded by color and dot shape). Timing is the
+[engines.svg](engines.svg), a dumbbell dot plot (one row per ESM entry,
+two dots on a log time axis — the gap between the paired dots is the
+ratio; series are double-encoded by color and dot shape). The results are
+**split by module mode**, because only ESM is an engine comparison: in CJS
+mode the tap ignores the input by design (no parse, no validation —
+accessors appended sight-unseen through the same registerHooks source
+pipeline; `Module._load` is never touched), so CJS rows tie by
+construction and live in their own plumbing-sanity table. Timing is the
 **minimum** of repeated runs (the work is deterministic and CPU-bound;
 shared-runner allocation jitter was observed turning an 8.8MB
 `Buffer.concat` into anything from 2ms to 578ms, so a median of few samples
 is noise). Two headline results from the pinned corpus:
 
-- The engines are much closer on real packages than on parse-heavy
-  fixtures: **1.3× summed / 1.7× geomean** — because most real entries are
-  CJS append taps where neither engine parses anything, and the biggest
-  rows are fs-bound (the date-fns star walk) where the engine barely
-  matters. oxc's real edge is the **ESM rewrite path: 3–10×** (nanoid
-  10.4×, execa 9.0×, chalk 7.6×, lodash-es 3.9×). The ~6× figure in
-  [docs/benchmarks.md](../docs/benchmarks.md) is real, but it lives where
+- **ESM (the engine comparison): acorn ~4.6× slower geomean** — parse,
+  per-binding validation and the rewrite tier are where the engines
+  genuinely differ, and the biggest rewrite gaps run 4–8× (nanoid, execa,
+  chalk, uuid, pg's esm wrapper). The outlier the other way is the
+  date-fns barrel, whose cost is the star walk's file reads — fs-bound, so
+  the engines converge there. This is consistent with the ~6× figure in
+  [docs/benchmarks.md](../docs/benchmarks.md): the native edge lives where
   parsing lives.
+- **CJS (plumbing sanity): geomean ~1.0×, the expected tie** — no parse
+  happens in CJS mode, so these rows verify the shared byte pipeline
+  rather than race the engines; a gap here would be a plumbing bug.
 - The bench doubles as the widest **byte-parity check** available:
   append-tier output (source + snippets, promised byte-identical) is
   asserted hash-equal per entry and holds corpus-wide. Rewrite-tier output
