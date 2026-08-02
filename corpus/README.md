@@ -72,7 +72,7 @@ deliberate JavaScript: `lib/consumer-require.cjs` (see finding 5).
 
 ## Findings so far
 
-Shipping the corpus produced five immediately, which is the point of it:
+Shipping the corpus produced six immediately, which is the point of it:
 
 1. **require(esm) of a hook-transformed module, pre-fix-train** — on Node
    22.22.2 / 24.10.0, `require()` of an ESM module whose source a sync load
@@ -116,12 +116,47 @@ module not been linked`); fixed exactly at the
    `lib/fingerprint.cts` is TypeScript and `lib/consumer-require.cjs` is
    not). A candidate scenario for the
    [interplay matrix](../hooks/interplay-matrix).
+6. **Next.js cannot boot under sync-hook instrumentation on Node 22.x** —
+   `next/dist/build/next-config-ts/require-hook.js` reads
+   `require.extensions['.js']` at module top level (a pirates-style
+   transpile hook), and on the whole 22.x line, CJS loaded in a sync-hook
+   context gets the **re-invented require without `extensions`** — the
+   interplay matrix's `import-cjs-synthetic-require` BARE_REQUIRE column,
+   the [nodejs/node#62786](https://github.com/nodejs/node/issues/62786)
+   class, here shipping inside the most popular framework there is. Fixed
+   territory on 24.11.1+ (both host scenarios pass on 24.18.0); the host
+   harness skips loudly on older Nodes and the corpus CI job runs Node 24.
+
+## Hosts: Next.js (SSR and the dev server)
+
+Platforms that own their module graph — Next.js — are **hosts, not tap
+targets**: the corpus never patches Next, it patches an ordinary
+server-side dependency (`ms`) and asserts a server-rendered request crossed
+it, with the hook delivered the way managed runtimes deliver it —
+`NODE_OPTIONS` preload, which reaches every worker the host forks.
+[hosts/nextjs](hosts/nextjs) is a minimal pages-router app whose
+`getServerSideProps` calls the patched dependency and renders the patch
+counter into the HTML; [lib/hosts.mts](lib/hosts.mts) drives two scenarios
+and the results land in matrix.md's Hosts table:
+
+- **`next start` (SSR)** — `next build` runs unhooked (the build process is
+  not the target), then the production server serves the probe page.
+- **`next dev` (SSR, dev server)** — the same page through the dev server's
+  compile-on-demand pipeline. This is the honest answer to "does it work
+  with the dev server": server-side dependencies, yes, same delivery; the
+  **client/HMR module graph stays out of scope by design** — dev-mode
+  module identity churns, and instrumenting it answers no production
+  question (the validate CLI's dry-run report is the right tool for
+  "will my config land" during development).
 
 ## Engine benchmark
 
 [bench.mts](bench.mts) runs the same full-surface identity tap once per
 engine — native oxc vs pure-JS acorn, one process each because the engine
-binds process-wide — and writes [engines.md](engines.md). Timing is the
+binds process-wide — and writes [engines.md](engines.md) plus
+[engines.svg](engines.svg), a dumbbell dot plot (one row per entry, two
+dots on a log time axis — the gap between the paired dots is the ratio;
+series are double-encoded by color and dot shape). Timing is the
 **minimum** of repeated runs (the work is deterministic and CPU-bound;
 shared-runner allocation jitter was observed turning an 8.8MB
 `Buffer.concat` into anything from 2ms to 578ms, so a median of few samples

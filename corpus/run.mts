@@ -29,6 +29,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { packages, keyFor } from './manifest.mts'
+import { nextJsHost } from './lib/hosts.mts'
+import type { HostResult } from './lib/hosts.mts'
 import type { CellName, CorpusEntry } from './manifest.mts'
 import type { EnumerateReport, EnumeratedTarget } from './lib/enumerate.mts'
 import type { Fingerprint, FingerprintComparison } from './lib/fingerprint.mts'
@@ -383,6 +385,38 @@ await Promise.all(
 const alarms = only.length === 0 ? await alarmChecks() : null
 if (alarms) console.error(`alarms: drift:${alarms.drift} inert:${alarms.inert}`)
 
+// hosts run last and only on full runs: they bind ports, build a Next app,
+// and prove the platform story rather than a package shape.
+//
+// CORPUS FINDING #6, expressed as a gate: Next's own
+// next-config-ts/require-hook.js reads `require.extensions['.js']` at
+// module top level — a pirates-style tool, exactly the class the interplay
+// matrix's import-cjs-synthetic-require column pins (nodejs/node#62786).
+// Under sync module hooks the whole 22.x line hands hook-context CJS a
+// re-invented require WITHOUT `extensions` (BARE_REQUIRE), so Next crashes
+// at boot under ANY registerHooks-based instrumentation there; 24.11.1+
+// carries a full require and both host scenarios pass. The gate skips
+// loudly instead of failing: the corridor is Node's, documented, and the
+// matrix row says exactly where it ends.
+let hosts: HostResult[] | null = null
+if (only.length === 0 && process.env.CORPUS_SKIP_HOSTS !== '1') {
+  const [major = 0, minor = 0, patch = 0] = process.versions.node.split('.').map(Number)
+  const hostsCapable = major > 24 || (major === 24 && (minor > 11 || (minor === 11 && patch >= 1)))
+  if (hostsCapable) {
+    hosts = await nextJsHost(here, {
+      NODE_OPTIONS: '--import @wrap-esm-lambda/hooks/register',
+      WRAP_ESM_LAMBDA_STRICT: '1',
+    })
+  } else {
+    const cell = `SKIP(${process.version}: Next reads require.extensions at boot — BARE_REQUIRE corridor on 22.x, needs >=24.11.1)`
+    hosts = [
+      { scenario: 'next start (SSR)', cell },
+      { scenario: 'next dev (SSR)', cell },
+    ]
+  }
+  for (const host of hosts) console.error(`host ${host.scenario}: ${host.cell}`)
+}
+
 // ── expectations ─────────────────────────────────────────────────────────────
 const deviations: string[] = []
 for (const row of rows) {
@@ -406,6 +440,13 @@ for (const row of rows) {
 if (alarms) {
   if (alarms.drift !== 'LOUD') deviations.push(`alarms.drift: expected LOUD, got ${alarms.drift}`)
   if (alarms.inert !== 'INERT') deviations.push(`alarms.inert: expected INERT, got ${alarms.inert}`)
+}
+if (hosts) {
+  for (const host of hosts) {
+    if (host.cell !== 'PATCHED' && !host.cell.startsWith('SKIP(')) {
+      deviations.push(`hosts.${host.scenario}: expected PATCHED, got ${host.cell}`)
+    }
+  }
 }
 
 // ── matrix.md ────────────────────────────────────────────────────────────────
@@ -472,6 +513,18 @@ const md = [
   ...(alarms
     ? [
         `Alarm checks: missing binding → **${alarms.drift}** (expected LOUD), non-matching versionRange → **${alarms.inert}** (expected INERT).`,
+        '',
+      ]
+    : []),
+  ...(hosts
+    ? [
+        '## Hosts',
+        '',
+        'Platforms that own their module graph are not tap targets — they are the process the hook rides inside. The config patches an ordinary server-side dependency (`ms`); delivery is `NODE_OPTIONS` preload, the managed-runtime shape, which reaches every worker the host forks. The SSR page renders the patch counter, so the cell asserts from plain HTML that a server-rendered request crossed the patched dependency. The client/HMR module graph is out of scope by design (see README).',
+        '',
+        '| host scenario | delivery | result |',
+        '| --- | --- | --- |',
+        ...hosts.map((host) => `| ${host.scenario} | NODE_OPTIONS preload | ${host.cell} |`),
         '',
       ]
     : []),

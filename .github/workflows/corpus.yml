@@ -56,10 +56,12 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          # setup-node resolves the latest 22.x, which is past the
-          # nodejs/node#59929 fix train the corpus runner requires (it
-          # refuses pre-fix minors with an explanation)
-          node-version: 22
+          # Node 24: past the #59929 fix train the runner requires, AND
+          # past the re-invented-require fix (#62786 class) the Next host
+          # harness needs — on 22.x Next itself reads require.extensions at
+          # boot and crashes under any sync-hook instrumentation (corpus
+          # finding #6; the harness skips loudly there)
+          node-version: 24
           cache: pnpm
       - name: Install rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
