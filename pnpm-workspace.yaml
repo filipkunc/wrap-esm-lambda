@@ -25,3 +25,17 @@ supportedArchitectures:
 
 minimumReleaseAgeExclude:
   - webpack@5.109.0
+
+# Transitive pins for advisories in the corpus host harness's tree. Next
+# pulls both of these and neither is reachable from anything this repo
+# publishes — but a corpus fixture must not ship known-vulnerable code into
+# a CI runner either, and patched versions exist inside the same major, so
+# pinning is cheaper than an allowlist entry that ages badly:
+# - postcss: GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 / GHSA-qx2v-qp2m-jg93
+#   (next 15.5 resolves 8.4.31; the fixes land in 8.5.10/8.5.12/8.5.18)
+# - sharp: GHSA-f88m-g3jw-g9cj, inherited libvips CVEs, fixed in 0.35.0
+#   (next's optional image-optimization dep; the harness never renders an
+#   image, and `allowBuilds` above keeps its native build off regardless)
+overrides:
+  postcss: '^8.5.25'
+  sharp: '^0.35.3'
