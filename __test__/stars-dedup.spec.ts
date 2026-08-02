@@ -89,6 +89,35 @@ test('two star providers forwarding the SAME origin binding resolve (the date-fn
   assert.match(String(applied!.code ?? barrelSource), /\.\/a\.js/)
 })
 
+test('a cyclic star graph terminates and resolves names reached through the cycle', () => {
+  // barrel -> cycle-a -> cycle-b -> cycle-a. The walk memoizes each
+  // module's provided-name set to stay O(sources + names), so the cycle is
+  // where a memoizing traversal can hang or lose names. This pins
+  // termination and that a name only reachable by stepping INTO the cycle
+  // (`fromB`) still resolves. It deliberately does not claim to exercise
+  // the "never cache a truncated set" guard in providedNames: in a plain
+  // star cycle the truncated module is reachable through the branch that
+  // completed it, so that guard is conservative rather than observable.
+  const cyclicPath = pkgFile('cyclic-barrel.js')
+  const cyclicSource = readFileSync(cyclicPath, 'utf8')
+  for (const binding of ['fromA', 'fromB']) {
+    const applied = applyMatched(
+      cyclicSource,
+      [
+        {
+          module: { name: '@fake/stars', files: [cyclicPath] },
+          patch: { name: 'patchShared', from: fixture('patches/stars.mjs') },
+          bindings: [binding],
+        },
+      ],
+      pathToFileURL(cyclicPath).href,
+      { format: 'module', delivery: 'registry' },
+    )
+    assert.notStrictEqual(applied, null, `${binding} resolves through the cycle`)
+    assert.match(String(applied!.code ?? cyclicSource), /cycle-a\.js/)
+  }
+})
+
 test('two star providers with DIFFERENT origins stay a loud refusal, origins named', () => {
   assert.throws(
     () =>

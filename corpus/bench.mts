@@ -29,6 +29,7 @@ import { promisify } from 'node:util'
 import { packages, keyFor } from './manifest.mts'
 import type { CorpusEntry } from './manifest.mts'
 import type { BenchReport } from './lib/bench-worker.mts'
+import { publishReport } from './lib/publish.mts'
 
 interface BenchRow {
   name: string
@@ -240,9 +241,13 @@ const md = [
   ...(mismatches.length > 0 ? [...mismatches.map((m) => `- ${m}`), ''] : []),
 ].join('\n')
 
+publishReport({
+  file: join(here, 'engines.md'),
+  markdown: md,
+  summaryTitle: 'Engine benchmark (oxc vs acorn)',
+  writeSnapshot: only.length === 0,
+})
 if (only.length === 0) {
-  writeFileSync(join(here, 'engines.md'), md)
-  console.error(`written to ${join(here, 'engines.md')}`)
   try {
     await renderChart(esmRows, join(here, 'engines.svg'))
     console.error(`written to ${join(here, 'engines.svg')}`)
@@ -251,8 +256,6 @@ if (only.length === 0) {
     // gets the tables — the chart is presentation, never the check
     console.error(`chart skipped: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`)
   }
-} else {
-  console.log(md)
 }
 
 /**
