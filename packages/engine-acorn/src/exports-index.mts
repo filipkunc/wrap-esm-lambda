@@ -111,11 +111,20 @@ export interface DefaultAnonymous {
   local?: undefined
 }
 
+/** Where an imported local binding comes from: the module specifier and the
+ * name imported from it (`*` for a namespace import, `default` for a
+ * default import) — recorded so `esmModuleExports` can report the true
+ * origin of import-backed list exports. */
+export interface ImportOrigin {
+  source: string
+  imported: string
+}
+
 /** Everything the binding resolver needs to know about a module's exports. */
 export interface ExportIndex {
   named: NamedExport[]
   default: DefaultLocal | DefaultAnonymous | null
-  importLocals: Set<string>
+  importLocals: Map<string, ImportOrigin>
   topConst: Map<string, VariableDeclaration>
   starSources: string[]
 }
@@ -161,7 +170,7 @@ export function buildExportIndex(program: Program): ExportIndex {
   const index: ExportIndex = {
     named: [],
     default: null,
-    importLocals: new Set(),
+    importLocals: new Map(),
     // top-level `const` declarations (exported directly or not) by name →
     // their VariableDeclaration node, for demotion of list-exported consts
     topConst: new Map(),
@@ -173,7 +182,15 @@ export function buildExportIndex(program: Program): ExportIndex {
     switch (stmt.type) {
       case 'ImportDeclaration':
         for (const spec of stmt.specifiers) {
-          index.importLocals.add(spec.local.name)
+          index.importLocals.set(spec.local.name, {
+            source: String(stmt.source.value),
+            imported:
+              spec.type === 'ImportSpecifier'
+                ? specifierName(spec.imported)
+                : spec.type === 'ImportDefaultSpecifier'
+                  ? 'default'
+                  : '*',
+          })
         }
         break
       case 'VariableDeclaration':
@@ -279,15 +296,46 @@ function indexDeclarationExport(index: ExportIndex, stmt: ExportNamedDeclaration
   }
 }
 
+/** One re-exported name with its provenance — the JS mirror of the native
+ * `EsmReexport`: `exported` is the consumer-visible name, `imported` the
+ * name taken from `source` (`*` for a namespace re-export). */
+export interface EsmReexport {
+  exported: string
+  imported: string
+  source: string
+}
+
 /**
  * The statically visible surface of an ESM module: every exported name
- * (including `default` and `export * as ns` names) plus the specifiers of
- * bare `export * from` statements — the building block of the caller's
- * star-graph walk. Mirrors the native `esmModuleExports`.
+ * (including `default` and `export * as ns` names), the specifiers of bare
+ * `export * from` statements, plus the provenance of every export that
+ * resolves into another module (`reexports`) — explicit re-exports,
+ * namespace re-exports, and list exports of import-backed locals
+ * (`import { x } from "m"; export { x }` — the binding is m's, exactly as
+ * if written `export { x } from "m"`). The building blocks of the caller's
+ * star-graph walk and its ResolveExport-style same-binding comparison.
+ * Mirrors the native `esmModuleExports`.
  */
-export function esmModuleExports(input: string): { names: string[]; starSources: string[] } {
+export function esmModuleExports(input: string): {
+  names: string[]
+  starSources: string[]
+  reexports: EsmReexport[]
+} {
   const index = buildExportIndex(parseModule(input))
   const names = index.named.map((info) => info.exported)
   if (index.default !== null) names.push('default')
-  return { names, starSources: index.starSources }
+  const reexports: EsmReexport[] = []
+  for (const info of index.named) {
+    if (info.kind === NamedKind.ReExport && info.source !== null) {
+      reexports.push({ exported: info.exported, imported: info.local, source: info.source })
+    } else if (info.kind === NamedKind.ReExportAll && info.source !== null) {
+      reexports.push({ exported: info.exported, imported: '*', source: info.source })
+    } else if (info.kind === NamedKind.ListLocal) {
+      const origin = index.importLocals.get(info.local)
+      if (origin !== undefined) {
+        reexports.push({ exported: info.exported, imported: origin.imported, source: origin.source })
+      }
+    }
+  }
+  return { names, starSources: index.starSources, reexports }
 }

@@ -12,8 +12,9 @@ const isIdent = (name) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
  * options.targets  'require' restricts to the require-condition entry — for
  *                  packages whose import condition is a statically invisible
  *                  shape (vue's one-liner `export * from './index.js'`, CJS).
- * options.exclude  named bindings to drop (date-fns' same-binding star
- *                  dedup gap); see the manifest notes of packages using it.
+ * options.exclude  named bindings to drop — kept for future transform
+ *                  gaps a package exposes (its original user, date-fns'
+ *                  same-binding star dedup, is fixed and no longer needs it).
  */
 export async function resolveSurface(pkg, { targets: targetsMode, exclude: excludeList } = {}) {
   const require_ = createRequire(import.meta.url)

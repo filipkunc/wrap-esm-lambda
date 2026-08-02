@@ -90,12 +90,14 @@ export const packages = [
   {
     name: 'date-fns',
     group: 'dual',
-    // CORPUS FINDING: `longFormatters` reaches the barrel through two
+    // CORPUS FINDING, FIXED: `longFormatters` reaches the barrel through two
     // `export *` sources (./format.js, ./parse.js) that forward the SAME
-    // origin binding — Node links it (same-binding dedup in ResolveExport),
-    // the static star walk refuses it as ambiguous by provider count.
-    excludeBindings: ['longFormatters'],
-    notes: 'per-function dual behind a huge exports map; longFormatters excluded — same-binding star dedup gap',
+    // origin binding. The star walk used to refuse it by provider count;
+    // it now compares transitive origins the way ResolveExport does (see
+    // core/src/stars.mts and __test__/stars-dedup.spec.ts), so the full
+    // surface taps. The excludeBindings knob this finding introduced stays
+    // available for future gaps.
+    notes: 'per-function dual behind a huge exports map; longFormatters exercises same-binding star dedup',
   },
   {
     name: 'vue',

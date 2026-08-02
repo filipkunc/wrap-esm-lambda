@@ -135,8 +135,17 @@ requested `bindings`:
     `node`/`import` conditions, `"module"` before `"main"` for map-less
     packages. Resolution only informs the walk; the emitted shadow export
     imports from the specifier as written, so Node or the bundler still
-    resolves it in the output. Loud limits: a name provided by **two** star
-    sources is refused as ambiguous (importers cannot link it either), a
+    resolves it in the output. A name provided by **multiple** star sources
+    is compared by **resolved origin**, the way ECMA ResolveExport compares
+    it: each provider is followed through its re-export provenance
+    (explicit re-exports, namespace re-exports, import-backed list exports)
+    to the module that declares the binding, and providers that bottom out
+    at the same (file, binding) pair are one export seen twice — date-fns
+    forwards `longFormatters` through both `./format.js` and `./parse.js`
+    from one `_lib` module, and that shape patches. Loud limits: a name
+    whose star providers resolve to genuinely **different** origins (or
+    origins the walk cannot determine) is refused as ambiguous — importers
+    cannot link that name either — a
     star pointing at a **CJS** file has no statically knowable names, and a
     specifier that resolves nowhere (package not installed) provides
     nothing — the error names the unresolved sources.
