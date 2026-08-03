@@ -11,19 +11,29 @@
   "rust-analyzer.check.command": "clippy",
   "rust-analyzer.check.extraArgs": ["--all-targets"],
 
-  // NOTE: there is deliberately no `typescript.tsdk` here. It was set while this
-  // repo was on 5.8.3, to stop VS Code's bundled compiler from disagreeing with
-  // `tsc`. It cannot work on 7.x: the TypeScript 7 package is a native Go binary
-  // and ships no tsserver.js for that setting to point at — `node_modules/
-  // typescript/lib/` contains only tsc.js, getExePath.js and version.cjs.
+  // NOTE: there is deliberately no `typescript.tsdk` here, and no
+  // `typescript.native-preview.tsdk` either.
   //
-  // Editor type-checking on 7.x comes from the TypeScript Native Preview
-  // extension (TypeScriptTeam.native-preview, recommended in extensions.json),
-  // which is LSP-based rather than tsserver-based. Until it is installed VS Code
-  // falls back to its bundled 6.0.3, which cannot resolve @types/node for the
-  // __test__ project under any configuration tried — nodenext and an explicit
-  // `types: ["node"]` both leave it at zero type files — so the specs will show
-  // phantom "Cannot find name 'process'" errors that `tsc` does not report.
+  // `typescript.tsdk` cannot work on 7.x: the TypeScript 7 package is a native
+  // Go binary and ships no tsserver.js for that setting to point at
+  // (node_modules/typescript/lib/ holds only tsc.js, getExePath.js,
+  // version.cjs). Editor type-checking comes from the LSP-based TypeScript
+  // Native Preview extension instead — TypeScriptTeam.native-preview, which
+  // extensions.json recommends. Without it VS Code falls back to its bundled
+  // 6.0.3, which cannot resolve @types/node for the __test__ project under any
+  // configuration tried, and reports ~300 errors `tsc` does not.
+  //
+  // A tsdk override is unnecessary because the versions already agree: the
+  // extension bundles its own compiler and it is 7.0.2, the same as the
+  // devDependency. Verified by running the extension's own lib/tsc against
+  // __test__ and corpus — zero errors, 82 @types/node files loaded, matching
+  // `pnpm typecheck` exactly.
+  //
+  // Worth knowing if that stops being true: the extension pins its compiler
+  // independently of package.json, so a future typescript bump here will not
+  // move the editor until the extension updates. The setting to reach for then
+  // is `js/ts.tsdk.path` — `typescript.native-preview.tsdk` still exists but is
+  // already marked deprecated in favour of it.
 
   // Rust tests in VS Code's built-in Testing view. rust-analyzer implements the
   // native testing API itself, so no adapter extension is involved — this flag
