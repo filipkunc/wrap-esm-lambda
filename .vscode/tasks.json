@@ -1,0 +1,96 @@
+{
+  "version": "2.0.0",
+  // COREPACK_ENABLE_DOWNLOAD_PROMPT=0 on every pnpm task: the version comes from
+  // package.json's `packageManager` field, and on a fresh checkout corepack wants
+  // to prompt before fetching it. A task that blocks on an invisible prompt just
+  // looks hung, so the download is pre-authorised.
+  "options": {
+    "env": {
+      "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0"
+    }
+  },
+  "tasks": [
+    {
+      // The default preLaunchTask. packages/*/dist is what the suite imports,
+      // so debugging without this silently steps through the PREVIOUS build.
+      "label": "build:packages",
+      "type": "shell",
+      "command": "pnpm build:packages",
+      "group": "build",
+      "problemMatcher": ["$tsc"],
+      "presentation": { "reveal": "silent", "clear": true }
+    },
+    {
+      // Release addon. Note it overwrites the same wrap-esm-lambda.<triple>.node
+      // that build:debug writes, so run this after any Rust debugging session or
+      // the benchmarks will be timing an unoptimised build.
+      "label": "build (release addon)",
+      "type": "shell",
+      "command": "pnpm build",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      // Debug symbols for the "Debug Rust addon" launch config. Same output
+      // path as the release build — see above.
+      "label": "build:debug",
+      "type": "shell",
+      "command": "pnpm build:debug",
+      "group": "build",
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "test (full suite)",
+      "type": "shell",
+      "command": "pnpm test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      // The open spec file, both engines in sequence — the terminal equivalent
+      // of the two launch configs. `-e` so a failing oxc run is not masked by a
+      // passing acorn run, the same reason CI's container blocks use `sh -eu`.
+      "label": "test:file (both engines)",
+      "type": "shell",
+      "command": "sh",
+      "args": [
+        "-e",
+        "-c",
+        "WRAP_ESM_LAMBDA_ENGINE=oxc node --import @oxc-node/core/register --test \"$1\"\nWRAP_ESM_LAMBDA_ENGINE=acorn node --import @oxc-node/core/register --test \"$1\"",
+        "sh",
+        "${relativeFile}"
+      ],
+      "options": {
+        "env": {
+          "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json"
+        }
+      },
+      "dependsOn": ["build:packages"],
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      // What the `lint` job runs, minus the parts already covered on save.
+      "label": "lint (oxlint)",
+      "type": "shell",
+      "command": "pnpm lint",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      // rust-analyzer already surfaces these inline (see settings.json), but the
+      // job runs --all-targets -D warnings — this is the identical gate.
+      "label": "clippy (CI gate)",
+      "type": "shell",
+      "command": "cargo clippy --all-targets -- -D warnings",
+      "group": "test",
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "format (prettier + rustfmt + taplo)",
+      "type": "shell",
+      "command": "pnpm format",
+      "problemMatcher": []
+    }
+  ]
+}
