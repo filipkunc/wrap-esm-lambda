@@ -536,7 +536,12 @@ analysis: [docs/serverless.md](docs/serverless.md).
 ## Development
 
 1. `pnpm install` — install dependencies
-2. `pnpm build` — build the native addon (`napi build --release`)
+2. `pnpm build` — build the native addon (`napi build --release`). **Required
+   once after cloning**, and not only for the addon: the same command writes
+   the package's entry point (`index.js`), its types (`index.d.ts`), and the
+   wasi glue. Those are generated files and are not in git, so before the
+   first build `../index` resolves to nothing and the typecheck fails.
+   `pnpm build:debug` writes the identical set if you only need the loader.
 3. `pnpm build:packages` — compile the workspace packages (`tsc -b`, project
    references, incremental); `pnpm test` runs it for you
 4. `pnpm test` — the test suite, on Node's built-in
@@ -548,6 +553,25 @@ analysis: [docs/serverless.md](docs/serverless.md).
 The packages import each other by their published specifiers, so the suite
 runs against the same `dist/` a consumer installs — `pnpm build:packages`
 first, or the imports resolve to nothing.
+
+### Generated files
+
+`index.js`, `index.d.ts`, `browser.js`, `wasi-worker.mjs`,
+`wasi-worker-browser.mjs`, `wrap-esm-lambda.wasi.cjs` and
+`wrap-esm-lambda.wasi-browser.js` are emitted by `napi build` and are
+gitignored. Any single build writes all of them — the set comes from
+`napi.targets` in `package.json`, so a native x64 build produces the wasi glue
+too.
+
+They used to be committed, and that hid a real defect: the checked-in loader
+still expected addon version `0.2.2` after the crate had moved to `0.2.3`.
+Nothing regenerates them on a version bump and the publish job does not build,
+so a release would have paired a `0.2.2` loader with `0.2.3` platform packages
+— a version-mismatch throw for any consumer running with
+`NAPI_RS_ENFORCE_VERSION_CHECK` set. In CI they now travel as the
+`binding-glue` artifact, built once in the `build` job and downloaded by every
+lane that resolves the package, so the bytes under test are the bytes
+published.
 
 ### WebAssembly
 
