@@ -898,7 +898,20 @@ jobs:
       - name: Build base (PR A/B)
         if: github.event_name == 'pull_request'
         working-directory: base
-        run: pnpm install && pnpm build && pnpm build:packages
+        # Base carries its own `packageManager` pin, and this is the only job
+        # that installs two trees side by side on one runner. A PR that moves
+        # the pin therefore has to install base at the OLD one, which fails
+        # outright when pnpm has since marked that release broken — the pnpm
+        # on PATH refuses it and the benchmark dies for a reason that has
+        # nothing to do with the numbers. Dropping the field is not a
+        # workaround but the more correct A/B: the comparison is of base's
+        # code against head's, so holding the package manager constant across
+        # both trees removes a variable instead of introducing one. Written
+        # with node rather than `pnpm pkg delete` because that is itself a
+        # pnpm invocation inside base, and would hit the same refusal.
+        run: |
+          node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));delete p.packageManager;fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n')"
+          pnpm install && pnpm build && pnpm build:packages
       - name: Benchmark (main)
         if: github.event_name == 'push'
         run: |
