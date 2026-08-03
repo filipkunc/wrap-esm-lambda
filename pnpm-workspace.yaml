@@ -25,6 +25,11 @@ supportedArchitectures:
 
 minimumReleaseAgeExclude:
   - webpack@5.109.0
+  # Added by pnpm when this was pinned: the fix for GHSA-8j4g-w8fx-2239 is
+  # newer than the release-age floor. Taking a hours-old release is the point
+  # here — the alternative is sitting on a known ReDoS until the clock runs
+  # out — but it is the reason this entry exists rather than a bare bump.
+  - hono@4.12.34
 
 # Transitive pins for advisories in the corpus host harness's tree. Next
 # pulls both of these and neither is reachable from anything this repo
@@ -36,6 +41,13 @@ minimumReleaseAgeExclude:
 # - sharp: GHSA-f88m-g3jw-g9cj, inherited libvips CVEs, fixed in 0.35.0
 #   (next's optional image-optimization dep; the harness never renders an
 #   image, and `allowBuilds` above keeps its native build off regardless)
+# - fast-uri: GHSA-7p8r-x3mc-p8w7, host confusion via a backslash authority
+#   introducer. Reached twice through fastify, on two different majors —
+#   ajv wants ^3 and fast-json-stringify wants ^4 — so a single pin would
+#   force one of them onto a major it does not declare. The fix shipped inside
+#   both lines (3.1.5 and 4.1.2), so each range is pinned to its own.
 overrides:
   postcss: '^8.5.25'
   sharp: '^0.35.3'
+  fast-uri@^3: '^3.1.5'
+  fast-uri@^4: '^4.1.2'
