@@ -554,6 +554,25 @@ The packages import each other by their published specifiers, so the suite
 runs against the same `dist/` a consumer installs — `pnpm build:packages`
 first, or the imports resolve to nothing.
 
+### TypeScript
+
+The repo is on **TypeScript 7**, the native Go compiler. Two migration details
+are worth knowing before adding a `tsconfig.json`:
+
+- `moduleResolution: "node"` (node10) was **removed** — it is a hard error
+  (TS5108), not a deprecation warning.
+- TypeScript 7 no longer auto-includes every `@types/*` package it can find, so
+  ambient types must be named: `"types": ["node"]`. Omitting it does not fail
+  loudly — it surfaces as a wall of `TS2591 Cannot find name 'process'` against
+  code that is perfectly valid.
+
+Editor support does **not** come from VS Code's built-in JavaScript/TypeScript
+IntelliSense, which is tsserver-based and cannot drive a compiler that ships no
+tsserver. Install the
+[TypeScript Native Preview](https://marketplace.visualstudio.com/items?itemName=TypeScriptTeam.native-preview)
+extension (`.vscode/extensions.json` recommends it). It is a preview: auto-imports,
+find-all-references and rename are incomplete.
+
 ### Generated files
 
 `index.js`, `index.d.ts`, `browser.js`, `wasi-worker.mjs`,

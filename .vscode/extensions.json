@@ -10,6 +10,13 @@
     // extension: rust-analyzer speaks the native testing API itself, gated
     // behind rust-analyzer.testExplorer in settings.json.
     "connor4312.nodejs-testing",
+    // TypeScript 7 is a native Go compiler with no tsserver, so the built-in
+    // JS/TS IntelliSense (VS Code 1.131 bundles 6.0.3) cannot drive it and
+    // reports errors `tsc` does not. This extension is the LSP-based
+    // replacement. It is a preview: auto-imports, find-all-references and
+    // rename are known to be incomplete, which is the price of matching the
+    // compiler CI actually runs.
+    "TypeScriptTeam.native-preview",
     "oxc.oxc-vscode",
     "tamasfe.even-better-toml",
     "esbenp.prettier-vscode",

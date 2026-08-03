@@ -11,21 +11,19 @@
   "rust-analyzer.check.command": "clippy",
   "rust-analyzer.check.extraArgs": ["--all-targets"],
 
-  // Type-check with the TypeScript this repo pins, not the one VS Code ships.
-  // They are not the same compiler: VS Code 1.131 bundles 6.0.3 while
-  // package.json pins ~5.8.3, and 6.0.3 does not resolve @types/node@24.2.0 in
-  // this tree — its automatic @types discovery returns nothing, and naming
-  // `types: ["node"]` explicitly does not rescue it either. The result is ~280
-  // phantom "Cannot find name 'process'" errors in the editor against a project
-  // that `tsc` and CI both compile with zero diagnostics.
+  // NOTE: there is deliberately no `typescript.tsdk` here. It was set while this
+  // repo was on 5.8.3, to stop VS Code's bundled compiler from disagreeing with
+  // `tsc`. It cannot work on 7.x: the TypeScript 7 package is a native Go binary
+  // and ships no tsserver.js for that setting to point at — `node_modules/
+  // typescript/lib/` contains only tsc.js, getExePath.js and version.cjs.
   //
-  // Pointing at the workspace lib makes the editor agree with `pnpm typecheck`
-  // by construction, which is what you want from a tracked setting regardless
-  // of this particular version skew.
-  "typescript.tsdk": "node_modules/typescript/lib",
-  // VS Code will not silently execute a workspace-supplied compiler — this
-  // makes it offer, once, instead of quietly staying on the bundled one.
-  "typescript.enablePromptUseWorkspaceTsdk": true,
+  // Editor type-checking on 7.x comes from the TypeScript Native Preview
+  // extension (TypeScriptTeam.native-preview, recommended in extensions.json),
+  // which is LSP-based rather than tsserver-based. Until it is installed VS Code
+  // falls back to its bundled 6.0.3, which cannot resolve @types/node for the
+  // __test__ project under any configuration tried — nodenext and an explicit
+  // `types: ["node"]` both leave it at zero type files — so the specs will show
+  // phantom "Cannot find name 'process'" errors that `tsc` does not report.
 
   // Rust tests in VS Code's built-in Testing view. rust-analyzer implements the
   // native testing API itself, so no adapter extension is involved — this flag

@@ -2,8 +2,19 @@
   "compilerOptions": {
     "target": "ESNext",
     "strict": true,
-    "moduleResolution": "node",
-    "module": "CommonJS",
+    // TypeScript 7 removed moduleResolution=node10 outright (TS5108), and this
+    // was the last config still asking for it. nodenext matches what
+    // tsconfig.base.json and corpus/ already use; benchmark/ and __test__/
+    // override both of these anyway, and no script compiles this project
+    // directly — it is an `extends` base.
+    "moduleResolution": "nodenext",
+    "module": "nodenext",
+    // TypeScript 7 no longer auto-includes every @types/* package it can find,
+    // so the ambient node types have to be named. Without this the specs report
+    // ~300 phantom TS2591s ("Cannot find name 'process'") against code that
+    // compiles clean. tsconfig.base.json and corpus/ already declared it; this
+    // is the config that did not, and __test__/ inherits from here.
+    "types": ["node"],
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "esModuleInterop": true,
