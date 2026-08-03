@@ -1,0 +1,42 @@
+{
+  // This file is tracked, so it is deliberately limited to settings that are
+  // correct for THIS repo's toolchain rather than personal preference.
+
+  // rust-analyzer's cargo check and `napi build` otherwise contend on the same
+  // target/ lock, so an on-save check can stall a build (and vice versa) for as
+  // long as the other holds it. `true` gives rust-analyzer its own subdirectory.
+  "rust-analyzer.cargo.targetDir": true,
+  // The lint job gates on `cargo clippy --all-targets -- -D warnings`; matching
+  // it here means the editor shows those failures instead of CI doing it later.
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.extraArgs": ["--all-targets"],
+
+  // Formatting is prettier for web files, rustfmt via rust-analyzer for Rust,
+  // and taplo for TOML — the same three that `pnpm format` runs, so on-save and
+  // `pnpm format:check` cannot disagree.
+  "editor.formatOnSave": true,
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[markdown]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[yaml]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[rust]": { "editor.defaultFormatter": "rust-lang.rust-analyzer" },
+  "[toml]": { "editor.defaultFormatter": "tamasfe.even-better-toml" },
+  "evenBetterToml.formatter.alignEntries": true,
+
+  // index.js/index.d.ts are napi-generated and prettier-ignored; formatting or
+  // linting them produces churn that the next `napi build` undoes.
+  "files.watcherExclude": {
+    "**/target/**": true,
+    "**/node_modules/**": true
+  },
+  "search.exclude": {
+    "**/target": true,
+    "**/dist": true,
+    "corpus/.scratch": true
+  },
+  // The suite is node's own test runner driven through the launch configs and
+  // tasks above; VS Code's auto-detected npm script lenses only add noise.
+  "npm.packageManager": "pnpm"
+}

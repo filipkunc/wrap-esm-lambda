@@ -1,0 +1,15 @@
+{
+  // This repo lints with oxlint and formats with prettier + rustfmt + taplo.
+  // Without this list VS Code suggests ESLint, and a contributor ends up with a
+  // toolchain that disagrees with `pnpm lint` and `pnpm format:check`.
+  "recommendations": [
+    "rust-lang.rust-analyzer",
+    // CodeLLDB — required by the "Debug Rust addon" launch config
+    "vadimcn.vscode-lldb",
+    "oxc.oxc-vscode",
+    "tamasfe.even-better-toml",
+    "esbenp.prettier-vscode",
+    "editorconfig.editorconfig"
+  ],
+  "unwantedRecommendations": ["dbaeumer.vscode-eslint"]
+}

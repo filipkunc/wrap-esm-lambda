@@ -5,6 +5,63 @@
   "version": "0.2.0",
   "configurations": [
     {
+      // WRAP_ESM_LAMBDA_ENGINE is EXPLICIT here for the same reason every CI
+      // lane names it: core falls back to the pure-JS acorn engine when the
+      // addon cannot be loaded, so an implicit run would have you debugging a
+      // different engine than the one you think you are in.
+      "name": "Debug spec file (oxc)",
+      "type": "node",
+      "request": "launch",
+      "program": "${file}",
+      "runtimeArgs": ["--import", "@oxc-node/core/register", "--test"],
+      "env": {
+        "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
+        "WRAP_ESM_LAMBDA_ENGINE": "oxc"
+      },
+      "preLaunchTask": "build:packages",
+      // Without the second entry, stepping into any import lands you inside the
+      // oxc register hook's transform rather than in the module you asked for.
+      "skipFiles": ["<node_internals>/**", "**/node_modules/@oxc-node/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      // The acorn twin. Engine-parity bugs are the ones worth a debugger, and
+      // they are found by running the same spec under both.
+      "name": "Debug spec file (acorn)",
+      "type": "node",
+      "request": "launch",
+      "program": "${file}",
+      "runtimeArgs": ["--import", "@oxc-node/core/register", "--test"],
+      "env": {
+        "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
+        "WRAP_ESM_LAMBDA_ENGINE": "acorn"
+      },
+      "preLaunchTask": "build:packages",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/@oxc-node/**"],
+      "console": "integratedTerminal"
+    },
+    {
+      // Breakpoints in src/*.rs. Requires the CodeLLDB extension and a debug
+      // addon — build:debug overwrites the release .node at the same path, so
+      // run the "build (release addon)" task before benchmarking again.
+      //
+      // `node` resolves off PATH: this repo is developed against nvm-managed
+      // and system nodes alike, so hardcoding an interpreter path here would
+      // break for everyone but its author.
+      "name": "Debug Rust addon (spec file)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "node",
+      "args": ["--import", "@oxc-node/core/register", "--test", "${file}"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
+        "WRAP_ESM_LAMBDA_ENGINE": "oxc"
+      },
+      "preLaunchTask": "build:debug",
+      "sourceLanguages": ["rust"]
+    },
+    {
       "name": "Hooks",
       "program": "${workspaceFolder}/hooks/httpload.cjs",
       "request": "launch",
