@@ -64,14 +64,6 @@ jobs:
         run: pnpm install
       - name: Oxlint
         run: pnpm lint
-      # the packages are TypeScript: building them is the typecheck, and it
-      # fails here before any test job pays for a broken build
-      - name: Build packages
-        run: pnpm build:packages
-      # the specs are TypeScript too, and nothing else checks them: the runner
-      # they execute under strips types without looking at them
-      - name: Typecheck specs
-        run: pnpm exec tsc --noEmit -p __test__/tsconfig.json
       - name: Cargo fmt
         run: cargo fmt -- --check
       # A gate, not a report: without -D warnings this job passed with warnings
@@ -81,6 +73,30 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
+      # index.d.ts is gitignored and napi only emits it as part of a build, so
+      # the typecheck below cannot resolve `../index` without one. This job
+      # builds its own rather than waiting on the `build` matrix: it is the
+      # fast-fail gate, and making it depend on cross-compiled targets would
+      # cost minutes of first feedback.
+      #
+      # Debug rather than release, and placed after clippy and cargo test so it
+      # reuses their target/. It is not free — clippy only *checks*, so this is
+      # the first step that runs codegen: cold clippy 10 s then this 15 s, on a
+      # 24-thread desktop; expect more on a shared runner. Still the cheapest
+      # option on the table, since a release build is slower again and the
+      # alternative is gating the fast-fail job on the whole build matrix.
+      # The glue is identical either way — it is generated from napi.targets,
+      # not from the profile.
+      - name: Generate the JS glue (debug — the addon itself is unused here)
+        run: pnpm build:debug
+      # the packages are TypeScript: building them is the typecheck, and it
+      # fails here before any test job pays for a broken build
+      - name: Build packages
+        run: pnpm build:packages
+      # the specs are TypeScript too, and nothing else checks them: the runner
+      # they execute under strips types without looking at them
+      - name: Typecheck specs
+        run: pnpm exec tsc --noEmit -p __test__/tsconfig.json
       # formatting is checked, not fixed, in CI: `pnpm format` is the local fix
       - name: Prettier
         run: pnpm exec prettier --check .
@@ -246,6 +262,29 @@ jobs:
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm
           if-no-files-found: error
+      # The JS loader, its types, and the wasi glue. These are gitignored, so
+      # every job that resolves the package needs them from here — including
+      # the ones that download no .node at all (test-js-only, azure).
+      #
+      # One cell produces them for everyone because the set is identical no
+      # matter which target built it: napi generates the loader from
+      # napi.targets in package.json, so the x64-gnu cell emits the wasi glue
+      # too. x64-gnu is the designated producer for being the cheapest cell —
+      # a native build, no zig and no napi-cross.
+      - name: Upload the generated JS glue
+        if: matrix.settings.target == 'x86_64-unknown-linux-gnu'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: binding-glue
+          path: |
+            index.js
+            index.d.ts
+            browser.js
+            wasi-worker.mjs
+            wasi-worker-browser.mjs
+            ${{ env.APP_NAME }}.wasi.cjs
+            ${{ env.APP_NAME }}.wasi-browser.js
+          if-no-files-found: error
   test-linux-binding:
     name: Test ${{ matrix.target }} - node@${{ matrix.node }}
     needs:
@@ -323,6 +362,13 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bindings-${{ matrix.target }}
+          path: .
+      # gitignored, so a checkout does not have them — the .node above is
+      # unreachable without the loader that resolves it
+      - name: Download the generated JS glue
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: binding-glue
           path: .
       - name: List packages
         run: ls -R .
@@ -403,6 +449,12 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bindings-${{ matrix.target }}
+          path: .
+      # gitignored — see the binding lane above
+      - name: Download the generated JS glue
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: binding-glue
           path: .
       - name: List packages
         run: ls -R .
@@ -681,6 +733,13 @@ jobs:
         with:
           name: bindings-${{ matrix.settings.target }}
           path: .
+      # gitignored — see the binding lane above. Runs on macOS and Windows too;
+      # the artifact is plain text files, so there is nothing host-specific.
+      - name: Download the generated JS glue
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: binding-glue
+          path: .
       - name: List packages
         run: ls -R .
         shell: bash
@@ -731,6 +790,14 @@ jobs:
         with:
           name: bindings-wasm32-wasip1-threads
           path: .
+      # gitignored, and this lane needs more of the set than the others: the
+      # assertion below resolves wrap-esm-lambda.wasi.cjs by name, not just
+      # index.js. Both come from the same artifact.
+      - name: Download the generated JS glue
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: binding-glue
+          path: .
       - name: List packages
         run: ls -R .
         shell: bash
@@ -774,11 +841,20 @@ jobs:
           WRAP_ESM_LAMBDA_ENGINE: oxc
   test-js-only:
     name: Test JS-only fallback - node@${{ matrix.node }}
-    # No artifact download and no Rust: the shape a consumer gets on a
-    # platform with no prebuilt addon (and the one npm's optional-dependency
-    # bug produces). Core degrades to the acorn engine with a warning instead
-    # of throwing out of `--import`, and this proves the degraded mode end to
-    # end on every supported major — not just in a unit test.
+    # No .node and no Rust: the shape a consumer gets on a platform with no
+    # prebuilt addon (and the one npm's optional-dependency bug produces).
+    # Core degrades to the acorn engine with a warning instead of throwing out
+    # of `--import`, and this proves the degraded mode end to end on every
+    # supported major — not just in a unit test.
+    #
+    # It does take the glue artifact, and the distinction is the whole point of
+    # the lane. "Loader present, no binding for this platform" is the consumer
+    # shape being tested; "no loader at all" is a different failure that
+    # reports as `Cannot find module .../index.js — verify package.json has a
+    # valid main entry`. Without this download the specs would still pass, on
+    # the wrong path.
+    needs:
+      - build
     strategy:
       fail-fast: false
       matrix:
@@ -801,6 +877,12 @@ jobs:
         run: pnpm install
       - name: Build packages
         run: pnpm build:packages
+      # the loader only — no bindings-* download, so no .node lands next to it
+      - name: Download the generated JS glue
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: binding-glue
+          path: .
       - name: Test with no native binding present
         # The excluded specs are the ones that reach for the addon directly
         # (`../index`) or pin WRAP_ESM_LAMBDA_ENGINE=oxc in a child process —
@@ -821,6 +903,12 @@ jobs:
     # the bracket, not the tap. The driver runs both delivery shapes: the
     # languageWorkers__node__arguments preload and the package.json "main"
     # prelude.
+    #
+    # Deliberately NOT taking the binding-glue artifact either, unlike
+    # test-js-only. Nothing here resolves the addon, so the glue would buy only
+    # a `needs: build` edge that makes this lane wait on cross-compiled targets
+    # it never loads. If a future preset does emit patch entries, this lane
+    # needs the glue and the dependency that comes with it.
     strategy:
       fail-fast: false
       matrix:
@@ -1006,6 +1094,22 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           path: artifacts
+      # index.js and index.d.ts are this package's `main` and its types — both
+      # named in package.json "files" — and this job does not build, so without
+      # this step the tarball would go up without an entry point.
+      #
+      # A second copy lands under artifacts/binding-glue/ from the step above;
+      # `napi artifacts` only looks for .node/.wasm, so it ignores it. This
+      # download is what puts them at the repo root where "files" resolves.
+      #
+      # Building here instead was the alternative and is worse: it would ship a
+      # loader that no test lane ever exercised. This way the exact bytes the
+      # test jobs ran against are the bytes that get published.
+      - name: Download the generated JS glue
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: binding-glue
+          path: .
       - name: Move artifacts
         run: pnpm run artifacts
       - name: List packages

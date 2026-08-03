@@ -20,10 +20,6 @@
 *.toml  text eol=lf
 *.debug text eol=lf merge=union
 
-# Generated codes
-index.js                         linguist-detectable=false
-index.d.ts                       linguist-detectable=false
-wrap-esm-lambda.wasi-browser.js linguist-detectable=false
-wrap-esm-lambda.wasi.cjs        linguist-detectable=false
-wasi-worker-browser.mjs          linguist-detectable=false
-wasi-worker.mjs                  linguist-detectable=false
+# The napi-generated files used to be listed here as linguist-detectable=false.
+# They are gitignored now, so linguist never sees them and the rules had nothing
+# left to apply to.
