@@ -11,6 +11,22 @@
   "rust-analyzer.check.command": "clippy",
   "rust-analyzer.check.extraArgs": ["--all-targets"],
 
+  // Type-check with the TypeScript this repo pins, not the one VS Code ships.
+  // They are not the same compiler: VS Code 1.131 bundles 6.0.3 while
+  // package.json pins ~5.8.3, and 6.0.3 does not resolve @types/node@24.2.0 in
+  // this tree — its automatic @types discovery returns nothing, and naming
+  // `types: ["node"]` explicitly does not rescue it either. The result is ~280
+  // phantom "Cannot find name 'process'" errors in the editor against a project
+  // that `tsc` and CI both compile with zero diagnostics.
+  //
+  // Pointing at the workspace lib makes the editor agree with `pnpm typecheck`
+  // by construction, which is what you want from a tracked setting regardless
+  // of this particular version skew.
+  "typescript.tsdk": "node_modules/typescript/lib",
+  // VS Code will not silently execute a workspace-supplied compiler — this
+  // makes it offer, once, instead of quietly staying on the bundled one.
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
   // Rust tests in VS Code's built-in Testing view. rust-analyzer implements the
   // native testing API itself, so no adapter extension is involved — this flag
   // is the whole integration. It is experimental and off by default.
