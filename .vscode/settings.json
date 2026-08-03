@@ -11,6 +11,42 @@
   "rust-analyzer.check.command": "clippy",
   "rust-analyzer.check.extraArgs": ["--all-targets"],
 
+  // Rust tests in VS Code's built-in Testing view. rust-analyzer implements the
+  // native testing API itself, so no adapter extension is involved — this flag
+  // is the whole integration. It is experimental and off by default.
+  "rust-analyzer.testExplorer": true,
+
+  // The TypeScript half, via connor4312.nodejs-testing. Nothing here is
+  // discoverable without being told: the specs do not use node's default
+  // test-file naming (`*.test.js`, `test/**`), they are TypeScript loaded
+  // through a register hook, and they need OXC_TSCONFIG_PATH set.
+  // `include` is what scopes discovery to the suite; the glob is left in the
+  // `**`-prefixed form the extension's own schema documents, because whether
+  // filePatterns is matched workspace-relative or include-relative is not
+  // specified. A narrower `__test__/*.spec.ts` would match nothing under the
+  // second reading, and "discovered zero tests" is the one failure this repo
+  // has learned to distrust — it looks identical to a green run.
+  "nodejs-testing.include": ["./__test__"],
+  "nodejs-testing.extensions": [
+    {
+      "extensions": ["ts"],
+      "filePatterns": ["**/*.spec.ts"],
+      "parameters": ["--import", "@oxc-node/core/register"]
+    }
+  ],
+  // The engine is pinned for the same reason the launch configs pin it — an
+  // unset value silently falls back to acorn. The cost is that the Testing view
+  // is an oxc-only view: there is one env per workspace, so parity work still
+  // goes through the two "Debug spec file" configs or the test:file task.
+  "nodejs-testing.env": {
+    "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
+    "WRAP_ESM_LAMBDA_ENGINE": "oxc"
+  },
+  // packages/*/dist is what the specs import, so the Testing view needs the
+  // same guard the launch configs get from preLaunchTask. `tsc -b` is
+  // incremental, so this is near-free on a warm tree.
+  "nodejs-testing.pretest": ["pnpm", "build:packages"],
+
   // Formatting is prettier for web files, rustfmt via rust-analyzer for Rust,
   // and taplo for TOML — the same three that `pnpm format` runs, so on-save and
   // `pnpm format:check` cannot disagree.
