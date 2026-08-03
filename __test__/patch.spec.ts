@@ -324,11 +324,24 @@ test('double-patch guard: runtime hook passes through a patched bundle', async (
   }
 })
 
+// The with-deps patch calls chalk.red(), and the two assertions below compare
+// stdout byte-for-byte. chalk colorizes whenever the ambient environment claims
+// colors are supported, so an inherited FORCE_COLOR turns a correct run into
+// `deps:[31msent:hello[39m!` and fails the compare. Nothing in CI
+// sets it — every lane pipes stdout, and chalk sees no TTY — but VS Code's test
+// integration does, which is how this surfaced.
+//
+// Pinned off in the child rather than stripped from the output afterwards:
+// these tests assert that the patch module graph resolves, not what chalk did,
+// and a strictEqual against a byte-exact string should not depend on who
+// launched the suite.
+const noColor = { FORCE_COLOR: '0' }
+
 test('patch dependencies: relative TS helper + bare npm specifier, runtime mode', async () => {
   const { stdout } = await execFileAsync(
     process.execPath,
     ['--import', '@wrap-esm-lambda/hooks/register', fixture('app.mjs')],
-    { env: { ...process.env, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.deps.ts') } },
+    { env: { ...process.env, ...noColor, WRAP_ESM_LAMBDA_CONFIG: fixture('wrap.config.deps.ts') } },
   )
   assert.strictEqual(stdout.trim(), 'deps:sent:hello!', 'the patch module graph resolves at preload')
 })
@@ -351,7 +364,9 @@ test('patch dependencies: the same graph bundles in build mode', async () => {
     const bundled = await readFile(outfile, 'utf8')
     assert.ok(bundled.includes('exclaim'), 'the relative TS helper is bundled')
 
-    const { stdout } = await execFileAsync(process.execPath, [outfile])
+    const { stdout } = await execFileAsync(process.execPath, [outfile], {
+      env: { ...process.env, ...noColor },
+    })
     assert.strictEqual(stdout.trim(), 'deps:sent:hello!', 'chalk and the helper ride along in the artifact')
   } finally {
     await rm(outDir, { recursive: true, force: true })
