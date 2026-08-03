@@ -127,7 +127,7 @@
     "singleQuote": true,
     "arrowParens": "always"
   },
-  "packageManager": "pnpm@11.13.0",
+  "packageManager": "pnpm@11.20.0",
   "homepage": "https://github.com/filipkunc/wrap-esm-lambda#readme",
   "bugs": {
     "url": "https://github.com/filipkunc/wrap-esm-lambda/issues"
