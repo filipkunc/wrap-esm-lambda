@@ -85,7 +85,7 @@ prototype gaps, marked as such.
 - If it throws at **build** time the build fails. At **runtime** the throw is
   contained: the failure is reported once on stderr, the patched module still
   loads (unpatched), and `WRAP_ESM_LAMBDA_STRICT=1` restores the hard failure —
-  see the [failure policy](../../README.md#failure-policy-what-happens-when-instrumentation-cannot-do-its-job).
+  see the [failure policy](../../docs/failure-policy.md).
 
 ### What it receives
 

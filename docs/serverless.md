@@ -136,6 +136,14 @@ honest limit: an agent that captured a reference to `registerHook` _before_
 activation and calls it later would bypass the choke point — on Azure that
 window is worker boot only, where no third-party code runs.
 
+Each invocation reports the full nesting: `totalMs` (first pre hook → last
+post hook), `callbackMs` (outermost callback wrapper — applied by the
+preset's _last_ pre hook, so it contains every foreign wrapper), `handlerMs`
+(innermost — applied by its _first_ pre hook, nothing between it and user
+code), per-hook timings for every foreign hook, and flags for anything that
+swapped the inputs, replaced the callback, bypassed the handler, or mutated
+the result or error on the way out.
+
 Delivery, then, has two shapes. The worker-arguments preload
 (`languageWorkers__node__arguments = --import @wrap-esm-lambda/hooks/register`,
 the config arming the preset) is the Lambda-like route and additionally
