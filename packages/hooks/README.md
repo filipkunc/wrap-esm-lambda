@@ -108,4 +108,4 @@ stderr and lands in core's `instrumentationFailures()`.
 
 Config resolution itself stays loud: there is nothing to degrade to, and
 silently running uninstrumented is the one failure an operator cannot see. The
-full table is in the [root README](../../README.md#failure-policy-what-happens-when-instrumentation-cannot-do-its-job).
+full table is in [docs/failure-policy.md](../../docs/failure-policy.md).

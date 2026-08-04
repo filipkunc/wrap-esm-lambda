@@ -7,17 +7,16 @@ builtins — delivered at runtime or at build time from one config.**
 
 You describe _what_ to patch (package name, semver range, files, exported
 bindings) and write an ordinary imperative patch function. The toolkit appends
-a generic **exports tap** to the matched module's source (a native
-[oxc](https://oxc.rs/) transform via [napi.rs](https://napi.rs/)), and your
-function receives the module's live bindings as get/set accessors — the same
-reach `Module._load` monkey-patching ever had, but working for `import` and
-`require()` alike, including on the Node minors where the classic patch points
-were [broken](docs/history.md).
+a generic **exports tap** to the matched module's source, and your function
+receives the module's live bindings as get/set accessors — the same reach
+`Module._load` monkey-patching ever had, but working for `import` and
+`require()` alike. The project began as an experiment in wrapping AWS Lambda
+ESM handlers ([still a first-class use case](#wrapping-an-aws-lambda-handler))
+and grew into a general instrumentation toolkit.
 
-The project began as an experiment in wrapping AWS Lambda ESM handlers — a
-job the generic tap now does on its own, discovering the handler from the
-Lambda environment ([below](#wrapping-a-lambda-handler--now-just-a-patch-entry))
-— and grew into a general instrumentation toolkit.
+New here? Start with the **[getting-started tutorial](docs/getting-started.md)**
+— it walks from an empty directory to a patched express app in both delivery
+modes.
 
 ## Quick start
 
@@ -86,276 +85,83 @@ await build({
 })
 ```
 
-Both modes run the **same transform** — the instrumented output differs only
-in how the patch function is delivered (a bundled import vs the preloaded
-registry) — and a sentinel comment guards against double-patching when
-they're combined. A runnable copy of this exact setup lives in
-[examples/express-route](examples/express-route):
+Both modes run the **same transform** and can be combined safely — a sentinel
+comment guards against double-patching. A runnable copy of this exact setup
+lives in [examples/express-route](examples/express-route):
 
 ```sh
 pnpm --filter example-express-route start
 ```
 
-## How it works
+## Which package do I need?
 
-The matched module is parsed once (oxc, full AST) and every requested
-binding is validated against its statically visible exports — a missing
-export is a hard error, the version-drift alarm. Then the tap is **tiered**:
+The toolkit is a small family of packages; you only install the ones for your
+delivery mode. All of them share one config format
+([reference](docs/config.md)).
 
-- **Fast path** — when every requested binding is already a reassignable
-  local (function/class/`let`/`var` declarations, list exports of mutable
-  locals: the common case for classes like smithy's `Client`), the tap only
-  **appends** a snippet calling your patch function with get/set accessors
-  over the live bindings. The source is untouched, existing source maps stay
-  valid, and on the runtime path the bytes never leave UTF-8.
-- **Rewrite path** — shapes that cannot be rebound as written are
-  **restructured** through one AST rewrite + codegen (with a source map):
-  `export const` is demoted to `let` (destructuring patterns included), an
-  anonymous `export default` is named into a local, and re-exports —
-  `export { a as b } from`, `export * as ns from`, import-backed list
-  exports — are split into an import plus a rebindable local. Even a bare
-  `export * from` resolves: the transform walks the star sources' files to
-  find the provider — following bare specifiers (`export * from "pkg"`)
-  through full import-style package resolution
-  ([oxc_resolver](https://docs.rs/oxc_resolver) natively, its JS twin in the
-  acorn engine) — then appends a shadow export (explicit exports shadow
-  `export *`, so this one is append-only). Only modules that need a
-  rewrite pay for one; what stays loud: ambiguous star names, stars into
-  CJS, stars into packages that are not installed.
+| you want to…                                                     | use                                                                                                                                    |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| write a config and patch functions (always needed)               | [`@wrap-esm-lambda/core`](packages/core) — `definePatches`, the [patch author contract](packages/core/README.md#patch-author-contract) |
+| patch at **runtime**, no build changes (`node --import`)         | [`@wrap-esm-lambda/hooks`](packages/hooks)                                                                                             |
+| patch at **build time** (Vite, Rollup, esbuild, webpack, Rspack) | [`@wrap-esm-lambda/unplugin`](packages/unplugin)                                                                                       |
+| wrap an AWS Lambda handler                                       | the [`aws-lambda` preset](packages/hooks/README.md#aws-lambda) in `@wrap-esm-lambda/hooks`                                             |
+| bracket Azure Functions invocations                              | the [`azure-functions` preset](packages/hooks/README.md#azure-functions) in `@wrap-esm-lambda/hooks`                                   |
+| run with **no native binary** (unsupported platform, WASM edge)  | [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) — `WRAP_ESM_LAMBDA_ENGINE=acorn`, same output, pure JS                        |
 
-Either way the patch call runs at the end of the module's own evaluation:
-after its definitions exist, before any importer sees them.
+Under both shells sits the native transform: the root
+[`wrap-esm-lambda`](src/lib.rs) package, an [oxc](https://oxc.rs/) addon via
+[napi.rs](https://napi.rs/). It is an implementation detail — the shells load
+it for you and fall back to the pure-JS acorn engine when no prebuilt binary
+exists for your platform.
 
-- `bindings.X` reads the live value; mutating it
-  (`X.prototype.send = ...`) works everywhere.
-- `bindings.X = wrapped` **rebinds** the export — an ESM live binding
-  reassignment or a `module.exports.X` write. The reserved
-  `'module.exports'` binding rebinds a CJS module whose export _is_ the API
-  (fastify's factory); `'default'` taps a default export.
-- ESM and CJS get mode-specific snippets; the CJS-or-ESM decision reproduces
-  Node's own format rules at runtime (extension, then nearest package.json
-  `"type"`), and falls back to the same **syntax detection** bundlers
-  themselves use at build time, where no format hint exists — so a pure-CJS
-  express, the AWS SDK's `"type"`-less ESM `dist-es`, and the two trees of a
-  dual package like hono each land on their real tap in both shells.
-- Patch delivery differs per mode: at build time a static import of your
-  patch module is appended and bundled (a `require()` call when the patched
-  module is CJS — appended `import` syntax would flip its format under the
-  bundler's own detection); at runtime the register entry preloads patch
-  functions into a global registry the tap reads (a hook-overridden CJS
-  source cannot serve an injected `require`).
+Because a config is code and patch entries are plain data, instrumentation
+also ships as an ordinary npm package (config + patches + register entry) that
+an app activates with one flag — the pattern an APM vendor would use. See
+[shipping instrumentation as a package](docs/config.md#shipping-instrumentation-as-a-package).
 
-Full rules — call timing, rebinding edges, dependency dos and don'ts, failure
-modes — live in the
-[patch author contract](packages/core/README.md#patch-author-contract), each
-backed by a test.
+## How it works, in one minute
 
-### Why not `Module._load` / a loader proxy?
+The matched module is parsed once (full AST) and every requested binding is
+validated against its statically visible exports — a missing export is a hard
+error, the version-drift alarm. Then a small snippet is **appended** to the
+module's source: it calls your patch function at the end of the module's own
+evaluation — after its definitions exist, before any importer sees them — with
+get/set accessors over the live bindings. Reading `bindings.X` gives the live
+value; assigning `bindings.X = wrapped` rebinds the export for every importer.
 
-Three mechanism classes exist for reaching a module's exports, and each has a
-blind spot ([full comparison](docs/comparisons.md), with tests over identical
-targets):
+Export shapes that cannot be rebound as written (`export const`, anonymous
+`export default`, re-export barrels, `export * from` chains) are restructured
+through one AST rewrite with a source map; everything else leaves the source
+byte-for-byte untouched. ESM and CJS each get a mode-specific snippet, chosen
+by reproducing Node's own format rules.
 
-- **`Module._load` patching** (require-in-the-middle lineage) never sees
-  `import` of a builtin, historically lost `import`-ed CJS whenever Node's
-  loader shifted ([the breakage trail](docs/history.md)), and has no
-  build-time story.
-- **Loader proxies** ([import-in-the-middle](https://github.com/nodejs/import-in-the-middle))
-  never see a pure `require()` chain — the path the real AWS SDK takes under
-  plain `node`.
-- **Body-rewriting transforms** ([orchestrion-js](https://github.com/nodejs/orchestrion-js))
-  can reach non-exported internals, but user code only _observes_ events —
-  and the transform costs ~100x more per module.
+The full mechanism — the fast/rewrite tiers, rebinding semantics, the
+CJS-or-ESM decision, how the two delivery modes differ, and why the classic
+alternatives (`Module._load` patching, loader proxies, body-rewriting
+transforms) each have a blind spot this design avoids — is in
+**[docs/how-it-works.md](docs/how-it-works.md)**.
 
-The exports tap patches both module systems from one declarative entry, works
-at build time too, and never touches `Module._load` — the
-[interplay matrix](hooks/interplay-matrix) shows it behaving identically on
-every Node 22/24/26 rung, including the minors where sync hooks and
-`Module._load` miscomposed.
+## Wrapping an AWS Lambda handler
 
-## The packages
-
-| package                                                  | role                                                                                                                                                |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@wrap-esm-lambda/core`](packages/core)                 | config (`defineConfig`/`definePatches`), matcher, apply step; the [patch author contract](packages/core/README.md#patch-author-contract)            |
-| [`@wrap-esm-lambda/hooks`](packages/hooks)               | **runtime** shell: synchronous `registerHooks` load hook + eager builtin patching, activated via `node --import`                                    |
-| [`@wrap-esm-lambda/unplugin`](packages/unplugin)         | **build-time** shell: one [unplugin](https://unplugin.unjs.io/), adapters for Vite/Rolldown, Rollup, esbuild, webpack, Rspack                       |
-| [`wrap-esm-lambda`](index.d.ts) (repo root)              | the native oxc addon — the default engine: `exportsTap*` (the tap) with zero-copy `Buffer` variants, plus the resolver and format-detection helpers |
-| [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) | the pure-JS engine (acorn + magic-string), same surface and byte-identical snippets — select with `WRAP_ESM_LAMBDA_ENGINE=acorn`                    |
-
-All four are written in TypeScript (`src/*.mts`) and ship compiled ESM plus
-declarations (`dist/*.mjs` + `dist/*.d.mts`, with declaration and source maps
-back to the `.mts`), so a config file gets real completion on
-`definePatches`, and `TransformEngine` — the surface the native addon and the
-acorn engine both implement — is now a type the compiler checks them against,
-not only a contract the parity tests assert.
-
-The `core` source mirrors the pipeline a patch travels:
-[`config.mts`](packages/core/src/config.mts) (the entry shapes) ->
-[`match.mts`](packages/core/src/match.mts) (which entries apply to which
-module) -> [`format.mts`](packages/core/src/format.mts) (the CJS-or-ESM
-decision) -> [`apply.mts`](packages/core/src/apply.mts) (entries ->
-instrumented source), plus [`registry.mts`](packages/core/src/registry.mts)
-(the runtime patch-registry contract).
-
-## Config reference
-
-A config is a list of patch entries.
-
-### Patch entries — the exports tap
-
-```ts
-{
-  module: {
-    name: '@smithy/core',        // package name (nearest package.json) — or a builtin ('node:os')
-    versionRange: '>=3 <5',      // optional semver gate (builtins: gates on process.versions.node)
-    files: ['dist-es/submodules/client/smithy-client/client.js', 'dist-cjs/submodules/client/index.js'],
-                                 // optional path suffixes; omit = every file of the package
-  },
-  patch: { name: 'patchSmithyClient', from: '/abs/path/patches/aws.ts' },
-  bindings: ['Client'],          // exports handed to the patch; 'module.exports' rebinds the whole CJS export
-}
-```
-
-- `patch.from` may be relative to the config file, a bare package specifier,
-  a `file://` URL or an absolute path — pass `import.meta.url` as the second
-  argument of `defineConfig`/`definePatches` and everything is resolved to an
-  absolute path at definition time (resolution rules in the
-  [patch author contract](packages/core/README.md#patch-author-contract)).
-  TypeScript patch files ride on Node's type stripping at runtime and on the
-  bundler at build time.
-- **Path-identified targets**: `module: { path: [...] }` (a string or list;
-  an absolute path matches exactly, a relative one as a suffix) matches files
-  instead of a package, for code with no useful package identity — an app's
-  own files, or a Lambda handler whose location only the runtime environment
-  knows (the [aws-lambda preset](#wrapping-a-lambda-handler--now-just-a-patch-entry)
-  derives such an entry from `_HANDLER`/`LAMBDA_TASK_ROOT` at preload).
-  `path` replaces `name` and excludes `versionRange`/`files`; the validator
-  checks whichever candidates exist in the local tree and skips the rest as
-  runtime-only.
-- **Builtin targets** (`node:http`, `os`, ...) have no source to transform,
-  so each shell reaches them through what it owns. The runtime shell patches
-  their exports object **eagerly at preload**, before any user code loads.
-  The build shell owns module **resolution** instead: every configured
-  builtin specifier is aliased to a generated wrapper module that patches
-  the real exports object via `process.getBuiltinModule` (Node >= 22.3
-  where the bundle runs) and re-exports the patched bindings. In both modes
-  `require()`, ESM default import and ESM named import all observe the
-  patch, and a shared guard keeps the hybrid combination single-patched.
-  Builtin entries reject `files`; `versionRange` gates on the running Node
-  at preload and on the building Node at bundle time.
-- Validation is loud: a requested binding missing from an ESM module (or a
-  builtin) is a hard error, and a rebind that cannot take effect (getter-only
-  CJS exports of a sloppy-mode bundle) throws instead of silently no-opping.
-
-Patch entries are the only entry kind. Earlier versions had a second one —
-**wrap entries** (`match` + `handler` + `wrapper`), the original
-Lambda-handler transform — removed once the tap's rewrite path could rebind
-every shape they covered and the
-[aws-lambda preset](#wrapping-a-lambda-handler--now-just-a-patch-entry)
-covered the runtime discovery. A wrap entry translates directly: a
-`module: { path: [...] }` match, `bindings: [<handler>]`, and a one-line
-patch function `bindings.handler = WrapAwsLambda(bindings.handler)`.
-
-## Shipping instrumentation as a package
-
-A config is code, and `from` specifiers resolve against the config file — so
-patch code, config and activation ship together as **one ordinary npm
-package**, the way an APM vendor distributes instrumentation:
-
-```
-your-apm/
-  package.json          exports: { "./register": ..., "./config": ... }
-  src/patches/*.mjs     the patch functions (no dependency on this toolkit)
-  src/config.mjs        definePatches([...], import.meta.url)
-  src/register.mjs      import { registerConfig } from '@wrap-esm-lambda/hooks'
-                        import config from './config.mjs'
-                        await registerConfig(config)
-```
-
-The app installs the package and the whole runtime integration is one flag —
-no config file, no env var:
-
-```sh
-node --import your-apm/register app.mjs
-```
-
-Alternatively `WRAP_ESM_LAMBDA_CONFIG` accepts a package specifier (resolved
-from the app, like any dependency):
-
-```sh
-WRAP_ESM_LAMBDA_CONFIG=your-apm/config node --import @wrap-esm-lambda/hooks/register app.mjs
-```
-
-…and the same installed config drives build-time delivery through the
-unplugin adapters. Because entries are plain data, an app composes several
-instrumentation packages by concatenating their entries. The runnable version
-of this pattern is [examples/function-logger](examples/function-logger) — a
-before/after call logger with exception capture (logged and rethrown),
-consumed by [examples/function-logger-app](examples/function-logger-app) and
-verified end-to-end (both runtime activations plus the bundled build) by
-[`__test__/packaging.spec.ts`](__test__/packaging.spec.ts).
-
-## Worked examples
-
-The test suite doubles as a recipe book — each spec runs the real package:
-
-| target                             | what it shows                                                                                                                                                                                                                                       | spec                                                        |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                                                                     | [`aws.spec.ts`](__test__/aws.spec.ts)                       |
-| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch, and the same config lands through esbuild at build time                                                                                    | [`frameworks.spec.ts`](__test__/frameworks.spec.ts)         |
-| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself, in both shells                                                                                                                                | [`frameworks.spec.ts`](__test__/frameworks.spec.ts)         |
-| **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                                                                    | [`frameworks.spec.ts`](__test__/frameworks.spec.ts)         |
-| **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                                                             | [`http-route.spec.ts`](__test__/http-route.spec.ts)         |
-| **builtins** (`node:os`)           | eager preload patching at runtime, a resolution-aliased wrapper module at build time — require, default import and named import all observe it either way, single-patched when combined                                                             | [`patch.spec.ts`](__test__/patch.spec.ts)                   |
-| **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — relative and bare package specifiers alike — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](__test__/tap-shapes.spec.ts)         |
-| **Lambda handler via `_HANDLER`**  | the generic approach carrying the original problem: the config learns the handler's file and export from the Lambda environment at preload, and the RIC's exact load sequence gets a wrapped handler — ESM rewrite path and CJS property tap alike  | [`lambda-generic.spec.ts`](__test__/lambda-generic.spec.ts) |
-| **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                                                             | [`hybrid.spec.ts`](__test__/hybrid.spec.ts)                 |
-| **packaging**                      | instrumentation as one installed npm package (patches + config + register entry): `--import your-apm/register`, package-specifier configs, and the same packaged config bundled at build time                                                       | [`packaging.spec.ts`](__test__/packaging.spec.ts)           |
-| **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                                                                      | [`patch.spec.ts`](__test__/patch.spec.ts)                   |
-
-For observe-only needs on core modules, Node's own
-[`diagnostics_channel`](https://nodejs.org/api/diagnostics_channel.html)
-tracing channels are the sanctioned alternative — the eager patch is for when
-you need to wrap or rebind.
-
-The full field notes on each of these — the per-shape lessons (target the
-defining module, not the barrel; where rebinding meets bundled-CJS reality),
-the `http.route` mechanisms, and the builtin eager-patch design — live in
-[docs/real-packages.md](docs/real-packages.md).
-
-## Wrapping a Lambda handler — now just a patch entry
-
-The problem this repo started with — transform:
+The problem this repo started with: turn
 
 ```js
-// input.js
-export const handler = async (event) => {
-  return 'Hi from AWS Lambda'
-}
+export const handler = async (event) => 'Hi from AWS Lambda'
 ```
 
-into:
+into
 
 ```js
-// transformed.js
-export const handler = WrapAwsLambda(async (event) => {
-  return 'Hi from AWS Lambda'
-})
+export const handler = WrapAwsLambda(async (event) => 'Hi from AWS Lambda')
 ```
 
-The generic tap covers this today with no dedicated mechanism — including the
-part that used to make it special: **on Lambda, the handler's file and export
-name are not yours to write down.** The platform owns them and hands them to
-its runtime interface client at startup as `_HANDLER` (`src/index.handler`)
-and `LAMBDA_TASK_ROOT`. A config is code evaluated in the target process at
-preload — before the RIC's late handler import — so the `aws-lambda` preset
-reads the same two variables there and emits an ordinary path-matched patch
-entry, reproducing the RIC's own resolution rules (basename split on the
-first dot, module root prefix, the `''`/`.js`/`.mjs`/`.cjs` lookup order):
+On Lambda the handler's file and export name are not yours to write down —
+the platform owns them (`_HANDLER`, `LAMBDA_TASK_ROOT`). The `aws-lambda`
+preset reads that contract at preload and emits an ordinary patch entry, so
+the config names nothing:
 
 ```js
-// wrap.config.mjs — no file name, no export name: the environment knows
+// wrap.config.mjs
 import { definePatches } from '@wrap-esm-lambda/core'
 import { lambdaHandlerEntries } from '@wrap-esm-lambda/hooks/aws-lambda'
 
@@ -369,341 +175,108 @@ export default definePatches(
 // patches/lambda.mjs — the platform picked the export's name, so don't name it
 export function wrapHandler(bindings) {
   for (const name of Object.keys(bindings)) {
-    const original = bindings[name]
-    bindings[name] = WrapAwsLambda(original)
+    bindings[name] = WrapAwsLambda(bindings[name])
   }
 }
 ```
 
-Activation is the usual runtime-shell flag, which Lambda accepts through
-`NODE_OPTIONS` (details in [docs/serverless.md](docs/serverless.md)). An
-`export const handler` goes through the tap's rewrite path, a CJS
-`exports.handler` is a `module.exports` property tap, and outside Lambda the
-same config is inert — no `_HANDLER`, no entry.
-[`__test__/lambda-generic.spec.ts`](__test__/lambda-generic.spec.ts) replays
-the RIC's exact load sequence on every lane, and the CI Lambda lane runs the
-same fixture through AWS's real runtime interface client on the real
-`public.ecr.aws/lambda/nodejs` images, both module systems, answering real
-invocations.
+Activation goes through `NODE_OPTIONS=--import`; outside Lambda the same
+config is inert. CI verifies the whole arrangement on AWS's real
+`public.ecr.aws/lambda/nodejs` images, answering real invocations. The
+practical composition — a [Hono](https://hono.dev/) app on Lambda with its
+handler timed, routes labeled and the AWS SDK intercepted — is
+[examples/hono-lambda](examples/hono-lambda); platform analysis is in
+[docs/serverless.md](docs/serverless.md).
 
-The practical composition of all of it is a runnable example:
-[examples/hono-lambda](examples/hono-lambda) — a [Hono](https://hono.dev/)
-app behind `hono/aws-lambda`'s `handle()`, its handler timed by the preset
-entry, its routes labeled with `http.route`, and the real AWS SDK beneath it
-intercepted at `@smithy/core` before credentials or network exist (which is
-also why testing it needs no LocalStack). The CI Lambda lane answers real
-API Gateway events against it on the runtime image and reads billed
-milliseconds and memory off the platform's own `REPORT` line onto the job
-summary.
+**Azure Functions** needs no handler transform at all: the platform ships a
+`preInvocation`/`postInvocation` hook pipeline, and the `azure-functions`
+preset brackets it — first and last hook, per-invocation timing, foreign
+hooks attributed to their registering package. See the
+[preset docs](packages/hooks/README.md#azure-functions),
+[examples/azure-functions](examples/azure-functions), and
+[docs/serverless.md](docs/serverless.md#azure-functions-the-hook-pipeline-first-and-last).
 
-## Bracketing Azure Functions — the platform's hooks, first and last
+## When instrumentation fails
 
-Azure's v4 Node model needs no handler transform at all: the platform ships
-an extension pipeline — `preInvocation`/`postInvocation` hooks that may
-replace the function callback, the inputs, the result and the error, executed
-by the worker **strictly in registration order**. Array position is the whole
-ordering contract, and every registration funnels through one function:
-`registerHook` on `@azure/functions-core` — a module the worker serves from a
-`require()` proxy, which **never exists as a file**. That is the one target
-the exports tap fundamentally cannot reach, so the `azure-functions` preset
-handles it the way the `aws-lambda` preset handles `_HANDLER`: by reading the
-platform's own contract. It registers at the earliest instant the platform
-allows (nothing can register before worker setup — the module isn't served
-yet), patches `registerHook` in place on the shared core object, and from
-that choke point keeps its bracket true: its opening hook stays first, its
-closing hooks are re-appended to the tail whenever anyone registers behind
-them — a coexisting APM's hooks (Application Insights registers through this
-exact module), even one registered mid-invocation, execute inside the
-bracket, individually timed and attributed:
+Instrumentation sits in the load path of a process it does not own, so the
+rule is: **fail soft wherever partial degradation exists, stay loud where
+there is nothing to degrade to.** A drifted binding, a throwing patch or a
+missing native addon each cost exactly one entry, one patch call or one
+engine — the app still starts; only an unresolvable config fails startup, on
+purpose. Every recovered failure reports once on stderr and is retrievable
+via `instrumentationFailures()`, and `npx wrap-esm-lambda-validate` turns
+version drift into a CI failure ahead of time.
 
-```js
-// wrap.config.mjs — nothing to name here either: the pipeline is the target
-import { definePatches } from '@wrap-esm-lambda/core'
-import { azureFunctionsEntries } from '@wrap-esm-lambda/hooks/azure-functions'
+| variable                    | effect                                                          |
+| --------------------------- | --------------------------------------------------------------- |
+| `WRAP_ESM_LAMBDA_DISABLE=1` | kill switch — no hooks, no patches, no transform                |
+| `WRAP_ESM_LAMBDA_STRICT=1`  | every recovered failure throws instead (what CI runs)           |
+| `WRAP_ESM_LAMBDA_DEBUG=1`   | trace decisions — engine, instrumented modules, skipped entries |
 
-export default definePatches([...azureFunctionsEntries({ onReport: (report) => console.log(report) })], import.meta.url)
-```
-
-Each invocation reports the full nesting: `totalMs` (first pre hook → last
-post hook), `callbackMs` (outermost callback wrapper — applied by the
-preset's _last_ pre hook, so it contains every foreign wrapper), `handlerMs`
-(innermost — applied by its _first_ pre hook, nothing between it and user
-code), per-hook timings for every foreign hook, and flags for anything that
-swapped the inputs, replaced the callback, bypassed the handler, or mutated
-the result or error on the way out. Outside an Azure worker the same config
-is inert. Delivery is either the worker-arguments preload (the
-`NODE_OPTIONS` analog) or a `package.json` `"main"` prelude — Azure's own
-recommended agent delivery, which keeps prewarmed workers usable;
-[examples/azure-functions](examples/azure-functions) runs both shapes under
-Core Tools' `func start` (the real host, the real worker), against a fake
-coexisting agent, and the CI Azure lane asserts the whole story on every
-push. The worker-side mechanics are replayed line-for-line in
-[`__test__/azure-functions.spec.ts`](__test__/azure-functions.spec.ts);
-platform details and caveats in [docs/serverless.md](docs/serverless.md).
-
-The dedicated transform this repo started with is gone — everything runs on
-the tap, and the handler shape rides its rewrite path. Stack traces survive:
-the rewrite emits a source map, chained all the way back to an original
-`.ts` when an upstream map exists — composed in Rust without leaving the
-addon ([docs/source-maps.md](docs/source-maps.md)). The research that got
-here — the wrap re-implemented with [Babel](https://babeljs.io/),
-[Acorn](https://github.com/acornjs/acorn), [swc.rs](https://swc.rs/) and
-loader hooks of every flavor — lives in [docs/history.md](docs/history.md)
-and the [presentations](Presentation.md); today's benchmark compares the
-tap against [orchestrion-js](https://github.com/nodejs/orchestrion-js) and
-[import-in-the-middle](https://github.com/nodejs/import-in-the-middle) on a
-real AWS SDK module ([docs/benchmarks.md](docs/benchmarks.md)).
-
-## Failure policy: what happens when instrumentation cannot do its job
-
-Instrumentation sits in the load path of every module of a process it does not
-own, so the question that decides whether it is deployable is not "does the
-patch work" but "what happens when it doesn't" — a binding renamed in a
-dependency bump, a patch function with a bug in it, a platform with no
-prebuilt addon.
-
-The rule: **fail soft wherever partial degradation exists, stay loud where
-there is nothing to degrade to.** Downstream of a valid config, every failure
-costs exactly what it has to and no more.
-
-| what fails                                       | what it costs                                       |
-| ------------------------------------------------ | --------------------------------------------------- |
-| the native addon cannot be loaded                | the process runs on the pure-JS acorn engine        |
-| a patch module will not import                   | that one entry drops; the other entries still apply |
-| a requested binding is gone (version drift)      | that one module loads untouched                     |
-| a patch function throws                          | that one patch call; the patched module still loads |
-| a builtin's binding moved                        | that one builtin patch                              |
-| `module.registerHooks` is missing (Node < 22.15) | the load hook; eager builtin patches still apply    |
-| the config cannot be found or loaded             | **startup** — loud, on purpose (see below)          |
-
-Every recovered failure reports once on stderr and is retrievable
-programmatically, so "is this process fully instrumented?" has an answer:
-
-```js
-import { instrumentationFailures } from '@wrap-esm-lambda/core'
-// { total: 1, entries: [{ what: "instrumenting file:///...", error: [Error] }] }
-```
-
-Ahead of time, `wrap-esm-lambda-validate` asks the same questions against the
-installed tree — package present, version in range, declared files there, ESM
-exports still exported, patch module importable — and exits non-zero on any
-failure, so drift is a CI failure in your repo rather than absent telemetry
-later:
-
-```sh
-npx wrap-esm-lambda-validate ./wrap.config.mjs
-#   ERROR   hono >=4 <5 · dist/hono.js
-#           installed 4.12.31; dist/hono.js: 'Hono' not exported (available: HonoBase)
-```
-
-It claims only what static analysis can: a CJS target reports _unverifiable_
-rather than passing, because its exports are assembled at runtime — the same
-reason the CJS tap validates nothing and reaches through `module.exports`.
-
-Three switches:
-
-| variable                    | effect                                                                                                                                                                      |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `WRAP_ESM_LAMBDA_DISABLE=1` | kill switch: no hooks, no patches, no transform — and the config is never resolved, the addon never loaded. Mitigates an incident without touching the app's start command. |
-| `WRAP_ESM_LAMBDA_STRICT=1`  | every recovered failure throws instead. What CI runs; also how to find out why a patch is silently not applying.                                                            |
-| `WRAP_ESM_LAMBDA_DEBUG=1`   | trace the decisions — engine bound, modules instrumented, entries skipped — to stderr.                                                                                      |
-
-Two deliberate exceptions to the soft default. **Config resolution is loud**:
-unlike a drifted binding it has nothing to degrade to, and an operator who
-passed `--import` should learn at startup that they got no instrumentation, not
-from absent telemetry hours later — `WRAP_ESM_LAMBDA_DISABLE=1` is the way to
-say "not now". And **the build-time shell keeps throwing**: a failing build is
-visible and cheap, a silently un-instrumented artifact is not.
-
-Engine availability is not governed by strict mode but by
-`WRAP_ESM_LAMBDA_ENGINE`: unset means "native, or the JS engine if the addon
-cannot be loaded", while naming an engine (`oxc`, `acorn`) means "this one or
-fail". CI names it, so a broken native build can never pass as a green acorn
-run.
-
-## Deploying on serverless platforms
-
-Both AWS Lambda and Azure Functions can activate the runtime shell without
-owning the node CLI (`NODE_OPTIONS=--import` / worker arguments), and the
-[interplay matrix](hooks/interplay-matrix) verifies both bootstrap shapes they
-use — Lambda's ESM runtime interface client and Azure's CJS node worker, each
-loading either handler module system — on every Node 22/24/26 rung, including
-the minors with broken loader interplay that the platforms may still run. When the platform minor is
-unverifiable and the risk budget is zero, the build-time shell delivers the
-identical instrumentation with no runtime loader machinery at all. Full
-analysis: [docs/serverless.md](docs/serverless.md).
-
-## Development
-
-1. `pnpm install` — install dependencies
-2. `pnpm build` — build the native addon (`napi build --release`). **Required
-   once after cloning**, and not only for the addon: the same command writes
-   the package's entry point (`index.js`), its types (`index.d.ts`), and the
-   wasi glue. Those are generated files and are not in git, so before the
-   first build `../index` resolves to nothing and the typecheck fails.
-   `pnpm build:debug` writes the identical set if you only need the loader.
-3. `pnpm build:packages` — compile the workspace packages (`tsc -b`, project
-   references, incremental); `pnpm test` runs it for you
-4. `pnpm test` — the test suite, on Node's built-in
-   [test runner](https://nodejs.org/api/test.html) (`node --test`; TypeScript
-   specs load through `@oxc-node/core`)
-5. `cargo fmt` and `cargo clippy` before committing
-6. `cargo test` — Rust tests
-
-The packages import each other by their published specifiers, so the suite
-runs against the same `dist/` a consumer installs — `pnpm build:packages`
-first, or the imports resolve to nothing.
-
-### TypeScript
-
-The repo is on **TypeScript 7**, the native Go compiler. Two migration details
-are worth knowing before adding a `tsconfig.json`:
-
-- `moduleResolution: "node"` (node10) was **removed** — it is a hard error
-  (TS5108), not a deprecation warning.
-- TypeScript 7 no longer auto-includes every `@types/*` package it can find, so
-  ambient types must be named: `"types": ["node"]`. Omitting it does not fail
-  loudly — it surfaces as a wall of `TS2591 Cannot find name 'process'` against
-  code that is perfectly valid.
-
-Editor support does **not** come from VS Code's built-in JavaScript/TypeScript
-IntelliSense, which is tsserver-based and cannot drive a compiler that ships no
-tsserver. Install the
-[TypeScript Native Preview](https://marketplace.visualstudio.com/items?itemName=TypeScriptTeam.native-preview)
-extension (`.vscode/extensions.json` recommends it). It is a preview: auto-imports,
-find-all-references and rename are incomplete.
-
-### Generated files
-
-`index.js`, `index.d.ts`, `browser.js`, `wasi-worker.mjs`,
-`wasi-worker-browser.mjs`, `wrap-esm-lambda.wasi.cjs` and
-`wrap-esm-lambda.wasi-browser.js` are emitted by `napi build` and are
-gitignored. Any single build writes all of them — the set comes from
-`napi.targets` in `package.json`, so a native x64 build produces the wasi glue
-too.
-
-They used to be committed, and that hid a real defect: the checked-in loader
-still expected addon version `0.2.2` after the crate had moved to `0.2.3`.
-Nothing regenerates them on a version bump and the publish job does not build,
-so a release would have paired a `0.2.2` loader with `0.2.3` platform packages
-— a version-mismatch throw for any consumer running with
-`NAPI_RS_ENFORCE_VERSION_CHECK` set. In CI they now travel as the
-`binding-glue` artifact, built once in the `build` job and downloaded by every
-lane that resolves the package, so the bytes under test are the bytes
-published.
-
-### WebAssembly
-
-1. `rustup target add wasm32-wasip1-threads` to install the build target
-2. `pnpm build --target wasm32-wasip1-threads` to create the `.wasm` file
-
-### CI
-
-Every lane below runs the whole suite on **each** supported Node major —
-`node@22`, `node@24`, `node@26` — except the Lambda lane, which tracks the
-platform's runtimes rather than Node's release line:
-
-| lane                                 | what it covers                                                                                           |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `linux-x64`, `linux-arm64`           | the prebuilt addon on both Linux arches, glibc and musl, in containers on native runners (no QEMU)       |
-| **AWS Lambda**                       | the real `public.ecr.aws/lambda/nodejs` image — `nodejs22.x` and `nodejs24.x`, x86_64 and Graviton       |
-| `win32-x64-msvc`, `win32-arm64-msvc` | Windows on both arches: drive letters and backslashes through matching, resolution and every child spawn |
-| `darwin-arm64`, `darwin-x64`         | macOS on Apple silicon and Intel                                                                         |
-| WASI                                 | the `wasm32-wasip1-threads` build — the reach onto platforms with no prebuilt addon                      |
-| JS-only                              | **no native artifact at all**: the degraded engine path a platform without a prebuild takes              |
-
-Every runner is native — the arm64 lanes are arm64 machines, not QEMU — so a
-green lane means the artifact that platform downloads actually loads there.
-
-The Lambda lane is the one that is not a proxy for its target: Amazon Linux
-2023, AWS's own Node build, and a managed minor that moves on AWS's cadence
-rather than nodejs.org's. Past the suite, it also runs the delivery shape the
-platform forces and no other lane covers — the hook injected through
-`NODE_OPTIONS` (the node CLI is not yours on a managed runtime) with the
-runtime interface client's late, indirect handler load standing in as the
-process main. There is deliberately no `node@26` row: no `nodejs26.x` runtime
-exists, so the matrix gains one when AWS ships one.
-
-Each native lane runs the suite twice, once per engine, and names
-`WRAP_ESM_LAMBDA_ENGINE` explicitly — an implicit run would let a missing or
-broken artifact pass as a green acorn run, since core falls back on purpose.
-The acorn engine earns its second pass on Windows especially: it reimplements
-import-style module resolution over `node:path`, which is where platform
-differences actually live.
-
-Gates in the lint job: `clippy -D warnings`, `oxlint --deny-warnings`,
-`prettier --check`, `tsc --noEmit` over the specs, and `cargo test`. A
-pack-and-install spec runs in every test lane, asserting that what the tarballs
-ship is what the manifests promise and that an app built from those tarballs
-alone actually instruments a package.
-
-Two more gates run beside it, and both block a release:
-
-- **MSRV** — `cargo check --all-targets --locked` on exactly the `rustc 1.95`
-  that `rust-version` in `Cargo.toml` promises. Everything else Rust-side
-  floats on stable, so without this a dependency raising the real floor would
-  surface as a contributor's build breaking rather than as a red check.
-- **Security audit** — `cargo audit` over the whole `Cargo.lock` (every crate
-  there links into the shipped addon, so there is no dev/prod split to make),
-  and `pnpm audit --prod` over what the published packages actually depend on.
-  The full dev tree is audited too but never blocks: bundlers, the benchmark
-  chart generator and test helpers carry advisories no consumer of this
-  package is exposed to, and a gate that is always red is a gate nobody reads.
-
-Every action is pinned to a commit SHA rather than a moving tag, with Renovate
-configured to keep the digests current.
-
-Not covered: 32-bit targets (Node ships no 32-bit Linux build, and win32-x86 is
-being retired), armv7, FreeBSD, and `cargo test`/`clippy` anywhere but Linux.
-
-### Releasing
-
-Pushes and tags **dry-run** the release: `pnpm publish -r --dry-run` for the
-workspace packages and `napi prepublish --dry-run` for the addon, so the
-plumbing is exercised continuously without touching the registry. An actual npm
-publish requires running the workflow manually and typing the confirmation —
-nothing automatic can reach the registry.
+The full failure table, the validator, and engine selection are in
+**[docs/failure-policy.md](docs/failure-policy.md)**.
 
 ## Performance
 
-The headline numbers (details and methodology in
-[docs/benchmarks.md](docs/benchmarks.md) and
-[docs/comparisons.md](docs/comparisons.md)):
+Headline numbers (methodology in [docs/benchmarks.md](docs/benchmarks.md)):
 
-- The exports tap costs **~14 µs** per matched ESM module (full-AST parse +
-  binding validation, all patch entries in one call) and **~2.4 µs** for a
-  CJS tap — orchestrion's body-rewriting transform on the same file costs
-  ~950–1200 µs. Shapes that
-  force the tap's rewrite path (`export const`, anonymous defaults,
-  re-exports) additionally pay one oxc codegen — still microseconds.
-- Runtime-hook cold start overhead on a real fixture app is **~29 ms**
-  (half of which used to be the `semver` package, now replaced by an
-  in-package range matcher), on par with import-in-the-middle's sync mode
-  and ~3x cheaper than the off-thread loader OTel ships by default. Use a
-  `.mjs` config (not `.ts`) where cold start matters.
-- Module sources cross the napi boundary zero-copy as UTF-8 buffers on the
-  runtime path; only the few-hundred-byte snippet comes back.
-- A pure-JS engine ([`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn),
-  `WRAP_ESM_LAMBDA_ENGINE=acorn`) runs the whole setup with no native binary:
-  same emitted code, ~6x slower on the parse-dominated tap (~86 µs vs ~14 µs
-  per matched ESM module), ~14 ms more cold start — the measured JS-only vs
-  JS + Rust trade-off, detailed in
-  [docs/benchmarks.md](docs/benchmarks.md#js-only-vs-js--rust-the-two-engines).
+- The exports tap costs **~14 µs** per matched ESM module and **~2.4 µs** per
+  CJS tap; orchestrion's body-rewriting transform on the same file costs
+  ~950–1200 µs.
+- Runtime-hook cold start overhead on a real fixture app is **~29 ms** — on
+  par with import-in-the-middle's sync mode, ~3x cheaper than the off-thread
+  loader OTel ships by default.
+- The pure-JS acorn engine runs the same setup with no native binary: same
+  emitted code, ~6x slower on the parse-dominated tap, ~14 ms more cold start.
 
-## Design notes & further reading
+## Building and running locally
 
-- [docs/real-packages.md](docs/real-packages.md) — field notes from patching
-  express, fastify, hono, the AWS SDK and builtins
-- [docs/comparisons.md](docs/comparisons.md) — reach and cost vs
-  orchestrion-js and import-in-the-middle, with tests over identical targets
+Prerequisites: Node >= 22, [pnpm](https://pnpm.io/), and a
+[Rust toolchain](https://rustup.rs/) (for the native addon).
+
+```sh
+git clone https://github.com/filipkunc/wrap-esm-lambda
+cd wrap-esm-lambda
+pnpm install         # dependencies
+pnpm build           # native addon — required once after cloning (writes index.js/index.d.ts)
+pnpm build:packages  # compile the workspace packages (pnpm test also runs this)
+pnpm test            # the whole suite, on node --test
+```
+
+Then run any example, e.g. `pnpm --filter example-express-route start`.
+Rust-side checks are `cargo fmt`, `cargo clippy` and `cargo test`. Details —
+why the first build is mandatory, generated files, the TypeScript 7 setup,
+the CI matrix and the release process — are in
+**[CONTRIBUTING.md](CONTRIBUTING.md)**.
+
+## Documentation
+
+Guides:
+
+- [docs/getting-started.md](docs/getting-started.md) — tutorial: from empty
+  directory to a patched app, runtime and build-time
+- [docs/config.md](docs/config.md) — config reference, and shipping
+  instrumentation as an npm package
+- [docs/how-it-works.md](docs/how-it-works.md) — the exports tap mechanism,
+  and comparisons with `Module._load` patching and loader proxies
+- [docs/failure-policy.md](docs/failure-policy.md) — failure modes, the
+  validator CLI, engine selection
+- [CONTRIBUTING.md](CONTRIBUTING.md) — development, CI, releasing
+
+Deep dives:
+
+- [docs/real-packages.md](docs/real-packages.md) — worked examples and field
+  notes from patching express, fastify, hono, the AWS SDK and builtins
 - [docs/serverless.md](docs/serverless.md) — AWS Lambda / Azure Functions
   soundness, empirically verified
-- [docs/source-maps.md](docs/source-maps.md) — inline maps, chaining to
-  TypeScript, composing maps in Rust
+- [docs/comparisons.md](docs/comparisons.md) — reach and cost vs
+  orchestrion-js and import-in-the-middle, with tests over identical targets
 - [docs/benchmarks.md](docs/benchmarks.md) — cold start and transform-latency
   methodology and charts
+- [docs/source-maps.md](docs/source-maps.md) — inline maps, chaining to
+  TypeScript, composing maps in Rust
 - [docs/history.md](docs/history.md) — the Node loader breakage trail that
-  shaped the design, and the removed Frida fs-detour fallback
+  shaped the design
 - [hooks/interplay-matrix](hooks/interplay-matrix) — the Node 22/24/26
   hook/`Module._load` interplay matrix (`pnpm matrix`)
 - [Presentation.md](Presentation.md) / [RustPresentation.md](RustPresentation.md) —

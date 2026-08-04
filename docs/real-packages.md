@@ -9,6 +9,24 @@ package.
 shape, run through an identity-patch battery on every push and against
 latest versions nightly, results in [corpus/matrix.md](../corpus/matrix.md).)
 
+## Index: the test suite as a recipe book
+
+Each spec runs the real package:
+
+| target                             | what it shows                                                                                                                                                                                                                                       | spec                                                           |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                                                                     | [`aws.spec.ts`](../__test__/aws.spec.ts)                       |
+| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch, and the same config lands through esbuild at build time                                                                                    | [`frameworks.spec.ts`](../__test__/frameworks.spec.ts)         |
+| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself, in both shells                                                                                                                                | [`frameworks.spec.ts`](../__test__/frameworks.spec.ts)         |
+| **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                                                                    | [`frameworks.spec.ts`](../__test__/frameworks.spec.ts)         |
+| **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                                                             | [`http-route.spec.ts`](../__test__/http-route.spec.ts)         |
+| **builtins** (`node:os`)           | eager preload patching at runtime, a resolution-aliased wrapper module at build time — require, default import and named import all observe it either way, single-patched when combined                                                             | [`patch.spec.ts`](../__test__/patch.spec.ts)                   |
+| **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — relative and bare package specifiers alike — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](../__test__/tap-shapes.spec.ts)         |
+| **Lambda handler via `_HANDLER`**  | the generic approach carrying the original problem: the config learns the handler's file and export from the Lambda environment at preload, and the RIC's exact load sequence gets a wrapped handler — ESM rewrite path and CJS property tap alike  | [`lambda-generic.spec.ts`](../__test__/lambda-generic.spec.ts) |
+| **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                                                             | [`hybrid.spec.ts`](../__test__/hybrid.spec.ts)                 |
+| **packaging**                      | instrumentation as one installed npm package (patches + config + register entry): `--import your-apm/register`, package-specifier configs, and the same packaged config bundled at build time                                                       | [`packaging.spec.ts`](../__test__/packaging.spec.ts)           |
+| **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                                                                      | [`patch.spec.ts`](../__test__/patch.spec.ts)                   |
+
 ## The AWS SDK (`@smithy/core`)
 
 [`__test__/aws.spec.ts`](../__test__/aws.spec.ts) proves the tap against the
