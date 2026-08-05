@@ -5,6 +5,7 @@ import { captureThrows } from './helpers'
 
 import * as oxc from '../index.js'
 import * as acorn from '@wrap-esm-lambda/engine-acorn'
+import { isMissingExportError } from '@wrap-esm-lambda/core'
 
 // The two transform engines side by side: the native oxc addon (JS + Rust)
 // and the pure-JS acorn engine. Their contract is shared — same API, same
@@ -174,6 +175,20 @@ test('a missing export throws the same message from both engines', () => {
   assert.match(errors[0], /export 'Hidden' not found in module/)
   assert.match(errors[0], /available: Client, default/)
   assert.match(errors[0], /unresolved 'export \*' sources: \.\/m\.js/)
+})
+
+test("both engines' missing-export errors satisfy core's contract predicate", () => {
+  // isMissingExportError is what tapWithStarRetry keys the star-graph retry
+  // on. This is the drift alarm for that contract: each engine's ACTUAL
+  // error object must pass the ACTUAL predicate, so rewording either
+  // producer (rewrite.rs, tap.mts) or the predicate fails here instead of
+  // silently disabling star resolution in production.
+  const source = 'export class Client {}\n'
+  for (const [name, engine] of engines) {
+    const err = captureThrows(() => tap(engine, source, ['Hidden']))
+    assert.strictEqual(isMissingExportError(err), true, `${name} error is recognized by isMissingExportError`)
+  }
+  assert.strictEqual(isMissingExportError(new Error('some other failure')), false, 'unrelated errors do not retry')
 })
 
 test('esmModuleExports reports the same surface from both engines', () => {

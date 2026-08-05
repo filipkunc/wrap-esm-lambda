@@ -184,6 +184,10 @@ pub(crate) fn resolve_binding(
       index.star_sources.join(", ")
     )
   };
+  // The phrasing is CONTRACT, shared with the acorn engine's tap.mts: core's
+  // `isMissingExportError` keys the star-graph retry on "not found in
+  // module", and the engine-parity suite pins both producers to it. Reword
+  // only together with that predicate.
   Err(format!(
     "export '{}' not found in module (available: {}{})",
     name,

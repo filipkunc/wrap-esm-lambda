@@ -143,8 +143,11 @@ function splitLocal(ops: Ops, fresh: FreshNames, info: NamedExport): string {
  * Resolve one requested binding name against the export index, recording any
  * rewrite it needs. Returns the local identifier the accessor closes over.
  * Every resolved binding is reassignable — that is the point of the rewrite
- * path; the only refusal left is a name that does not exist (thrown with the
- * same message the native engine produces — callers match on it).
+ * path; the only refusal left is a name that does not exist. That error's
+ * phrasing is CONTRACT, shared with the native engine's
+ * `src/transform/rewrite.rs`: core's `isMissingExportError` keys the
+ * star-graph retry on "not found in module", and the engine-parity suite
+ * pins both producers to it.
  */
 function resolveBinding(name: string, index: ExportIndex, ops: Ops, fresh: FreshNames): string {
   const info = index.named.find((entry) => entry.exported === name)
