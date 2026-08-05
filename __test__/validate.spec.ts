@@ -63,6 +63,21 @@ test('a binding that moved is an error, naming what the module does export', asy
   assert.match(report.entries[0]!.detail, /'HonoRenamedInV5' not exported \(available: Hono\)/)
 })
 
+test('an ambiguous star-forwarded binding surfaces the star walk refusal, origins named', async () => {
+  // Surfacing exactly this ahead of time is the validator's purpose: the tap
+  // would raise the ambiguity error at load time, so the report must carry
+  // its detail (which sources, which origins) rather than the misleading
+  // "not exported" a swallowed refusal collapses into.
+  const starsDir = fileURLToPath(new URL('./fixtures/stars/', import.meta.url))
+  const configUrl = new URL('./fixtures/stars/wrap.config.ambiguous.mjs', import.meta.url)
+  const config = ((await import(configUrl.href)) as { default: InstrumentConfig }).default
+  const report = await core.validateConfig(config, { cwd: starsDir })
+  assert.strictEqual(report.ok, false)
+  assert.strictEqual(report.counts.error, 1)
+  assert.match(report.entries[0]!.detail, /'clash' is ambiguous/)
+  assert.match(report.entries[0]!.detail, /different origins/)
+})
+
 test('a version range that excludes the installed package is skipped, not failed', async () => {
   // the config is doing its job: this entry is gated off here
   const config = await loadConfig('wrap.config.mjs')
