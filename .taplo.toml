@@ -1,4 +1,9 @@
-exclude = ["node_modules/**/*.toml"]
+# Name where the repo's TOML actually lives instead of letting taplo crawl
+# the whole tree for `**/*.toml`: exclude does not prune its walker, so on a
+# warm checkout the crawl visits every build artifact under target/ and every
+# file under node_modules/ to find nothing — minutes (or an OOM abort) for a
+# subsecond format.
+include = ["*.toml", ".taplo.toml", ".cargo/*.toml"]
 
 # https://taplo.tamasfe.dev/configuration/formatter-options.html
 [formatting]
