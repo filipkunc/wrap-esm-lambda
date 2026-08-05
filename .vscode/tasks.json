@@ -40,6 +40,29 @@
       "problemMatcher": ["$rustc"]
     },
     {
+      // CodeLLDB's `program` is a path, never a PATH lookup, and every
+      // developer's node lives somewhere else (nvm, volta, system). This
+      // pins whatever `node` currently resolves to at a stable, gitignored
+      // path the "Debug Rust addon" launch config can name. Symlink where
+      // possible, copy where not (Windows without developer mode).
+      "label": "link node for lldb",
+      "type": "shell",
+      "command": "node",
+      "args": [
+        "-e",
+        "const fs=require('fs');const t='.vscode/node';try{fs.rmSync(t)}catch{};try{fs.symlinkSync(process.execPath,t)}catch{fs.copyFileSync(process.execPath,t)}"
+      ],
+      "presentation": { "reveal": "silent" },
+      "problemMatcher": []
+    },
+    {
+      // What the "Debug Rust addon" launch config actually runs: the debug
+      // addon build plus the node symlink above.
+      "label": "prepare rust debug",
+      "dependsOn": ["build:debug", "link node for lldb"],
+      "problemMatcher": []
+    },
+    {
       "label": "test (full suite)",
       "type": "shell",
       "command": "pnpm test",

@@ -45,33 +45,61 @@
       // addon — build:debug overwrites the release .node at the same path, so
       // run the "build (release addon)" task before benchmarking again.
       //
-      // `node` resolves off PATH: this repo is developed against nvm-managed
-      // and system nodes alike, so hardcoding an interpreter path here would
-      // break for everyone but its author.
+      // `program` cannot be a bare "node": CodeLLDB takes a path, not a PATH
+      // lookup, so that spelling never launches. Hardcoding an interpreter
+      // path would break for everyone but its author (this repo is developed
+      // against nvm-managed and system nodes alike), so the preLaunchTask
+      // symlinks whatever `node` is on PATH to .vscode/node (gitignored) and
+      // the config points at the symlink.
       "name": "Debug Rust addon (spec file)",
       "type": "lldb",
       "request": "launch",
-      "program": "node",
+      "program": "${workspaceFolder}/.vscode/node",
       "args": ["--import", "@oxc-node/core/register", "--test", "${file}"],
       "cwd": "${workspaceFolder}",
       "env": {
         "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
         "WRAP_ESM_LAMBDA_ENGINE": "oxc"
       },
-      "preLaunchTask": "build:debug",
+      "preLaunchTask": "prepare rust debug",
       "sourceLanguages": ["rust"]
     },
     {
-      "name": "Hooks",
-      "program": "${workspaceFolder}/hooks/httpload.cjs",
+      // The cold-start bench harness under a debugger: hooks/runtime.mjs (the
+      // same entry hyperfine times in bench_hooks.sh) with one of the bench's
+      // --import hook entries, picked at launch. cwd is hooks/ so the entry
+      // specifiers match the bench script's command lines exactly.
+      //
+      // The register-tap entries load the compiled workspace packages (hence
+      // the preLaunchTask), and the oxc one additionally needs an addon built
+      // once via the "build (release addon)" task — with the engine pinned to
+      // oxc there is no silent acorn fallback to paper over a missing .node.
+      "name": "Debug hooks bench (pick hook)",
+      "type": "node",
       "request": "launch",
-      "skipFiles": [
-        // "<node_internals>/**"
+      "program": "${workspaceFolder}/hooks/runtime.mjs",
+      "runtimeArgs": ["--import", "${input:hookEntry}"],
+      "cwd": "${workspaceFolder}/hooks",
+      "preLaunchTask": "build:packages",
+      "skipFiles": ["<node_internals>/**"],
+      "console": "integratedTerminal"
+    }
+  ],
+  "inputs": [
+    {
+      // The bench_hooks.sh ladder, minus the no-hook baseline (nothing to
+      // debug there that "Debug spec file" does not already cover better).
+      "id": "hookEntry",
+      "type": "pickString",
+      "description": "Hook entry to --import before hooks/runtime.mjs",
+      "options": [
+        "./register-tap-oxc.mjs",
+        "./register-tap-acorn.mjs",
+        "./sync-hooks-noop.mjs",
+        "./sync-hooks-orchestrion.mjs",
+        "./sync-hooks-orchestrion-tracing.mjs"
       ],
-      "env": {
-        "NODE_OPTIONS": "--import ./hooks/sync-hooks-empty.mjs"
-      },
-      "type": "node"
+      "default": "./register-tap-oxc.mjs"
     }
   ]
 }
