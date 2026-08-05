@@ -101,6 +101,20 @@ export interface EsmExportsInfo {
   reexports?: EsmReexport[]
 }
 
+/**
+ * Is this the tap's missing-export error? The phrase is part of the tap
+ * contract: both engines throw `export '<name>' not found in module
+ * (available: ...)` — produced independently in the addon's
+ * `src/transform/rewrite.rs` and the acorn engine's `tap.mts` — and
+ * `tapWithStarRetry` keys the star-graph retry on recognizing it here.
+ * This predicate is the ONLY consumer-side match; the engine-parity suite
+ * feeds both engines' actual errors through it, so rewording a producer
+ * fails a test instead of silently disabling star resolution.
+ */
+export function isMissingExportError(err: unknown): boolean {
+  return /not found in module/.test(err instanceof Error ? err.message : String(err))
+}
+
 /** The optional trailing arguments both tap variants share. */
 type TapTail = [
   filename?: string | undefined | null,

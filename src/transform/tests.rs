@@ -426,6 +426,10 @@ fn test_exports_tap_missing_export_is_loud() {
   let source = "export class Client {}\nexport default 1;\n";
   let err = tap1(source, &["Klient"], false, false).unwrap_err();
   assert!(err.contains("export 'Klient' not found"));
+  assert!(
+    err.contains("not found in module"),
+    "the exact phrase is contract: core's isMissingExportError keys the star-graph retry on it"
+  );
   assert!(err.contains("Client"), "error lists what is available");
   assert!(err.contains("default"), "default is listed as available");
 }
