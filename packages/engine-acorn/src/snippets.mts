@@ -28,7 +28,7 @@ export function quoteJsString(value: string): string {
 }
 
 /** True when `name` can appear bare as an object-literal property name. */
-export function isPlainPropertyName(name: string): boolean {
+function isPlainPropertyName(name: string): boolean {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name)
 }
 

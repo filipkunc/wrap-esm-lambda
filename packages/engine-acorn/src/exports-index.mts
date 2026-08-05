@@ -130,7 +130,7 @@ export interface ExportIndex {
 }
 
 /** The name of an import/export specifier position (`Identifier` or string `Literal`). */
-export function specifierName(node: Identifier | Literal): string {
+function specifierName(node: Identifier | Literal): string {
   return node.type === 'Identifier' ? node.name : String(node.value)
 }
 
@@ -139,7 +139,7 @@ export function specifierName(node: Identifier | Literal): string {
  * destructuring (including defaults and rest), recursively —
  * `export const { a, b: [c], ...rest } = obj` exports `a`, `c` and `rest`.
  */
-export function collectBoundNames(pattern: Pattern, out: string[]): void {
+function collectBoundNames(pattern: Pattern, out: string[]): void {
   switch (pattern.type) {
     case 'Identifier':
       out.push(pattern.name)

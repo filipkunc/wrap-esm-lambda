@@ -70,7 +70,7 @@ test('build mode: unplugin wraps the handler at bundle time', async () => {
 
 test('per delivery, the instrumented output is identical however the module is identified', async () => {
   const source = await readFile(fixture('handler.mjs'), 'utf8')
-  const entry = theEntry(core.createMatcher(config)(fixture('handler.mjs')))
+  const entry = theEntry(core.matchEntries(config, fixture('handler.mjs'))[0])
 
   // Both shells delegate to this one call — assert the invariant it provides:
   // a plain path and a file URL produce the same bytes.
@@ -96,7 +96,7 @@ test('per delivery, the instrumented output is identical however the module is i
 
 test('double-wrap guard: applyMatched skips instrumented sources', async () => {
   const source = await readFile(fixture('handler.mjs'), 'utf8')
-  const entry = theEntry(core.createMatcher(config)(fixture('handler.mjs')))
+  const entry = theEntry(core.matchEntries(config, fixture('handler.mjs'))[0])
   const once = core.applyMatched(source, [entry], fixture('handler.mjs'), { format: 'module' })
   assert.ok(once)
   assert.strictEqual(core.applyMatched(String(once.code), [entry], fixture('handler.mjs'), { format: 'module' }), null)
