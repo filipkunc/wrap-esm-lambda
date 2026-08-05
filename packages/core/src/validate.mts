@@ -71,22 +71,33 @@ function locatePackage(name: string, cwd: string): { root: string; version: stri
   return null
 }
 
-/** Which requested bindings a module's own source cannot account for. */
-function missingBindings(source: string, bindings: string[], filePath: string): string[] {
+/**
+ * Which requested bindings a module's own source cannot account for.
+ * `starError` carries the star walk's own refusal (an ambiguous name —
+ * several `export *` sources with different origins): the tap would raise
+ * exactly that error at load time, and surfacing ahead-of-time is this
+ * validator's whole purpose, so it must not collapse into a plain
+ * "not exported".
+ */
+function missingBindings(
+  source: string,
+  bindings: string[],
+  filePath: string,
+): { missing: string[]; starError?: string } {
   const { names, starSources } = esmModuleExports(source)
   const known = new Set(names)
   const missing = bindings.filter((name) => !known.has(name))
-  if (missing.length === 0 || starSources.length === 0) return missing
+  if (missing.length === 0 || starSources.length === 0) return { missing }
   // the tap resolves star-forwarded names by walking the star sources; a name
   // one of them provides is not missing
   let resolved: { binding: string }[] = []
   try {
     resolved = resolveStarBindings(missing, starSources, filePath)
-  } catch {
-    // an ambiguous name is a real error the tap would raise; leave it missing
+  } catch (err) {
+    return { missing, starError: err instanceof Error ? err.message : String(err) }
   }
   const found = new Set(resolved.map((r) => r.binding))
-  return missing.filter((name) => !found.has(name))
+  return { missing: missing.filter((name) => !found.has(name)) }
 }
 
 /** Check one file of a matched package against the entry's bindings. */
@@ -101,7 +112,10 @@ function checkFile(filePath: string, bindings: string[]): { status: CheckStatus;
       detail: 'CommonJS: exports are assembled at runtime, so bindings cannot be checked ahead of time',
     }
   }
-  const missing = missingBindings(source, bindings, filePath)
+  const { missing, starError } = missingBindings(source, bindings, filePath)
+  if (starError !== undefined) {
+    return { status: 'error', detail: starError }
+  }
   if (missing.length > 0) {
     const { names } = esmModuleExports(source)
     return {
