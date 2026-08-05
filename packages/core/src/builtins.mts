@@ -70,6 +70,47 @@ function braceName(name: string): string {
 }
 
 /**
+ * A requested binding the builtin does not have is the version-drift alarm,
+ * thrown with the same message wherever the check runs — at bundle time in
+ * `builtinWrapperSource`, at runtime in the shell's `applyBuiltinPatches`
+ * (via `builtinAccessors` below). One producer, so the two spots that are
+ * contracted to behave identically cannot drift apart.
+ */
+function assertBuiltinBinding(target: Record<string, unknown>, binding: string, moduleName: string): void {
+  if (!(binding in target)) {
+    const available = Object.keys(target).slice(0, 20).join(', ')
+    throw new TypeError(`binding '${binding}' not found in ${moduleName} (available: ${available}, ...)`)
+  }
+}
+
+/**
+ * The live get/set accessor object a builtin patch function is handed at
+ * runtime: one enumerable accessor pair per requested binding, reading and
+ * writing through the REAL exports object (so a runtime `require()` observes
+ * rebinds too). Validates every binding first — the same check, with the
+ * same error, that `builtinWrapperSource` runs at bundle time; the generated
+ * wrapper's emitted accessors mirror exactly what this builds live.
+ */
+export function builtinAccessors(
+  target: Record<string, unknown>,
+  moduleName: string,
+  bindings: string[],
+): Record<string, unknown> {
+  const accessors: Record<string, unknown> = {}
+  for (const name of bindings) {
+    assertBuiltinBinding(target, name, moduleName)
+    Object.defineProperty(accessors, name, {
+      enumerable: true,
+      get: () => target[name],
+      set: (value) => {
+        target[name] = value
+      },
+    })
+  }
+  return accessors
+}
+
+/**
  * The generated wrapper module source for one builtin, covering every
  * config entry that targets it. Mirrors the runtime shell's
  * `applyBuiltinPatches` contract exactly: only the requested bindings are
@@ -89,10 +130,7 @@ export function builtinWrapperSource(name: string, entries: PatchEntry[]): strin
   })
   entries.forEach((entry, i) => {
     for (const binding of entry.bindings) {
-      if (!(binding in target)) {
-        const available = Object.keys(target).slice(0, 20).join(', ')
-        throw new TypeError(`binding '${binding}' not found in ${name} (available: ${available}, ...)`)
-      }
+      assertBuiltinBinding(target, binding, name)
     }
     const props = entry.bindings
       .map(

@@ -40,7 +40,7 @@ export { nearestPackage, matchEntries, createMatcher, builtinPatchEntries } from
 export { runtimeFormatFor, moduleKindFor } from './format.mjs'
 export { SENTINEL, SENTINEL_TEXT, applyMatched, inlineMap } from './apply.mjs'
 export { PATCH_REGISTRY, patchKey } from './registry.mjs'
-export { builtinAliases, builtinWrapperSource, builtinGuardKey } from './builtins.mjs'
+export { builtinAliases, builtinWrapperSource, builtinGuardKey, builtinAccessors } from './builtins.mjs'
 export { DEBUG, debug, isDisabled, isStrict, recover, warnOnce, instrumentationFailures } from './diagnostics.mjs'
 export { selectEngine, FALLBACK_ENGINE } from './engine-select.mjs'
 export { TAP_CONTRACT_VERSION, isMissingExportError } from './engine.mjs'
