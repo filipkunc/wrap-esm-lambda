@@ -3,11 +3,10 @@
 // (`module.path`, for code with no package identity), and the builtin
 // split — builtin targets never match a file and are handed to the runtime
 // shell for eager preload patching instead.
-import { dirname, join } from 'node:path'
-import { readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
 import { satisfies } from './range.mjs'
 import { cleanPath } from './paths.mjs'
+import { nearestPackageValue } from './package-walk.mjs'
 import type { InstrumentConfig, InstrumentEntry, PackageModuleMatch, PatchEntry } from './config.mjs'
 
 /** Identity of the package a file belongs to, from its nearest package.json. */
@@ -17,37 +16,20 @@ export interface PackageInfo {
   root: string
 }
 
-// Nearest-package.json lookup, cached per directory so the runtime hook stays
-// cold-start-cheap across the many files of one package.
+// Nearest NAMED package.json (nameless type markers are skipped — the walk
+// keeps climbing), cached per directory by the shared walk.
 const packageCache = new Map<string, PackageInfo | undefined>()
 
 export function nearestPackage(filePath: string): PackageInfo | undefined {
-  let dir = dirname(filePath)
-  const visited: string[] = []
-  while (true) {
-    if (packageCache.has(dir)) {
-      const hit = packageCache.get(dir)
-      for (const d of visited) packageCache.set(d, hit)
-      return hit
-    }
-    visited.push(dir)
-    try {
-      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as Partial<PackageInfo>
-      if (pkg.name) {
-        const info: PackageInfo = { name: pkg.name, version: pkg.version ?? '0.0.0', root: dir }
-        for (const d of visited) packageCache.set(d, info)
-        return info
-      }
-    } catch {
-      // no package.json here — keep walking up
-    }
-    const parent = dirname(dir)
-    if (parent === dir) {
-      for (const d of visited) packageCache.set(d, undefined)
-      return undefined
-    }
-    dir = parent
-  }
+  return nearestPackageValue(
+    filePath,
+    packageCache,
+    (pkg, dir) => {
+      if (typeof pkg.name !== 'string' || pkg.name === '') return undefined
+      return { name: pkg.name, version: typeof pkg.version === 'string' ? pkg.version : '0.0.0', root: dir }
+    },
+    undefined,
+  )
 }
 
 /** The `path` / `files` rule: an absolute candidate exactly, a suffix otherwise. */
