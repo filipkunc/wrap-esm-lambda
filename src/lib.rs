@@ -175,6 +175,35 @@ fn tap_entries(entries: Vec<TapEntryInput>) -> Vec<transform::TapEntry> {
     .collect()
 }
 
+/// The shared body of `exports_tap` and `exports_tap_from_buffer`: convert
+/// the napi input shapes, run the tap, wrap the outcome. The two entry
+/// points differ only in how the module source arrives.
+fn run_exports_tap(
+  source: &str,
+  entries: Vec<TapEntryInput>,
+  cjs: bool,
+  registry: bool,
+  filename: Option<String>,
+  upstream_map: Option<String>,
+  star_resolutions: Option<Vec<TapStarResolution>>,
+) -> napi::Result<TapResult> {
+  let out = transform::exports_tap(
+    source,
+    &tap_entries(entries),
+    cjs,
+    registry,
+    filename.as_deref(),
+    upstream_map.as_deref(),
+    &star_resolutions_in(star_resolutions),
+  )
+  .map_err(napi::Error::from_reason)?;
+  Ok(TapResult {
+    snippets: out.snippets,
+    code: out.code,
+    map: out.map,
+  })
+}
+
 /// The generic "exports tap" behind declarative patches, for every patch
 /// entry of one module in a single call (one parse, at most one codegen):
 /// each entry's patch function is handed the module's live bindings as
@@ -202,21 +231,15 @@ pub fn exports_tap(
   upstream_map: Option<String>,
   star_resolutions: Option<Vec<TapStarResolution>>,
 ) -> napi::Result<TapResult> {
-  let out = transform::exports_tap(
+  run_exports_tap(
     &input,
-    &tap_entries(entries),
+    entries,
     cjs,
     registry,
-    filename.as_deref(),
-    upstream_map.as_deref(),
-    &star_resolutions_in(star_resolutions),
+    filename,
+    upstream_map,
+    star_resolutions,
   )
-  .map_err(napi::Error::from_reason)?;
-  Ok(TapResult {
-    snippets: out.snippets,
-    code: out.code,
-    map: out.map,
-  })
 }
 
 /// Buffer-input variant of `exportsTap`, for the runtime hook path where
@@ -244,19 +267,13 @@ pub fn exports_tap_from_buffer(
     std::str::from_utf8(&input)
       .map_err(|err| napi::Error::from_reason(format!("module source is not valid UTF-8: {err}")))?
   };
-  let out = transform::exports_tap(
+  run_exports_tap(
     source,
-    &tap_entries(entries),
+    entries,
     cjs,
     registry,
-    filename.as_deref(),
-    upstream_map.as_deref(),
-    &star_resolutions_in(star_resolutions),
+    filename,
+    upstream_map,
+    star_resolutions,
   )
-  .map_err(napi::Error::from_reason)?;
-  Ok(TapResult {
-    snippets: out.snippets,
-    code: out.code,
-    map: out.map,
-  })
 }
