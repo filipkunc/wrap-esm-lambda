@@ -4,10 +4,32 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
-## Unreleased
+## 0.3.0 (2026-08-05)
+
+### Removed — **breaking**
+
+- **`createMatcher` is gone from `@wrap-esm-lambda/core`.** It returned only
+  the first matching entry and was superseded when multi-entry matching
+  landed; by this release its only callers anywhere were its own tests.
+  Migration: `matchEntries(config, idOrUrl)` — and `[0]` of that if the old
+  first-match behavior is genuinely wanted.
+- **`SelectEngineOptions.defaultEngine` is gone.** Nothing ever passed it;
+  the default engine is (and was) `oxc`, with `WRAP_ESM_LAMBDA_ENGINE` as
+  the one lever over the binding.
 
 ### Added
 
+- **`isMissingExportError`** (`@wrap-esm-lambda/core`) — the tap-contract
+  predicate for the "export not found in module" error both engines throw.
+  It is what the star-graph retry keys on, and the engine-parity suite now
+  feeds both engines' actual errors through it, so the phrase can no longer
+  be reworded on one side without a red test. Useful to consumers that need
+  to distinguish a version-drift refusal from other tap failures.
+- **`builtinAccessors`** (`@wrap-esm-lambda/core`) — the live get/set
+  accessor object a builtin patch function is handed, extracted from the
+  runtime shell so it shares the binding validation (and the version-drift
+  error) with the build shell's generated wrapper. The two spots documented
+  as mirroring each other exactly now execute the same code.
 - **`pnpm publish:rehearsal`** — a full-dress rehearsal of the npm publish
   against a throwaway local Verdaccio, because the public registry has no
   draft state and a published version's number is burned forever. It runs
@@ -19,6 +41,31 @@ would break a consumer.
   the rehearsal registry and runs the runtime hook end to end on the oxc
   engine. Deliberately not rehearsed: the nine-platform `napi prepublish`
   orchestration (CI artifacts only) and npm provenance.
+
+### Fixed
+
+- **A malformed `upstreamMap` no longer panics the native addon.**
+  `exportsTap` treated it as the one input worth an `.expect`; it now
+  surfaces as an ordinary catchable error naming the bad input, like every
+  other invalid argument.
+- **The validator no longer flattens star ambiguity into "not exported".**
+  A binding that several bare `export *` sources provide with different
+  origins is a refusal the tap raises at load time; `validateConfig` now
+  reports that refusal's own detail — which sources, which origins — where
+  it previously reported the binding as merely missing.
+- The star walk traces unreadable and unparseable star sources under
+  `WRAP_ESM_LAMBDA_DEBUG` instead of silently treating them like modules
+  that provide nothing.
+
+### Internal
+
+- The Rust transform and the azure-functions preset are each split into
+  focused modules (public surfaces unchanged); the two shells share one
+  builtin binding check; core's two nearest-package.json walks are one
+  parameterized walk. `rust-toolchain.toml` pins local rustup-managed
+  machines to the MSRV while CI keeps floating on stable via
+  `RUSTUP_TOOLCHAIN`; the repo also gained working VS Code debug targets
+  and a Claude Code on the web session-start hook.
 
 ## 0.2.3 (2026-07-30)
 

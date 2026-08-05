@@ -9,7 +9,7 @@ name    = "wrap_esm_lambda"
 # rust-toolchain.toml (kept in step with this value) makes rustup-managed
 # machines install the floor automatically instead of erroring.
 rust-version = "1.95"
-version      = "0.2.3"
+version      = "0.3.0"
 
 [lib]
 crate-type = ["cdylib"]
