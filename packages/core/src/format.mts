@@ -1,10 +1,9 @@
 // CJS-or-ESM decisions. The tap's emitted snippet differs per module system,
 // so getting this wrong mis-parses a module — these helpers reproduce the
 // format Node itself would assign.
-import { dirname, join } from 'node:path'
-import { readFileSync } from 'node:fs'
 import { cleanPath } from './paths.mjs'
 import { hasModuleSyntax } from './engine.mjs'
+import { nearestPackageValue } from './package-walk.mjs'
 
 // Nearest "type" field, Node's rule: the FIRST package.json up the tree
 // decides, named or not — dual packages mark their CJS tree with a nameless
@@ -15,30 +14,7 @@ const typeCache = new Map<string, ModuleType>()
 type ModuleType = 'commonjs' | 'module'
 
 function nearestPackageType(filePath: string): ModuleType {
-  let dir = dirname(filePath)
-  const visited: string[] = []
-  while (true) {
-    if (typeCache.has(dir)) {
-      const hit = typeCache.get(dir)!
-      for (const d of visited) typeCache.set(d, hit)
-      return hit
-    }
-    visited.push(dir)
-    try {
-      const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { type?: string }
-      const type: ModuleType = pkg.type === 'module' ? 'module' : 'commonjs'
-      for (const d of visited) typeCache.set(d, type)
-      return type
-    } catch {
-      // no package.json here — keep walking up
-    }
-    const parent = dirname(dir)
-    if (parent === dir) {
-      for (const d of visited) typeCache.set(d, 'commonjs')
-      return 'commonjs'
-    }
-    dir = parent
-  }
+  return nearestPackageValue(filePath, typeCache, (pkg) => (pkg.type === 'module' ? 'module' : 'commonjs'), 'commonjs')
 }
 
 /**
