@@ -21,6 +21,19 @@ pub(crate) fn quote_js_string(value: &str) -> String {
   out
 }
 
+/// One get/set accessor pair handed to a patch function: how consumers name
+/// the binding (`exported`) and how the module reaches its value (`local` —
+/// a local identifier for ESM, a `module.exports.X` path for CJS), plus the
+/// two switches `push_accessors` documents: whether a setter is emitted at
+/// all, and whether that setter re-reads the property to verify the rebind
+/// took.
+pub(crate) struct Accessor {
+  pub(crate) exported: String,
+  pub(crate) local: String,
+  pub(crate) reassignable: bool,
+  pub(crate) verify_set: bool,
+}
+
 /// True when `name` can appear bare as an object-literal property name.
 pub(crate) fn is_plain_property_name(name: &str) -> bool {
   !name.is_empty()
@@ -41,31 +54,31 @@ pub(crate) fn is_plain_property_name(name: &str) -> bool {
 /// non-configurable getters and is NOT strict mode, so `module.exports.X = v`
 /// on it is a silent no-op — the setter re-reads the property and throws if
 /// the rebind did not take.
-fn push_accessors(out: &mut String, bindings: &[(String, String, bool, bool)]) {
-  for (exported, local, reassignable, verify_set) in bindings {
+fn push_accessors(out: &mut String, bindings: &[Accessor]) {
+  for accessor in bindings {
     let quoted;
-    let name: &str = if is_plain_property_name(exported) {
-      exported
+    let name: &str = if is_plain_property_name(&accessor.exported) {
+      &accessor.exported
     } else {
-      quoted = quote_js_string(exported);
+      quoted = quote_js_string(&accessor.exported);
       &quoted
     };
     out.push_str("\n  get ");
     out.push_str(name);
     out.push_str("() { return ");
-    out.push_str(local);
+    out.push_str(&accessor.local);
     out.push_str("; },");
-    if *reassignable {
+    if accessor.reassignable {
       out.push_str("\n  set ");
       out.push_str(name);
       out.push_str("(v) { ");
-      out.push_str(local);
+      out.push_str(&accessor.local);
       out.push_str(" = v;");
-      if *verify_set {
+      if accessor.verify_set {
         out.push_str(" if (");
-        out.push_str(local);
+        out.push_str(&accessor.local);
         out.push_str(" !== v) throw new TypeError(\"wrap-esm-lambda: rebinding ");
-        out.push_str(exported);
+        out.push_str(&accessor.exported);
         out.push_str(" had no effect (getter-only CJS export)\");");
       }
       out.push_str(" },");
@@ -133,12 +146,7 @@ export { ",
 /// with the same message shape the runtime uses so one grep finds both. The
 /// `__wel_err`/`__wel_s` bindings are block-scoped to the catch, so several
 /// entries in one module cannot collide.
-fn push_guarded_call(
-  out: &mut String,
-  alias: &str,
-  key: &str,
-  accessors: &[(String, String, bool, bool)],
-) {
+fn push_guarded_call(out: &mut String, alias: &str, key: &str, accessors: &[Accessor]) {
   out.push_str("try {\n");
   out.push_str(alias);
   out.push_str("({");
@@ -162,7 +170,7 @@ fn push_guarded_call(
 /// statement appended to CJS source would flip the module's format under
 /// every bundler's syntax detection and break its `module.exports`.
 pub(crate) fn build_snippet(
-  accessors: &[(String, String, bool, bool)],
+  accessors: &[Accessor],
   patch_name: &str,
   patch_from: &str,
   registry: bool,
