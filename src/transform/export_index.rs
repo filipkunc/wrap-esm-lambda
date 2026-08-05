@@ -133,15 +133,13 @@ pub(crate) fn build_export_index(program: &Program) -> ExportIndex {
           }
         }
       }
-      Statement::VariableDeclaration(var) => {
-        if var.kind == VariableDeclarationKind::Const {
-          let mut names = Vec::new();
-          for decl in &var.declarations {
-            collect_bound_names(&decl.id, &mut names);
-          }
-          for name in names {
-            index.top_const.insert(name, stmt_idx);
-          }
+      Statement::VariableDeclaration(var) if var.kind == VariableDeclarationKind::Const => {
+        let mut names = Vec::new();
+        for decl in &var.declarations {
+          collect_bound_names(&decl.id, &mut names);
+        }
+        for name in names {
+          index.top_const.insert(name, stmt_idx);
         }
       }
       Statement::ExportNamedDeclaration(export) => {

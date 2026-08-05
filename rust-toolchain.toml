@@ -1,0 +1,15 @@
+# The rustup-managed fix for "my build fails asking for rustc 1.95": with
+# this file, rustup installs and uses the declared floor automatically
+# instead of erroring on whatever stale stable the machine happens to have.
+# Keep the channel in step with `rust-version` in Cargo.toml — same floor,
+# one bump.
+#
+# Local machines only, by design: every CI job that runs cargo sets
+# RUSTUP_TOOLCHAIN, which outranks this file, so CI keeps floating on stable
+# (and the MSRV job keeps checking the floor) exactly as before this file
+# existed. Developing on the floor toolchain has its own payoff — code that
+# needs a newer rustc fails at the desk, not in CI's msrv job.
+
+[toolchain]
+channel    = "1.95"
+components = ["clippy", "rustfmt"]

@@ -5,7 +5,9 @@ edition = "2024"
 name    = "wrap_esm_lambda"
 # The oxc crates require it, and without it the failure is a confusing
 # dependency-level error rather than "upgrade your toolchain". CI floats on
-# stable; this is the floor a contributor's stable has to clear.
+# stable; this is the floor a contributor's stable has to clear — and
+# rust-toolchain.toml (kept in step with this value) makes rustup-managed
+# machines install the floor automatically instead of erroring.
 rust-version = "1.95"
 version      = "0.2.3"
 
