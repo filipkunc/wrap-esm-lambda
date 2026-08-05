@@ -36,7 +36,7 @@ export type { EsmExportsInfo, TapEntryInput, TapResult, TapStarResolution, Trans
 
 export { defineConfig, definePatches } from './config.mjs'
 export { engineName } from './engine.mjs'
-export { nearestPackage, matchEntries, createMatcher, builtinPatchEntries } from './match.mjs'
+export { nearestPackage, matchEntries, builtinPatchEntries } from './match.mjs'
 export { runtimeFormatFor, moduleKindFor } from './format.mjs'
 export { SENTINEL, SENTINEL_TEXT, applyMatched, inlineMap } from './apply.mjs'
 export { PATCH_REGISTRY, patchKey } from './registry.mjs'

@@ -21,9 +21,10 @@
 /** The engine used when the default one cannot be loaded. */
 export const FALLBACK_ENGINE = 'acorn'
 
+/** The engine bound when WRAP_ESM_LAMBDA_ENGINE is unset. */
+const DEFAULT_ENGINE = 'oxc'
+
 export interface SelectEngineOptions<Engine> {
-  /** The engine to bind when WRAP_ESM_LAMBDA_ENGINE is unset. */
-  defaultEngine?: string
   /** Called with the load failure just before the fallback is bound. */
   onFallback?: (err: unknown) => void
   /**
@@ -48,9 +49,9 @@ export function selectEngine<Engine>(
   loaders: Record<string, () => Engine>,
   options: SelectEngineOptions<Engine> = {},
 ): { engineName: string; engine: Engine } {
-  const { defaultEngine = 'oxc', onFallback, verify } = options
+  const { onFallback, verify } = options
   const explicit = requested !== undefined && requested !== ''
-  const name = explicit ? requested : defaultEngine
+  const name = explicit ? requested : DEFAULT_ENGINE
   if (!Object.hasOwn(loaders, name)) {
     throw new Error(
       `wrap-esm-lambda: unknown engine '${name}' in WRAP_ESM_LAMBDA_ENGINE (expected ${Object.keys(loaders).join(' or ')})`,

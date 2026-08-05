@@ -65,11 +65,6 @@ export function matchEntries(config: InstrumentConfig, idOrUrl: string): Instrum
   return config.entries.filter((entry) => entryMatches(entry, path))
 }
 
-/** First matching entry — kept for callers that predate multi-entry matching. */
-export function createMatcher(config: InstrumentConfig): (idOrUrl: string) => InstrumentEntry | undefined {
-  return (idOrUrl) => matchEntries(config, idOrUrl)[0]
-}
-
 /**
  * The patch entries of a config that target Node built-ins (`node:http`,
  * `os`, ...), version-gated against the running Node. Built-ins have no
