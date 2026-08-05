@@ -21,6 +21,12 @@ page keeps the details.
 5. `cargo fmt` and `cargo clippy` before committing
 6. `cargo test` — Rust tests
 
+The Rust toolchain takes care of itself on rustup-managed machines:
+`rust-toolchain.toml` pins the crate's MSRV (the `rust-version` floor from
+`Cargo.toml`), so the right rustc is installed on first use instead of a
+too-old stable failing the build. Working on the floor toolchain also means
+code that needs a newer rustc fails locally before CI's MSRV gate sees it.
+
 The packages import each other by their published specifiers, so the suite
 runs against the same `dist/` a consumer installs — `pnpm build:packages`
 first, or the imports resolve to nothing.
@@ -118,9 +124,12 @@ alone actually instruments a package.
 Two more gates run beside it, and both block a release:
 
 - **MSRV** — `cargo check --all-targets --locked` on exactly the `rustc 1.95`
-  that `rust-version` in `Cargo.toml` promises. Everything else Rust-side
-  floats on stable, so without this a dependency raising the real floor would
-  surface as a contributor's build breaking rather than as a red check.
+  that `rust-version` in `Cargo.toml` (and `rust-toolchain.toml`, kept in
+  step) promises. Everything else Rust-side floats on stable — CI jobs set
+  `RUSTUP_TOOLCHAIN` explicitly so the local-machine pin in
+  `rust-toolchain.toml` does not reach them — so without this a dependency
+  raising the real floor would surface as a contributor's build breaking
+  rather than as a red check.
 - **Security audit** — `cargo audit` over the whole `Cargo.lock` (every crate
   there links into the shipped addon, so there is no dev/prod split to make),
   and `pnpm audit --prod` over what the published packages actually depend on.
