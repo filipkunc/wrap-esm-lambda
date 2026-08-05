@@ -26,6 +26,7 @@ import {
   applyMatched,
   inlineMap,
   builtinPatchEntries,
+  builtinAccessors,
   builtinGuardKey,
   engineName,
   runtimeFormatFor,
@@ -220,20 +221,7 @@ export function applyBuiltinPatches(config: InstrumentConfig): void {
     }
     try {
       const target = requireBuiltin(entry.module.name) as Record<string, unknown>
-      const accessors: Record<string, unknown> = {}
-      for (const name of entry.bindings) {
-        if (!(name in target)) {
-          const available = Object.keys(target).slice(0, 20).join(', ')
-          throw new TypeError(`binding '${name}' not found in ${entry.module.name} (available: ${available}, ...)`)
-        }
-        Object.defineProperty(accessors, name, {
-          enumerable: true,
-          get: () => target[name],
-          set: (value) => {
-            target[name] = value
-          },
-        })
-      }
+      const accessors = builtinAccessors(target, entry.module.name, entry.bindings)
       // The guard is marked only once the patch has actually applied: setting
       // it up front would make a failed patch look done to the build shell's
       // generated wrapper as well, leaving the builtin with no patch at all.
