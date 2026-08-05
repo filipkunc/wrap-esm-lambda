@@ -19,6 +19,12 @@ jobs:
     name: Security audit
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # `cargo audit` goes through the runner's rustup shim, so without this
+      # the repo's rust-toolchain.toml (the local-machine MSRV pin) would make
+      # it download the floor toolchain first — the audit reads Cargo.lock and
+      # does not care which rustc runs it
+      RUSTUP_TOOLCHAIN: stable
     permissions:
       contents: read
       # Uploading SARIF to code scanning. Everything else stays read-only.

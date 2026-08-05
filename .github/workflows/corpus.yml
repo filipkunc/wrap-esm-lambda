@@ -49,6 +49,10 @@ jobs:
     name: Corpus (${{ github.event_name == 'schedule' && 'latest' || inputs.latest || 'pinned' }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # outranks rust-toolchain.toml (the local-machine MSRV pin), keeping
+      # this job on the stable the toolchain action installs — same as CI.yml
+      RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup pnpm

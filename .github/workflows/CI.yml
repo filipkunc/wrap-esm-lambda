@@ -4,6 +4,11 @@ env:
   APP_NAME: wrap-esm-lambda
   MACOSX_DEPLOYMENT_TARGET: '10.13'
   CARGO_INCREMENTAL: '1'
+  # Outranks the repo's rust-toolchain.toml (which pins local machines to the
+  # MSRV, see the comment there), so every cargo here keeps floating on the
+  # stable the dtolnay action installs. The msrv job overrides this with the
+  # floor it exists to check.
+  RUSTUP_TOOLCHAIN: stable
 'on':
   push:
     branches:
@@ -104,6 +109,10 @@ jobs:
     name: MSRV - rustc 1.95
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # keep in step with `rust-version` in Cargo.toml and rust-toolchain.toml;
+      # overrides the workflow-level `stable` so this job checks the floor
+      RUSTUP_TOOLCHAIN: '1.95'
     # `rust-version = "1.95"` in Cargo.toml is a promise to contributors, and
     # until now nothing kept it: every other Rust job floats on stable, so a
     # dependency raising the real floor would surface as somebody's build
