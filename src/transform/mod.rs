@@ -24,7 +24,7 @@ use oxc_span::SourceType;
 
 use export_index::{NamedKind, build_export_index};
 use rewrite::{FreshNames, RewriteOps, apply_rewrites, resolve_binding};
-use snippet::{build_snippet, push_star_stub};
+use snippet::{Accessor, build_snippet, push_star_stub};
 use source_map::chain_source_maps;
 
 /// One patch entry's inputs to the exports tap, mirroring the JS config
@@ -124,7 +124,7 @@ pub fn exports_tap(
   if cjs {
     let mut snippets = String::new();
     for entry in entries {
-      let accessors: Vec<(String, String, bool, bool)> = entry
+      let accessors: Vec<Accessor> = entry
         .bindings
         .iter()
         .map(|name| {
@@ -135,9 +135,19 @@ pub fn exports_tap(
           // identifier). Assigning the `module.exports` slot always works
           // (plain writable property), so no set verification there.
           if name == "module.exports" {
-            (name.clone(), "module.exports".to_string(), true, false)
+            Accessor {
+              exported: name.clone(),
+              local: "module.exports".to_string(),
+              reassignable: true,
+              verify_set: false,
+            }
           } else {
-            (name.clone(), format!("module.exports.{}", name), true, true)
+            Accessor {
+              exported: name.clone(),
+              local: format!("module.exports.{}", name),
+              reassignable: true,
+              verify_set: true,
+            }
           }
         })
         .collect();
@@ -173,8 +183,7 @@ pub fn exports_tap(
 
   // resolve every entry first: validation errors must fire before any
   // rewrite decision, and entries tapping the same binding share rewrites
-  let mut entry_accessors: Vec<Vec<(String, String, bool, bool)>> =
-    Vec::with_capacity(entries.len());
+  let mut entry_accessors: Vec<Vec<Accessor>> = Vec::with_capacity(entries.len());
   for entry in entries {
     let mut accessors = Vec::with_capacity(entry.bindings.len());
     for name in &entry.bindings {
@@ -199,7 +208,12 @@ pub fn exports_tap(
       };
       // ESM locals are strict-mode bindings; after resolution every local
       // is reassignable, so no set verification is needed.
-      accessors.push((name.clone(), local, true, false));
+      accessors.push(Accessor {
+        exported: name.clone(),
+        local,
+        reassignable: true,
+        verify_set: false,
+      });
     }
     entry_accessors.push(accessors);
   }
@@ -231,14 +245,25 @@ pub fn exports_tap(
       ..CodegenOptions::default()
     })
     .build(&program);
-  let map = ret.map.as_ref().map(|tap_map| {
-    let upstream = upstream_map_json
-      .map(|json| SourceMap::from_json_string(json).expect("invalid upstream source map JSON"));
-    let chained = upstream
-      .as_ref()
-      .map(|upstream| chain_source_maps(tap_map, upstream));
-    chained.as_ref().unwrap_or(tap_map).to_json_string()
-  });
+  let map = match ret.map.as_ref() {
+    Some(tap_map) => {
+      // The upstream map is caller input (typically another tool's output),
+      // so a malformed one reports like every other bad input — as an Err
+      // that surfaces as a catchable JS exception — rather than a panic.
+      let upstream = match upstream_map_json {
+        Some(json) => Some(
+          SourceMap::from_json_string(json)
+            .map_err(|err| format!("invalid upstream source map JSON: {err}"))?,
+        ),
+        None => None,
+      };
+      let chained = upstream
+        .as_ref()
+        .map(|upstream| chain_source_maps(tap_map, upstream));
+      Some(chained.as_ref().unwrap_or(tap_map).to_json_string())
+    }
+    None => None,
+  };
   Ok(TapOutput {
     snippets,
     code: Some(ret.code),

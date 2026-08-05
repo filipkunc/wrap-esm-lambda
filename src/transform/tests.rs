@@ -43,6 +43,33 @@ fn test_exports_tap_chained_upstream_map() {
   assert!(map.contains("\"sourcesContent\""));
 }
 
+#[test]
+fn test_exports_tap_malformed_upstream_map_is_err_not_panic() {
+  // A `const` export forces the rewrite path, which is the only consumer of
+  // the upstream map. The map is caller input, so garbage must come back as
+  // an Err (a catchable JS exception through napi), never a panic.
+  let source = "export const handler = async (event) => event;\n";
+  let err = exports_tap(
+    source,
+    &[TapEntry {
+      bindings: vec!["handler".to_string()],
+      patch_name: "patchIt".to_string(),
+      patch_from: "/abs/patch.ts".to_string(),
+      alias_index: 0,
+    }],
+    false,
+    true,
+    Some("handler.js"),
+    Some("this is not a source map"),
+    &[],
+  )
+  .unwrap_err();
+  assert!(
+    err.contains("invalid upstream source map JSON"),
+    "error names the bad input: {err}"
+  );
+}
+
 fn tap1(source: &str, bindings: &[&str], cjs: bool, registry: bool) -> Result<TapOutput, String> {
   exports_tap(
     source,
