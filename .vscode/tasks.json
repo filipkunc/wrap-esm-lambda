@@ -45,8 +45,12 @@
       // pins whatever `node` currently resolves to at a stable, gitignored
       // path the "Debug Rust addon" launch config can name. Symlink where
       // possible, copy where not (Windows without developer mode).
+      //
+      // `process`, not `shell`: a shell task splices command and args into one
+      // command line and wraps this -e script in single quotes without escaping
+      // the ones already in it, so require('fs') reaches node as require(fs).
       "label": "link node for lldb",
-      "type": "shell",
+      "type": "process",
       "command": "node",
       "args": [
         "-e",
