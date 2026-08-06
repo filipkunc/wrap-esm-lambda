@@ -21,13 +21,30 @@ would break a consumer.
   inherits the CJS wrapper's `this` and `arguments`. Directives become the
   arrow body's own prologue, so strict mode survives; line numbers are
   unchanged (the inserted prefix contains no newline), so an upstream
-  source map keeps resolving stack frames line-accurately (a fully
-  minified single-line module's first-line columns shift by the prefix
-  width); cjs-module-lexer still detects the named exports; and a module
+  source map keeps resolving stack frames line-accurately; cjs-module-lexer
+  still detects the named exports; and a module
   that _throws_ mid-evaluation stays unpatched (the tap sits after the
   call, parity with the ESM tap). Instrumented CJS output changes shape
   for every module; the emitted snippets and the engine contract are
   untouched.
+
+- **A minified single-line CJS bundle keeps an accurate source map through
+  the evaluation wrap.** The wrap's no-newline prefix preserves line
+  numbers, but a production-minified bundle IS its first line — there the
+  10-column shift made the module's own map resolve every stack frame to
+  the wrong original position (js-yaml's shipped `dist/js-yaml.min.js`
+  reported `state` where `readFlowCollection` threw). `applyMatched` now
+  returns a corrected copy of the module's own map (inline data URL or the
+  external file its `sourceMappingURL` names): the first mapped segment of
+  the insertion line moves right by the prefix width, which reflows the
+  whole line since VLQ columns are deltas. The runtime hook inlines the
+  corrected map after the code — the last `sourceMappingURL` comment wins —
+  and the build shell hands it to the bundler, which composes maps itself.
+  When nothing mapped moves (no map; a banner comment owns the first line,
+  as in axios's minified dist) the result stays `map: null` and the output
+  is byte-identical to before. Pinned by
+  `__test__/cjs-minified-map.spec.ts` against the real shipped js-yaml and
+  axios artifacts.
 
 ## 0.3.0 (2026-08-05)
 

@@ -44,8 +44,25 @@
 //   this), so Node's named-import surface of the wrapped module keeps
 //   resolving.
 //
-// The scan compares ASCII bytes only, so it works on UTF-8 Buffers and
-// strings identically — the byte fast path never decodes.
+// One preservation claim above needs help: "only the insertion line's
+// columns shift" is harmless for handwritten code but fatal for a MINIFIED
+// single-line bundle — there the insertion line is the whole module, its
+// source map is all line-0 columns, and a 10-column shift resolves every
+// stack frame to the wrong original position (js-yaml's shipped dist turns
+// `readFlowCollection` into `state`). `cjsWrapMap` repairs exactly that:
+// when the module carries its own source map (inline data URL or an
+// external file next to it) AND the insertion line has mapped segments, it
+// returns a corrected copy of that map — the first segment of the insertion
+// line moved right by the prefix width, which reflows every later segment
+// on the line since VLQ columns are deltas. The runtime hook inlines the
+// corrected map after the code (the last `sourceMappingURL` comment wins),
+// and the build shell hands it to the bundler, which composes maps itself.
+// When nothing mapped moves (a banner comment owns the insertion line, or
+// there is no map at all) it returns null and the output stays byte-lean.
+
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { cleanPath } from './paths.mjs'
 
 const LF = 0x0a
 const BANG = 0x21
@@ -92,4 +109,126 @@ export function cjsEvalWrap(source: string | Buffer, snippets: string): CjsWrap 
     }
   }
   return { insertAt: i, prefix, trailer: `\n})();${snippets}` }
+}
+
+/**
+ * A corrected copy of the module's OWN source map, compensating for the
+ * columns `wrap.prefix` occupies on the insertion line — or null when the
+ * module has no discoverable map, the map is unusable, or no mapped segment
+ * sits on that line (then nothing moved and emitting a map would only bloat
+ * the output). The caveat of re-homing an external map inline: sources then
+ * resolve relative to the module file instead of the map file — identical
+ * whenever the two sit in the same directory, which is where bundlers put
+ * them.
+ */
+export function cjsWrapMap(source: string | Buffer, wrap: CjsWrap, idOrUrl: string): string | null {
+  if (wrap.prefix.charCodeAt(0) === LF) {
+    // the unterminated-shebang shape: the file is a single shebang line, so
+    // there is no mapped code to protect
+    return null
+  }
+  const map = upstreamMap(source, idOrUrl)
+  if (map == null || typeof map.mappings !== 'string' || 'sections' in map) {
+    return null
+  }
+  let insertLine = 0
+  const at: (i: number) => number =
+    typeof source === 'string' ? (i) => source.charCodeAt(i) : (i) => source[i] as number
+  for (let i = 0; i < wrap.insertAt; i++) {
+    if (at(i) === LF) insertLine++
+  }
+  const lines = map.mappings.split(';')
+  const line = lines[insertLine]
+  if (!line) {
+    return null
+  }
+  const shifted = shiftLeadingColumn(line, wrap.prefix.length)
+  if (shifted == null) {
+    return null
+  }
+  lines[insertLine] = shifted
+  map.mappings = lines.join(';')
+  return JSON.stringify(map)
+}
+
+/** The map the module itself points at, via its last `sourceMappingURL=`. */
+function upstreamMap(source: string | Buffer, idOrUrl: string): { mappings?: unknown } | null {
+  const NEEDLE = 'sourceMappingURL='
+  const idx = source.lastIndexOf(NEEDLE)
+  if (idx < 0 || !isMagicComment(source, idx)) {
+    return null
+  }
+  const at: (i: number) => number =
+    typeof source === 'string' ? (i) => source.charCodeAt(i) : (i) => source[i] as number
+  let end = idx + NEEDLE.length
+  while (end < source.length) {
+    const c = at(end)
+    if (c === LF || c === 0x0d || c === 0x20 || c === 0x09) break
+    end++
+  }
+  const url =
+    typeof source === 'string'
+      ? source.slice(idx + NEEDLE.length, end)
+      : source.subarray(idx + NEEDLE.length, end).toString('utf8')
+  try {
+    if (url.startsWith('data:')) {
+      // inline map: only the base64 flavor is worth supporting
+      const comma = url.indexOf(',')
+      if (comma < 0 || !url.slice(0, comma).includes('base64')) {
+        return null
+      }
+      return JSON.parse(Buffer.from(url.slice(comma + 1), 'base64').toString('utf8')) as { mappings?: unknown }
+    }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+      // any other scheme (http:, webpack:, …) is not a neighbor file
+      return null
+    }
+    const mapPath = resolve(dirname(cleanPath(idOrUrl)), url)
+    return JSON.parse(readFileSync(mapPath, 'utf8')) as { mappings?: unknown }
+  } catch {
+    // an unreadable or malformed map leaves the module exactly as unmapped
+    return null
+  }
+}
+
+/** True when `sourceMappingURL=` at `idx` sits in a `//#`/`//@` comment. */
+function isMagicComment(source: string | Buffer, idx: number): boolean {
+  const at: (i: number) => number =
+    typeof source === 'string' ? (i) => source.charCodeAt(i) : (i) => source[i] as number
+  let i = idx - 1
+  while (i >= 0 && (at(i) === 0x20 || at(i) === 0x09)) i--
+  if (i < 0 || (at(i) !== HASH && at(i) !== 0x40)) return false
+  return i >= 2 && at(i - 1) === 0x2f && at(i - 2) === 0x2f
+}
+
+const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+/**
+ * Move a mappings line's first segment `by` generated columns to the right.
+ * Only the leading VLQ field changes — within a line every later segment's
+ * column is a delta off the previous one, so the whole line reflows.
+ */
+function shiftLeadingColumn(line: string, by: number): string | null {
+  let value = 0
+  let shift = 0
+  let i = 0
+  for (;;) {
+    if (i >= line.length) return null
+    const digit = B64.indexOf(line[i]!)
+    if (digit < 0) return null
+    i++
+    value += (digit & 31) << shift
+    if ((digit & 32) === 0) break
+    shift += 5
+  }
+  const column = (value & 1 ? -(value >>> 1) : value >>> 1) + by
+  let vlq = column < 0 ? (-column << 1) | 1 : column << 1
+  let encoded = ''
+  do {
+    let digit = vlq & 31
+    vlq >>>= 5
+    if (vlq > 0) digit |= 32
+    encoded += B64[digit]
+  } while (vlq > 0)
+  return encoded + line.slice(i)
 }

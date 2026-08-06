@@ -5,7 +5,7 @@
 // whichever mode produced it.
 import { basename } from 'node:path'
 import { exportsTap, exportsTapFromBuffer } from './engine.mjs'
-import { cjsEvalWrap } from './cjs-wrap.mjs'
+import { cjsEvalWrap, cjsWrapMap } from './cjs-wrap.mjs'
 import { cleanPath } from './paths.mjs'
 import { moduleKindFor } from './format.mjs'
 import { tapWithStarRetry } from './stars.mjs'
@@ -152,7 +152,10 @@ export function applyMatched(
           buf.subarray(wrap.insertAt),
           Buffer.from(`${wrap.trailer}\n${SENTINEL}\n`),
         ]),
-        map: null,
+        // a minified single-line module's own map needs its columns
+        // compensated for the prefix — see cjsWrapMap; null when nothing
+        // mapped moved
+        map: cjsWrapMap(buf, wrap, idOrUrl),
       }
     }
     const trailer = `${tap.snippets}\n${SENTINEL}\n`
@@ -176,7 +179,7 @@ export function applyMatched(
   if (cjs) {
     const wrap = cjsEvalWrap(text, tap.snippets)
     const code = text.slice(0, wrap.insertAt) + wrap.prefix + text.slice(wrap.insertAt) + wrap.trailer
-    return { code: `${code}\n${SENTINEL}\n`, map: null }
+    return { code: `${code}\n${SENTINEL}\n`, map: cjsWrapMap(text, wrap, idOrUrl) }
   }
   let code = tap.code != null ? tap.code : text
   const map = tap.code != null ? (tap.map ?? null) : null
