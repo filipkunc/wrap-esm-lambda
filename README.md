@@ -247,9 +247,16 @@ pnpm test            # the whole suite, on node --test
 ```
 
 Then run any example, e.g. `pnpm --filter example-express-route start`.
-Rust-side checks are `cargo fmt`, `cargo clippy` and `cargo test`. Details —
-why the first build is mandatory, generated files, the TypeScript 7 setup,
-the CI matrix and the release process — are in
+Rust-side checks are `cargo fmt`, `cargo clippy` and `cargo test`.
+
+To try your build in a project of your own, `pnpm registry:publish` publishes
+every package into a local registry and prints the install command — the only
+way to exercise what a consumer actually gets (dependency resolution between
+the packages, the native addon's `optionalDependencies`, exports maps) without
+burning a version number on npmjs.
+
+Details — why the first build is mandatory, generated files, the TypeScript 7
+setup, the CI matrix and the release process — are in
 **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## Documentation

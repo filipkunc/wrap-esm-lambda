@@ -38,6 +38,62 @@ completion on `definePatches`, and `TransformEngine` — the surface the native
 addon and the acorn engine both implement — is a type the compiler checks
 them against, not only a contract the parity tests assert.
 
+## Trying a build in another project
+
+`pnpm test` covers the repo; it does not cover what a consumer gets. Dependency
+resolution between the packages, the napi `optionalDependencies` dance, bin
+links and exports maps only fail on a real install, and a real install needs a
+real registry. Publishing to npmjs to find out is not an option — a published
+version is live the moment it lands and its number is burned forever — so the
+answer is a registry only this machine can see:
+
+```sh
+pnpm build            # or build:debug — either writes a publishable addon
+pnpm registry:publish # starts verdaccio on :4875, publishes everything into it
+```
+
+Then install from it, in any project on the machine:
+
+```sh
+rm -rf node_modules package-lock.json
+npm install wrap-esm-lambda @wrap-esm-lambda/hooks --registry http://localhost:4875
+```
+
+Deleting the lockfile is not optional on a reinstall: a previous install
+recorded the native package as an **absent optional dependency** — which is how
+a missing addon presents, since `@wrap-esm-lambda/core` depends on
+`wrap-esm-lambda` optionally and npm skips optional deps it cannot resolve
+without erroring — and npm will not revisit that on its own.
+
+The registry stays up between commands, so the loop is edit → `pnpm build` →
+`pnpm registry:publish` → reinstall, and republishing a version that is already
+there works (it gets retracted first). The rest of the subcommands:
+
+| command                      | does                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
+| `pnpm registry:up`           | start the registry and nothing else                                                         |
+| `pnpm registry:smoke`        | install into a throwaway consumer, load the native binding, run the runtime hook end to end |
+| `pnpm registry:status`       | whether it is up, and what is published                                                     |
+| `pnpm registry:down`         | stop it, leaving what was published in place                                                |
+| `pnpm registry:down --clean` | stop it and wipe the storage                                                                |
+
+State lives in `.local-registry/` (gitignored). Port 4875 stays clear of
+verdaccio's own 4873 default and the rehearsal's 4874, so all three can run at
+once; `LOCAL_REGISTRY_PORT` overrides it.
+
+Two departures from a stock verdaccio config are what make this work at all,
+and both are worth knowing if you ever point the flow at a registry of your
+own. Our package names get **proxy-less blocks with `publish: $all`** — the
+default config proxies every pattern to npmjs and requires an authenticated
+user, so publishing `0.3.0` locally collides with whatever `0.3.0` npmjs
+already knows about (`EPUBLISHCONFLICT`) and rejects an anonymous token before
+that. And `max_body_size` is raised well past the ~60MB an unstripped
+`build:debug` addon reaches, which the 10mb default refuses with a bare `E413`.
+
+One more trap, this one in our own `package.json`: `publishConfig.registry`
+pins npmjs and **outranks `--registry`** at publish time. Both scripts work
+around it by rewriting the field in packed copies only, never in the repo.
+
 ## TypeScript
 
 The repo is on **TypeScript 7**, the native Go compiler. Two migration details
@@ -150,3 +206,18 @@ workspace packages and `napi prepublish --dry-run` for the addon, so the
 plumbing is exercised continuously without touching the registry. An actual npm
 publish requires running the workflow manually and typing the confirmation —
 nothing automatic can reach the registry.
+
+Before tagging, run **`pnpm publish:rehearsal`**: one hermetic pass on a
+throwaway verdaccio — publish the workspace packages, publish the host's
+platform package, publish the root addon, install the lot into a scratch
+consumer, run the runtime hook end to end, tear it all down. It needs a release
+`pnpm build`, and it leaves nothing behind, which is what separates it from the
+persistent registry in
+[trying a build in another project](#trying-a-build-in-another-project) — same
+publish flow, opposite lifetime.
+
+Neither rehearses `napi prepublish` itself — it orchestrates all nine platform
+packages from CI's downloaded artifacts, and locally only the host's binary
+exists, so the rehearsal publishes that one platform package directly and sends
+the root out with `--ignore-scripts` — nor npm provenance, which is a
+registry.npmjs.org feature.
