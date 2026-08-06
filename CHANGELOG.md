@@ -4,6 +4,31 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
+## Unreleased
+
+### Fixed
+
+- **A CJS module that exits through a top-level `return` is now patched.**
+  The CJS tap used to be plainly appended, and the CJS wrapper is a
+  function — an early-exit module (in either delivery mode: bundlers wrap
+  CJS in a function too) silently skipped the tap. `applyMatched` now
+  encloses the module body in an evaluation wrap built in
+  `core/cjs-wrap.mts`: an arrow IIFE, `;(() => { <body> })(); <tap>`. The
+  arrow is deliberate — a `try/finally` draft put sloppy-mode `function`
+  declarations in a block, where esbuild's Annex B lowering renamed them
+  (graceful-fs's `patch` became `patch2`, an observable `Function.name`
+  change the corpus caught), while a function body adds no block and
+  inherits the CJS wrapper's `this` and `arguments`. Directives become the
+  arrow body's own prologue, so strict mode survives; line numbers are
+  unchanged (the inserted prefix contains no newline), so an upstream
+  source map keeps resolving stack frames line-accurately (a fully
+  minified single-line module's first-line columns shift by the prefix
+  width); cjs-module-lexer still detects the named exports; and a module
+  that _throws_ mid-evaluation stays unpatched (the tap sits after the
+  call, parity with the ESM tap). Instrumented CJS output changes shape
+  for every module; the emitted snippets and the engine contract are
+  untouched.
+
 ## 0.3.0 (2026-08-05)
 
 ### Removed — **breaking**

@@ -77,6 +77,11 @@ prototype gaps, marked as such.
 - It is called **synchronously, exactly once per patched file, at the end of
   that file's evaluation** — after the module's definitions exist, before any
   importer runs.
+- "End of evaluation" holds even for a CJS module that exits through a
+  top-level `return`: the tap runs after an arrow IIFE enclosing the module
+  body (the CJS evaluation wrap in `core/cjs-wrap.mts`), not as appended
+  trailing code that an early exit would skip. A module that **throws**
+  while evaluating is not patched, in either module system.
 - Everything it does must be synchronous: the return value is ignored, so an
   async patch would apply only after importers already hold references.
 - It runs once _per file instance_: two copies or versions of a package in

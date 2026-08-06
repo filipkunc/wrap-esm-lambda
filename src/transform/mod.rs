@@ -105,7 +105,10 @@ pub struct StarResolution {
 /// CJS (`cjs = true`): accessors go through `module.exports` (which also
 /// works with the getter-only exports esbuild-bundled packages define, via
 /// verified setters), no static validation is possible, and no rewrite is
-/// ever needed — `source_text` is ignored; pass an empty string.
+/// ever needed — `source_text` is ignored; pass an empty string. The caller
+/// must not attach these snippets by plain append: the CJS wrapper is a
+/// function, so a top-level `return` would skip trailing code — core
+/// splices them into its CJS evaluation wrap (`cjs-wrap.mts`) instead.
 ///
 /// Delivery per entry: `registry = false` (build time) emits a static
 /// import of `patch_from` aliased by `alias_index`; `registry = true`
