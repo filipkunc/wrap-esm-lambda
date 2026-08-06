@@ -3,6 +3,12 @@
   // Hover to view descriptions of existing attributes.
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
+  // The three "spec file" configs below debug whatever spec is in the active
+  // editor, via ${file}. VS Code expands that from the focused editor tab and
+  // has no fallback, so launching from the Run and Debug view with no editor
+  // focused fails outright with "Variable ${file} can not be resolved" — open
+  // the spec and click into it first. For a run that does not depend on focus,
+  // the "test (full suite)" task covers the whole suite.
   "configurations": [
     {
       // WRAP_ESM_LAMBDA_ENGINE is EXPLICIT here for the same reason every CI
@@ -83,6 +89,58 @@
       "preLaunchTask": "build:packages",
       "skipFiles": ["<node_internals>/**"],
       "console": "integratedTerminal"
+    },
+    {
+      // The Rust half of the "Debug hooks bench (Rust + JS)" compound. Launch
+      // it alone and it hangs at startup by design — --inspect-brk parks node
+      // before the first line of user code and never resumes until a JS
+      // debugger attaches, which is what the compound's other half does. That
+      // park is also the synchronisation: it removes any race between LLDB
+      // getting the process up and the attach finding the inspector port.
+      //
+      // No preLaunchTask here on purpose. In a compound VS Code starts the
+      // members without waiting, so a member-level build would leave the
+      // attach half racing a cargo build it cannot see; the task belongs on
+      // the compound, which does run once before either member starts.
+      "name": "hooks bench: Rust half (compound member)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.vscode/node",
+      "args": ["--inspect-brk=9229", "--import", "${input:hookEntry}", "runtime.mjs"],
+      "cwd": "${workspaceFolder}/hooks",
+      "sourceLanguages": ["rust"]
+    },
+    {
+      // The JS half. Attaches to the port the Rust half opened — no program,
+      // no args, so the hook entry is prompted for exactly once (by the member
+      // above) rather than once per session.
+      "name": "hooks bench: JS half (compound member)",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "cwd": "${workspaceFolder}/hooks",
+      "skipFiles": ["<node_internals>/**", "**/node_modules/@oxc-node/**"]
+    }
+  ],
+  "compounds": [
+    {
+      // Rust and JS breakpoints in one process at the same time: CodeLLDB has
+      // it under ptrace while V8's inspector runs in-process over a socket, so
+      // the two debuggers do not contend. This is the config for the seam the
+      // bench actually exercises — a JS breakpoint in the register hook and a
+      // Rust breakpoint in the transform it calls into, in one run.
+      //
+      // Expect the JS session to look frozen whenever LLDB is stopped in Rust.
+      // It is not wedged; the whole process is stopped, inspector included.
+      //
+      // Requires a DEBUG addon for the Rust breakpoints to bind — that is what
+      // "prepare rust debug" builds. It overwrites the same .node the release
+      // build writes, so re-run "build (release addon)" before trusting a
+      // bench number again.
+      "name": "Debug hooks bench (Rust + JS)",
+      "configurations": ["hooks bench: Rust half (compound member)", "hooks bench: JS half (compound member)"],
+      "preLaunchTask": "prepare rust debug",
+      "stopAll": true
     }
   ],
   "inputs": [
