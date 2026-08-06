@@ -5,6 +5,7 @@
 // whichever mode produced it.
 import { basename } from 'node:path'
 import { exportsTap, exportsTapFromBuffer } from './engine.mjs'
+import { cjsEvalWrap } from './cjs-wrap.mjs'
 import { cleanPath } from './paths.mjs'
 import { moduleKindFor } from './format.mjs'
 import { tapWithStarRetry } from './stars.mjs'
@@ -74,7 +75,8 @@ function tapEntries(patches: PatchEntry[]): TapEntryInput[] {
  * `registerHooks` load hook's `nextLoad`) is also accepted as `source`. For
  * matches that stay on the tap's fast path the source then never
  * leaves UTF-8 — it crosses napi zero-copy for validation and one
- * `Buffer.concat` appends the snippets — and `code` in the result is a
+ * `Buffer.concat` attaches the tap (appended for ESM; spliced into the CJS
+ * evaluation wrap, see cjs-wrap.mjs) — and `code` in the result is a
  * `Buffer` a load hook can return as-is. When the tap has to rewrite, the
  * regenerated module comes back as a string (that O(n) is the price of the
  * shapes that need it, paid only by modules that need it).
@@ -138,6 +140,21 @@ export function applyMatched(
       filename,
       undefined,
     )
+    if (cjs) {
+      // splice, don't just append: a top-level `return` in the CJS wrapper
+      // would skip an appended tap — see cjs-wrap.mjs. Subarrays are views,
+      // so the source bytes still cross exactly once.
+      const wrap = cjsEvalWrap(buf, tap.snippets)
+      return {
+        code: Buffer.concat([
+          buf.subarray(0, wrap.insertAt),
+          Buffer.from(wrap.prefix),
+          buf.subarray(wrap.insertAt),
+          Buffer.from(`${wrap.trailer}\n${SENTINEL}\n`),
+        ]),
+        map: null,
+      }
+    }
     const trailer = `${tap.snippets}\n${SENTINEL}\n`
     if (tap.code == null) {
       return { code: Buffer.concat([buf, Buffer.from(trailer)]), map: null }
@@ -156,6 +173,11 @@ export function applyMatched(
     filename,
     undefined,
   )
+  if (cjs) {
+    const wrap = cjsEvalWrap(text, tap.snippets)
+    const code = text.slice(0, wrap.insertAt) + wrap.prefix + text.slice(wrap.insertAt) + wrap.trailer
+    return { code: `${code}\n${SENTINEL}\n`, map: null }
+  }
   let code = tap.code != null ? tap.code : text
   const map = tap.code != null ? (tap.map ?? null) : null
   code += tap.snippets

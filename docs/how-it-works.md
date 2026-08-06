@@ -20,7 +20,7 @@ error, the version-drift alarm. Then the tap is **tiered**:
   over the live bindings. The source is untouched, existing source maps stay
   valid, and on the runtime path the bytes never leave UTF-8.
 - **Rewrite path** — shapes that cannot be rebound as written are
-  **restructured** through one AST rewrite + codegen (with a source map):
+  **restructured** through one AST rewrite (with a source map):
   `export const` is demoted to `let` (destructuring patterns included), an
   anonymous `export default` is named into a local, and re-exports —
   `export { a as b } from`, `export * as ns from`, import-backed list
@@ -32,7 +32,18 @@ error, the version-drift alarm. Then the tap is **tiered**:
   acorn engine) — then appends a shadow export (explicit exports shadow
   `export *`, so this one is append-only). Only modules that need a
   rewrite pay for one; what stays loud: ambiguous star names, stars into
-  CJS, stars into packages that are not installed.
+  CJS, stars into packages that are not installed. _How_ the rewrite edits
+  the source is the one place the engines diverge, and comments forced the
+  choice: bundlers hang real semantics on them (`/* @__PURE__ */`
+  tree-shake annotations, webpack magic comments, `/*!` legal comments),
+  and while oxc codegen preserves them as a feature, a JS printer in the
+  [astring](https://github.com/davidbonnet/astring) lineage cannot
+  reasonably reprint them. So the native engine regenerates the whole
+  program through oxc codegen, while the acorn engine makes surgical
+  [magic-string](https://github.com/rich-harris/magic-string) edits —
+  preservation is structural (unedited bytes cannot change), untouched
+  lines keep their exact source text, and the emitted map stays sparse.
+  Same output contract either way, down to byte-identical snippets.
 
 Either way the patch call runs at the end of the module's own evaluation:
 after its definitions exist, before any importer sees them.
@@ -51,6 +62,22 @@ after its definitions exist, before any importer sees them.
   themselves use at build time, where no format hint exists — so a pure-CJS
   express, the AWS SDK's `"type"`-less ESM `dist-es`, and the two trees of a
   dual package like hono each land on their real tap in both shells.
+- The CJS tap rides an **evaluation wrap**, not a bare append: the module
+  body becomes an arrow IIFE, `;(() => { <body> })(); <tap>`, because the
+  CJS wrapper is a function — a module that exits through a top-level
+  `return` (bundlers wrap CJS in a function too) would silently skip
+  anything merely appended. The arrow is the load-bearing choice: a
+  `try/finally` would put sloppy-mode `function` declarations in a block,
+  where bundlers' Annex B lowering renames them (esbuild turned
+  graceful-fs's `patch` into `patch2` — an observable `Function.name`
+  change the corpus caught), while a function body adds no block and
+  inherits the wrapper's `this` and `arguments` untouched. Directives
+  become the arrow body's own prologue, so strict mode survives without
+  hoisting; the prefix adds no newline, so every line keeps its number and
+  an upstream source map stays line-accurate; cjs-module-lexer still sees
+  the `exports` writes, so named ESM imports keep resolving; and a body
+  that **throws** never reaches the tap after the call — matching the ESM
+  tap, which never runs on a failed evaluation.
 - Patch delivery differs per mode: at build time a static import of your
   patch module is appended and bundled (a `require()` call when the patched
   module is CJS — appended `import` syntax would flip its format under the
