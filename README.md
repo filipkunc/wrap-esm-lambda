@@ -131,9 +131,12 @@ value; assigning `bindings.X = wrapped` rebinds the export for every importer.
 
 Export shapes that cannot be rebound as written (`export const`, anonymous
 `export default`, re-export barrels, `export * from` chains) are restructured
-through one AST rewrite with a source map; everything else leaves the source
-byte-for-byte untouched. ESM and CJS each get a mode-specific snippet, chosen
-by reproducing Node's own format rules.
+through one AST rewrite with a source map; everything else keeps every line of
+the source intact — ESM by pure appending, CJS through a newline-free
+evaluation wrap that a top-level `return` cannot skip (existing source maps
+stay accurate either way, minified single-line bundles included). ESM and CJS
+each get a mode-specific snippet, chosen by reproducing Node's own format
+rules.
 
 The full mechanism — the fast/rewrite tiers, rebinding semantics, the
 CJS-or-ESM decision, how the two delivery modes differ, and why the classic
