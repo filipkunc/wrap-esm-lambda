@@ -107,6 +107,7 @@
     "lint-staged": "^16.1.2",
     "npm-run-all2": "^8.0.4",
     "oxlint": "^1.8.0",
+    "pkg-pr-new": "^0.0.87",
     "prettier": "^3.6.2",
     "rolldown": "^1.2.0",
     "rollup": "^4.62.2",

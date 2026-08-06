@@ -1142,6 +1142,22 @@ jobs:
         # throwaway checkout; do not add a `pnpm install` after it, and if you
         # run it locally, discard the change.
         run: pnpm exec napi prepublish -t npm --dry-run
+      - name: Publish preview (pkg.pr.new)
+        # Installable previews for every green push, without touching npmjs.
+        # This step sits here, after the prepublish dry-run, on purpose:
+        # everything a preview needs is already assembled at this point — the
+        # tested .node binaries under npm/, the glue the test lanes ran
+        # against, and the per-platform optionalDependencies the dry-run just
+        # injected into package.json. pkg.pr.new rewrites every sibling
+        # reference (the workspace:^ links between the packages AND those
+        # injected platform pins) to its own commit-keyed tarball URLs, so a
+        # consumer machine installs the full dependency chain from the printed
+        # URLs with no registry and no token.
+        #
+        # Prerequisite: the pkg.pr.new GitHub App must be installed on this
+        # repository (https://github.com/apps/pkg-pr-new) — without it the
+        # upload is rejected and this step fails.
+        run: pnpm exec pkg-pr-new publish '.' './npm/*' './packages/*'
       - name: Publish
         # Two things must both be true to reach npm: a human dispatched this
         # workflow, and they typed the confirmation. A tag or a version-shaped
