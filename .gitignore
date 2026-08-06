@@ -130,6 +130,10 @@ dist-plain
 !.yarn/versions
 /npm
 
+# the local registry's config, storage, logs and scratch consumer — see
+# .github/scripts/local-registry.sh
+/.local-registry
+
 /benchmark/lib
 /hooks/.swc/
 *.wasm
