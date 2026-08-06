@@ -98,6 +98,7 @@
     "hono": "^4.12.34",
     "husky": "^9.1.7",
     "import-in-the-middle": "^3.3.1",
+    "js-yaml": "4.3.0",
     "lint-staged": "^16.1.2",
     "npm-run-all2": "^8.0.4",
     "oxlint": "^1.8.0",

@@ -74,7 +74,13 @@ after its definitions exist, before any importer sees them.
   inherits the wrapper's `this` and `arguments` untouched. Directives
   become the arrow body's own prologue, so strict mode survives without
   hoisting; the prefix adds no newline, so every line keeps its number and
-  an upstream source map stays line-accurate; cjs-module-lexer still sees
+  an upstream source map stays line-accurate — and for the module the
+  no-newline trick cannot save, a minified single-line bundle whose whole
+  body is the insertion line, the apply step returns a corrected copy of
+  the module's own map (first mapped segment of that line shifted by the
+  prefix width; VLQ columns are deltas, so the line reflows), which the
+  runtime hook inlines after the code (the last `sourceMappingURL` comment
+  wins) and the build shell hands to the bundler; cjs-module-lexer still sees
   the `exports` writes, so named ESM imports keep resolving; and a body
   that **throws** never reaches the tap after the call — matching the ESM
   tap, which never runs on a failed evaluation.
