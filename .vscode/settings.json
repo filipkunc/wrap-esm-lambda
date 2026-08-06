@@ -8,8 +8,10 @@
   "rust-analyzer.cargo.targetDir": true,
   // The lint job gates on `cargo clippy --all-targets -- -D warnings`; matching
   // it here means the editor shows those failures instead of CI doing it later.
+  // `--all-targets` is NOT spelled out in extraArgs: rust-analyzer already adds
+  // it (check.allTargets defaults to true), and clippy rejects the duplicate
+  // flag outright, which kills flycheck with "produced no valid metadata".
   "rust-analyzer.check.command": "clippy",
-  "rust-analyzer.check.extraArgs": ["--all-targets"],
 
   // NOTE: there is deliberately no `typescript.tsdk` here, and no
   // `typescript.native-preview.tsdk` either.
