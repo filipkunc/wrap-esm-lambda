@@ -13,6 +13,8 @@
 // - tap.mjs           — the exports tap (fast path + magic-string rewrites)
 // - sourcemaps.mjs    — map chaining and data-URL inlining
 // - resolve.mjs       — import-style module resolution (oxc_resolver's twin)
+// - privates.mjs      — the privates bridge injection (prototype: no native
+//                       twin yet — see docs/design-private-bindings.md)
 
 /**
  * The transform contract this engine implements — the same number the native
@@ -26,3 +28,6 @@ export function tapContractVersion(): number {
 export { esmModuleExports, hasModuleSyntax } from './exports-index.mjs'
 export { exportsTap, exportsTapFromBuffer } from './tap.mjs'
 export { resolveModule } from './resolve.mjs'
+// PROTOTYPE (this engine only, outside the tap contract until the native
+// port lands): the well-known symbol key the privates bridge publishes under
+export { PRIVATE_BRIDGE_KEY } from './privates.mjs'
