@@ -27,13 +27,19 @@ pub fn tap_contract_version() -> u32 {
 
 /// One patch entry's inputs to the exports tap — mirrors the JS config entry.
 /// `aliasIndex` keeps the injected import alias unique when several entries
-/// patch the same module in import delivery.
+/// patch the same module in import delivery. `privates` maps a class name to
+/// the private names whose get/set bridge the class body should publish
+/// under `Symbol.for("wrap-esm-lambda.privates")` — the class-body injection
+/// of docs/design-private-bindings.md. (An `IndexMap` so the emission
+/// follows the JS object's insertion order; determinism is part of the
+/// emission contract.)
 #[napi(object)]
 pub struct TapEntryInput {
   pub bindings: Vec<String>,
   pub patch_name: String,
   pub patch_from: String,
   pub alias_index: u32,
+  pub privates: Option<indexmap::IndexMap<String, Vec<String>>>,
 }
 
 /// Result of `exportsTap` for one module (all entries at once):
@@ -171,6 +177,7 @@ fn tap_entries(entries: Vec<TapEntryInput>) -> Vec<transform::TapEntry> {
       patch_name: entry.patch_name,
       patch_from: entry.patch_from,
       alias_index: entry.alias_index,
+      privates: entry.privates,
     })
     .collect()
 }

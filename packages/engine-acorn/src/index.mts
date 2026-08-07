@@ -13,8 +13,8 @@
 // - tap.mjs           — the exports tap (fast path + magic-string rewrites)
 // - sourcemaps.mjs    — map chaining and data-URL inlining
 // - resolve.mjs       — import-style module resolution (oxc_resolver's twin)
-// - privates.mjs      — the privates bridge injection (prototype: no native
-//                       twin yet — see docs/design-private-bindings.md)
+// - privates.mjs      — the privates bridge injection (twin of the native
+//                       src/transform/privates.rs)
 
 /**
  * The transform contract this engine implements — the same number the native
@@ -28,6 +28,7 @@ export function tapContractVersion(): number {
 export { esmModuleExports, hasModuleSyntax } from './exports-index.mjs'
 export { exportsTap, exportsTapFromBuffer } from './tap.mjs'
 export { resolveModule } from './resolve.mjs'
-// PROTOTYPE (this engine only, outside the tap contract until the native
-// port lands): the well-known symbol key the privates bridge publishes under
+// The well-known symbol key the privates bridge publishes under. This
+// engine only — the native addon has no equivalent export; core will own
+// the public constant when the config plumbing lands.
 export { PRIVATE_BRIDGE_KEY } from './privates.mjs'

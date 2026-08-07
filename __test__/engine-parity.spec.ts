@@ -191,6 +191,113 @@ test("both engines' missing-export errors satisfy core's contract predicate", ()
   assert.strictEqual(isMissingExportError(new Error('some other failure')), false, 'unrelated errors do not retry')
 })
 
+// The privates bridge (docs/design-private-bindings.md): the native engine
+// grafts the member into the class AST and regenerates through codegen; the
+// acorn engine prints the identical text by hand and splices it in. On
+// codegen-conventional sources the two whole-module rewrites must stay
+// byte-for-byte identical — this is the suite the design said would drive
+// the port, and what any future TAP_CONTRACT_VERSION bump for `privates`
+// will lean on.
+const PRIVATES_SOURCE = `export class Db {
+	#url;
+	#pool = [];
+	constructor(url) {
+		this.#url = url;
+	}
+}
+`
+const privatesEntry = (privates: Record<string, string[]>, bindings = ['Db']) => [
+  { bindings, patchName: 'traceDb', patchFrom: '/abs/apm-patch.mjs', aliasIndex: 0, privates },
+]
+
+test('privates bridge: both engines emit identical rewrites', () => {
+  for (const registry of [true, false]) {
+    const fromOxc = oxc.exportsTap(PRIVATES_SOURCE, privatesEntry({ Db: ['#url', '#pool'] }), false, registry, 'db.mjs')
+    const fromAcorn = (acorn as Engine).exportsTap(
+      PRIVATES_SOURCE,
+      privatesEntry({ Db: ['#url', '#pool'] }),
+      false,
+      registry,
+      'db.mjs',
+    )
+    assert.strictEqual(fromAcorn.snippets, fromOxc.snippets, 'snippets are byte-identical')
+    assert.ok(fromOxc.code != null, 'a planned bridge forces the rewrite path')
+    assert.strictEqual(fromAcorn.code, fromOxc.code, 'the injected member and the rest of the module match')
+    assert.strictEqual(fromAcorn.map == null, fromOxc.map == null, 'both engines agree on whether a map is emitted')
+  }
+})
+
+test('privates bridge: slot shapes emit identically (fields, methods, lone accessors, static)', () => {
+  const source = `export class Shape {
+	#hidden = 1;
+	static #count = 7;
+	#bump() {
+		return ++this.#hidden;
+	}
+	get #virtual() {
+		return this.#hidden * 2;
+	}
+	set #input(v) {
+		this.#hidden = v;
+	}
+}
+`
+  // single-slot and multi-slot bridges format differently (codegen keeps a
+  // one-property object inline) — pin each shape
+  const requests: string[][] = [
+    ['#hidden'],
+    ['#bump'],
+    ['#input'],
+    ['#hidden', '#count', '#bump', '#virtual', '#input'],
+  ]
+  for (const names of requests) {
+    const fromOxc = oxc.exportsTap(source, privatesEntry({ Shape: names }, ['Shape']), false, true, 'shape.mjs')
+    const fromAcorn = (acorn as Engine).exportsTap(
+      source,
+      privatesEntry({ Shape: names }, ['Shape']),
+      false,
+      true,
+      'shape.mjs',
+    )
+    assert.strictEqual(fromAcorn.code, fromOxc.code, `identical rewrite for privates [${names.join(', ')}]`)
+  }
+})
+
+test('privates bridge: injection composes identically with a binding rewrite', () => {
+  // a class-valued const: the demotion and the injection land in one rewrite
+  const source = `export const Client = class {
+	#token = "t0";
+};
+`
+  const fromOxc = oxc.exportsTap(source, privatesEntry({ Client: ['#token'] }, ['Client']), false, true, 'client.mjs')
+  const fromAcorn = (acorn as Engine).exportsTap(
+    source,
+    privatesEntry({ Client: ['#token'] }, ['Client']),
+    false,
+    true,
+    'client.mjs',
+  )
+  assert.ok(fromOxc.code!.includes('export let Client'), 'the demotion happened')
+  assert.strictEqual(fromAcorn.code, fromOxc.code)
+})
+
+test('privates refusals: identical messages, never the missing-export phrase', () => {
+  const cases: [string, () => unknown][][] = engines.map(([, engine]) => [
+    ['unknown class', () => engine.exportsTap(PRIVATES_SOURCE, privatesEntry({ Missing: ['#x'] }), false, true)],
+    ['unknown private', () => engine.exportsTap(PRIVATES_SOURCE, privatesEntry({ Db: ['#nope'] }), false, true)],
+    ['cjs', () => engine.exportsTap('', privatesEntry({ Db: ['#url'] }), true, true)],
+  ])
+  const [oxcCases, acornCases] = [cases[0]!, cases[1]!]
+  for (let i = 0; i < oxcCases.length; i += 1) {
+    const [label, runOxc] = oxcCases[i]!
+    const [, runAcorn] = acornCases[i]!
+    const fromOxc = captureThrows(() => runOxc())
+    const fromAcorn = captureThrows(() => runAcorn())
+    assert.strictEqual(fromAcorn.message, fromOxc.message, `${label}: identical message`)
+    assert.strictEqual(isMissingExportError(fromOxc), false, `${label}: must never trigger core's star-graph retry`)
+  }
+})
+
 test('esmModuleExports reports the same surface from both engines', () => {
   const source = 'export const a = 1;\nexport * from "./x.js";\nexport * as ns from "./y.js";\nexport default 2;\n'
   const fromOxc = oxc.esmModuleExports(source)

@@ -329,6 +329,7 @@ checksum = "fc1d56eed08a179e1c5bedb1613c58e882087cec97fcaa7788cc42366335a41d"
 dependencies = [
  "bitflags",
  "ctor",
+ "indexmap",
  "napi-build",
  "napi-sys",
  "nohash-hasher",
@@ -1313,11 +1314,13 @@ checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
 name = "wrap_esm_lambda"
 version = "0.3.0"
 dependencies = [
+ "indexmap",
  "napi",
  "napi-build",
  "napi-derive",
  "oxc_allocator",
  "oxc_ast",
+ "oxc_ast_visit",
  "oxc_codegen",
  "oxc_parser",
  "oxc_resolver",

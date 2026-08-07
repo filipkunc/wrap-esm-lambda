@@ -27,6 +27,7 @@ fn test_exports_tap_chained_upstream_map() {
       patch_name: "patchIt".to_string(),
       patch_from: "/abs/patch.ts".to_string(),
       alias_index: 0,
+      privates: None,
     }],
     false,
     true,
@@ -56,6 +57,7 @@ fn test_exports_tap_malformed_upstream_map_is_err_not_panic() {
       patch_name: "patchIt".to_string(),
       patch_from: "/abs/patch.ts".to_string(),
       alias_index: 0,
+      privates: None,
     }],
     false,
     true,
@@ -78,6 +80,7 @@ fn tap1(source: &str, bindings: &[&str], cjs: bool, registry: bool) -> Result<Ta
       patch_name: "patchIt".to_string(),
       patch_from: "/abs/patch.ts".to_string(),
       alias_index: 0,
+      privates: None,
     }],
     cjs,
     registry,
@@ -288,6 +291,7 @@ fn test_exports_tap_star_resolution_appends_shadow_export() {
       patch_name: "patchIt".to_string(),
       patch_from: "/abs/patch.ts".to_string(),
       alias_index: 0,
+      privates: None,
     }],
     false,
     true,
@@ -402,12 +406,14 @@ fn test_exports_tap_shared_rewrites_across_entries() {
       patch_name: "patchA".to_string(),
       patch_from: "/a.ts".to_string(),
       alias_index: 0,
+      privates: None,
     },
     TapEntry {
       bindings: vec!["VERSION".to_string()],
       patch_name: "patchB".to_string(),
       patch_from: "/b.ts".to_string(),
       alias_index: 1,
+      privates: None,
     },
   ];
   let out = exports_tap(source, &entries, false, false, Some("mod.js"), None, &[]).unwrap();
@@ -513,4 +519,112 @@ fn test_has_module_syntax() {
   assert!(!has_module_syntax("import(\"x\").then(() => {});\n"));
   // does not parse as ESM at all -> not ESM
   assert!(!has_module_syntax("with (obj) { x = 1; }\n"));
+}
+
+fn tap_privates(
+  source: &str,
+  bindings: &[&str],
+  privates: &[(&str, &[&str])],
+) -> Result<TapOutput, String> {
+  let mut map: indexmap::IndexMap<String, Vec<String>> = indexmap::IndexMap::new();
+  for (class_name, names) in privates {
+    map.insert(
+      class_name.to_string(),
+      names.iter().map(|n| n.to_string()).collect(),
+    );
+  }
+  exports_tap(
+    source,
+    &[TapEntry {
+      bindings: bindings.iter().map(|b| b.to_string()).collect(),
+      patch_name: "traceDb".to_string(),
+      patch_from: "/abs/apm-patch.mjs".to_string(),
+      alias_index: 0,
+      privates: Some(map),
+    }],
+    false,
+    true,
+    Some("db.mjs"),
+    None,
+    &[],
+  )
+}
+
+const DB_SOURCE: &str = "export class Db {\n\t#url;\n\t#pool = [];\n\tconstructor(url) {\n\t\tthis.#url = url;\n\t}\n\tdescribe() {\n\t\treturn `db:${this.#url}:${this.#pool.length}`;\n\t}\n}\nexport function connect(url) {\n\treturn new Db(url);\n}\n";
+
+#[test]
+fn test_privates_bridge_injects_static_block() {
+  // The member codegen prints for the grafted static block — the exact text
+  // the acorn engine's memberText emits by hand; engine-parity diffs them.
+  let out = tap_privates(DB_SOURCE, &["Db"], &[("Db", &["#url", "#pool"])]).unwrap();
+  let code = out
+    .code
+    .expect("a planned bridge forces the rewrite path even when bindings alone would not");
+  let member = "\tstatic {\n\t\tObject.defineProperty(this, Symbol.for(\"wrap-esm-lambda.privates\"), { value: {\n\t\t\t\"#url\": {\n\t\t\t\tget: (o) => o.#url,\n\t\t\t\tset: (o, v) => {\n\t\t\t\t\to.#url = v;\n\t\t\t\t}\n\t\t\t},\n\t\t\t\"#pool\": {\n\t\t\t\tget: (o) => o.#pool,\n\t\t\t\tset: (o, v) => {\n\t\t\t\t\to.#pool = v;\n\t\t\t\t}\n\t\t\t}\n\t\t} });\n\t}\n}";
+  assert!(code.contains(member), "canonical member emission:\n{code}");
+  assert!(out.map.is_some(), "the rewrite emits a map");
+  // untouched lines keep their exact source text: on a codegen-conventional
+  // source the rewrite IS the original plus the injected member
+  assert!(code.starts_with("export class Db {\n\t#url;"));
+  assert!(code.ends_with("export function connect(url) {\n\treturn new Db(url);\n}\n"));
+}
+
+#[test]
+fn test_privates_bridge_slot_capabilities() {
+  // methods and get-only accessors grant no setter, set-only accessors no
+  // getter — the bridge's shape is the capability report
+  let source = "export class Shape {\n\t#hidden = 1;\n\t#bump() {\n\t\treturn ++this.#hidden;\n\t}\n\tget #virtual() {\n\t\treturn this.#hidden * 2;\n\t}\n\tset #input(v) {\n\t\tthis.#hidden = v;\n\t}\n}\n";
+  let out = tap_privates(
+    source,
+    &["Shape"],
+    &[("Shape", &["#hidden", "#bump", "#virtual", "#input"])],
+  )
+  .unwrap();
+  let code = out.code.unwrap();
+  assert!(code.contains("\"#bump\": { get: (o) => o.#bump }"));
+  assert!(code.contains("\"#virtual\": { get: (o) => o.#virtual }"));
+  assert!(code.contains("\"#input\": { set: (o, v) => {\n\t\t\t\to.#input = v;\n\t\t\t} }"));
+  assert!(!code.contains("set: (o, v) => {\n\t\t\t\t\to.#bump"));
+}
+
+#[test]
+fn test_privates_bridge_refusals() {
+  // shared verbatim with the acorn engine, and deliberately NOT the
+  // missing-export phrasing core's star-graph retry keys on
+  let err = tap_privates(DB_SOURCE, &["Db"], &[("Missing", &["#x"])]).unwrap_err();
+  assert_eq!(
+    err,
+    "privates: no top-level class named 'Missing' (top-level classes: Db)"
+  );
+  assert!(!err.contains("not found in module"));
+
+  let err = tap_privates(DB_SOURCE, &["Db"], &[("Db", &["#nope"])]).unwrap_err();
+  assert_eq!(
+    err,
+    "privates: '#nope' not found in class 'Db' (available: #url, #pool)"
+  );
+  assert!(!err.contains("not found in module"));
+
+  let mut map: indexmap::IndexMap<String, Vec<String>> = indexmap::IndexMap::new();
+  map.insert("Db".to_string(), vec!["#url".to_string()]);
+  let err = exports_tap(
+    "",
+    &[TapEntry {
+      bindings: vec!["Db".to_string()],
+      patch_name: "traceDb".to_string(),
+      patch_from: "/abs/apm-patch.mjs".to_string(),
+      alias_index: 0,
+      privates: Some(map),
+    }],
+    true,
+    true,
+    None,
+    None,
+    &[],
+  )
+  .unwrap_err();
+  assert_eq!(
+    err,
+    "privates: only ESM modules are supported (requested for a CJS module)"
+  );
 }
