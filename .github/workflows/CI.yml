@@ -1070,6 +1070,33 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+      # The same charts a release embeds, rendered from THIS run's numbers
+      # instead of the committed SVGs, and attached as an artifact — a job
+      # summary cannot inline a local image (the constraint corpus.yml
+      # documents), so the summary points at the artifact. Both legs render
+      # the two transform charts from the head tree; only the main leg adds
+      # the cold-start chart, because bench_hooks.sh has already produced it
+      # there (make-chart.mjs parses that harness's RSS-annotated table — on
+      # a PR the file in the checkout is the committed, stale one, which
+      # would be misleading to attach as this run's output).
+      - name: Render charts
+        run: |
+          set -euo pipefail
+          pnpm --silent bench:chart > /dev/null
+          mkdir -p bench-charts
+          cp hooks/tapMechanismChart.svg hooks/tapEngineChart.svg bench-charts/
+          if [ "${{ github.event_name }}" = "push" ]; then
+            cp hooks/benchChart.svg bench-charts/
+          fi
+          {
+            echo ''
+            echo '_Charts rendered from this run are attached as the `bench-charts` artifact._'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload charts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: bench-charts
+          path: bench-charts/
   publish:
     name: Publish
     runs-on: ubuntu-latest
