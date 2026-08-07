@@ -166,3 +166,6 @@ dist-plain
 # The "link node for lldb" task pins the PATH-resolved node here so the
 # CodeLLDB launch config has a stable program path to point at.
 /.vscode/node
+
+# privates-bridge.spec.ts scratch modules (cleaned by the suite; guard against crashed runs)
+__test__/privates-tmp-*/

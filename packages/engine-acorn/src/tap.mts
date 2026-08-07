@@ -13,13 +13,21 @@ import type { ExportIndex, ExportStatement, NamedExport } from './exports-index.
 import { braceName, buildSnippet, quoteJsString, starStub } from './snippets.mjs'
 import type { Accessor } from './snippets.mjs'
 import { chainMaps } from './sourcemaps.mjs'
+import { planPrivateBridges } from './privates.mjs'
+import type { BridgePlan } from './privates.mjs'
 
-/** One patch entry's inputs, mirroring the native `TapEntryInput`. */
+/**
+ * One patch entry's inputs, mirroring the native `TapEntryInput`.
+ * `privates` (PROTOTYPE, this engine only until the native port lands) maps
+ * a class name to the private names whose bridge the class body should
+ * publish — see privates.mts and docs/design-private-bindings.md.
+ */
 export interface TapEntryInput {
   bindings: string[]
   patchName: string
   patchFrom: string
   aliasIndex: number
+  privates?: Record<string, string[]> | undefined | null
 }
 
 /** A star-forwarded name resolved to the source that provides it. */
@@ -285,8 +293,48 @@ function applyRewrites(ms: MagicString, input: string, ops: Ops, index: ExportIn
   }
 }
 
+/**
+ * The `privates` requests of every entry, merged per class in first-seen
+ * order — several entries bridging the same class converge on ONE injected
+ * static block, exactly as overlapping binding taps converge on one rewrite.
+ */
+function mergedPrivates(entries: TapEntryInput[]): Map<string, string[]> {
+  const merged = new Map<string, string[]>()
+  for (const entry of entries) {
+    if (entry.privates == null) continue
+    for (const [className, names] of Object.entries(entry.privates)) {
+      const known = merged.get(className) ?? []
+      for (const name of names) {
+        if (!known.includes(name)) known.push(name)
+      }
+      merged.set(className, known)
+    }
+  }
+  return merged
+}
+
+/**
+ * Inject each planned bridge member just inside its class body's closing
+ * brace, matching the surrounding line structure the way `applyRewrites`
+ * does for appended statements: no blank separator line when the body
+ * already ends in a newline.
+ */
+function applyBridges(ms: MagicString, input: string, bridges: BridgePlan[]): void {
+  for (const bridge of bridges) {
+    const lead = input[bridge.insertAt - 1] === '\n' ? '' : '\n'
+    ms.appendLeft(bridge.insertAt, `${lead}  ${bridge.member}\n`)
+  }
+}
+
 /** The CJS tap: accessors through `module.exports`, no validation, no rewrite. */
 function cjsTap(entries: TapEntryInput[], registry: boolean): TapOutcome {
+  for (const entry of entries) {
+    if (entry.privates != null && Object.keys(entry.privates).length > 0) {
+      // the CJS tap never parses source — there is no class body to inject
+      // into, so a privates request on a CJS module is a config error
+      throw new Error(`privates: only ESM modules are supported (requested for a CJS module)`)
+    }
+  }
   let snippets = ''
   for (const entry of entries) {
     const accessors = entry.bindings.map((name) =>
@@ -370,11 +418,17 @@ export function exportsTap(
     snippets += buildSnippet(entryAccessors[i]!, entry.patchName, entry.patchFrom, registry, entry.aliasIndex, false)
   })
 
-  if (opsAreEmpty(ops)) {
+  // privates validate after bindings so the existing error precedence (a
+  // missing export fires first) is preserved; any planned bridge forces the
+  // rewrite path even when every binding took the fast path
+  const bridges = planPrivateBridges(program, mergedPrivates(entries))
+
+  if (opsAreEmpty(ops) && bridges.length === 0) {
     return { snippets, code: null, map: null }
   }
 
   const ms = new MagicString(input)
+  applyBridges(ms, input, bridges)
   applyRewrites(ms, input, ops, index)
   let map: string | null = null
   if (filename != null) {
