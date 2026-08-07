@@ -3,10 +3,10 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import * as oxc from '../index.js'
 import * as acornEngine from '@wrap-esm-lambda/engine-acorn'
 import { isMissingExportError } from '@wrap-esm-lambda/core'
 import { captureThrows } from './helpers'
+import type * as OxcEngine from '../index.js'
 
 // The privates bridge (docs/design-private-bindings.md), end to end on BOTH
 // engines: `privates: { Db: ['#url'] }` injects a static block into the
@@ -17,11 +17,21 @@ import { captureThrows } from './helpers'
 // byte-level parity of the two engines' emissions is pinned separately in
 // engine-parity.spec.ts.
 
-type Engine = typeof oxc
-const engines: [string, Engine][] = [
-  ['oxc', oxc],
-  ['acorn', acornEngine as Engine],
-]
+type Engine = typeof OxcEngine
+
+// The native addon loads the way it does for a consumer: optionally. The
+// JS-only CI lane ships the loader with no binding next to it, and the
+// acorn half of this suite is exactly what that lane exists to cover — so
+// a missing binding drops the oxc half instead of failing the whole file
+// at import time (which is why the lane's spec filter need not know about
+// this file).
+const engines: [string, Engine][] = []
+try {
+  engines.push(['oxc', (await import('../index.js')) as Engine])
+} catch {
+  // no native binding on this platform/lane — acorn-only run
+}
+engines.push(['acorn', acornEngine as Engine])
 
 const BRIDGE = Symbol.for(acornEngine.PRIVATE_BRIDGE_KEY)
 const ENTRY = { bindings: ['Db'], patchName: 'traceDb', patchFrom: '/abs/apm-patch.mjs', aliasIndex: 0 }
