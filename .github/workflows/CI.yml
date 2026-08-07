@@ -968,6 +968,10 @@ jobs:
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      # the sticky benchmark-charts comment on PRs
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Checkout base (PR A/B)
@@ -1097,6 +1101,24 @@ jobs:
         with:
           name: bench-charts
           path: bench-charts/
+      # The release page embeds the committed charts; the PR gets the same
+      # set where the conversation happens — a sticky comment PATCHed in
+      # place per push (marker-keyed, the Lambda lane's cold-start-comment
+      # pattern), with pointers to this run's freshly rendered charts and
+      # tables. Same-repo PRs only: a fork's token cannot write comments.
+      - name: Chart the benchmarks on the PR
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # the head commit, NOT github.sha: on pull_request events that is
+          # the ephemeral merge commit, whose raw URLs rot after the merge
+          # ref is recomputed or collected
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: .github/scripts/pr-bench-charts-comment.sh
   publish:
     name: Publish
     runs-on: ubuntu-latest
