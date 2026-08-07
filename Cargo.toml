@@ -15,10 +15,14 @@ version      = "0.3.0"
 crate-type = ["cdylib"]
 
 [dependencies]
-napi          = "3.2.4"
+# object_indexmap: the tap's `privates` field crosses napi as an IndexMap so
+# the bridge emission follows the JS object's insertion order
+indexmap      = "2"
+napi          = { version = "3.2.4", features = ["object_indexmap"] }
 napi-derive   = "3.2.4"
 oxc_allocator = "0.141.0"
 oxc_ast       = "0.141.0"
+oxc_ast_visit = "0.141.0"
 oxc_codegen   = "0.141.0"
 oxc_parser    = "0.141.0"
 oxc_resolver  = "11.24.2"

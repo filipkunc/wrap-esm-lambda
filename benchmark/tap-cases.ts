@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 
 import { exportsTap, exportsTapFromBuffer } from '../index.js'
 import * as acornEngine from '@wrap-esm-lambda/engine-acorn'
@@ -35,6 +36,21 @@ const esmBuffer = readFileSync(esmPath)
 // padded with a comment block to the 42 KB of the real CJS bundle
 const esmBigSource = esmSource + `\n/* ${'x'.repeat(cjsSource.length - esmSource.length - 8)} */\n`
 const esmBigBuffer = Buffer.from(esmBigSource)
+
+// The privates bridge (docs/design-private-bindings.md) on a real
+// class-heavy module: hono's Context — an 11 KB ESM file whose class hides
+// request state behind ~20 private fields, exactly the kind no public
+// surface exposes. Tapping the `Context` binding alone takes the
+// append-only fast path on this file (a mutable `var` behind a list
+// export); requesting privates forces the full rewrite — parse, class-body
+// injection, whole-module regeneration (codegen for oxc, magic-string for
+// acorn) — so the pair prices the bridge's marginal cost on the same input.
+// (`import.meta.resolve` because hono's exports map encapsulates
+// package.json; ./request is exported and context.js sits beside it.)
+const honoContextPath = fileURLToPath(new URL('./context.js', import.meta.resolve('hono/request')))
+const honoSource = readFileSync(honoContextPath, 'utf8')
+const HONO_TAP = [{ bindings: ['Context'], patchName: 'patch', patchFrom: '/p.ts', aliasIndex: 0 }]
+const HONO_TAP_PRIVATES = [{ ...HONO_TAP[0], privates: { Context: ['#rawRequest', '#req', '#var', '#status'] } }]
 
 const orchestrionConfig = {
   channelName: 'smithy-send',
@@ -72,7 +88,8 @@ export function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): numb
 
 export const inputDescription =
   `input: @smithy/core@${corePkg.version}\n` +
-  `  dist-es client.js: ${esmSource.length} bytes, dist-cjs index.js: ${cjsSource.length} bytes`
+  `  dist-es client.js: ${esmSource.length} bytes, dist-cjs index.js: ${cjsSource.length} bytes\n` +
+  `  hono dist/context.js (privates bridge): ${honoSource.length} bytes`
 
 // Every label reads `tool: operation (input)` — the tool first (oxc and
 // acorn are the two engines of THIS package, iitm and orchestrion the
@@ -135,6 +152,14 @@ export const cases: { label: string; run: () => void; mechanism?: boolean }[] = 
     },
   },
   {
+    label: 'oxc tap: hono Context, binding only — fast path (11 KB)',
+    run: () => exportsTap(honoSource, HONO_TAP, false, true),
+  },
+  {
+    label: 'oxc tap: hono Context, privates bridge rewrite (11 KB)',
+    run: () => exportsTap(honoSource, HONO_TAP_PRIVATES, false, true),
+  },
+  {
     // the same parse+validate through the pure-JS engine: what the tap costs
     // with no Rust in the loop (acorn parse instead of oxc-across-napi)
     label: 'acorn tap: ESM parse + validate (1.8 KB)',
@@ -160,6 +185,14 @@ export const cases: { label: string; run: () => void; mechanism?: boolean }[] = 
       const source = esmBigBuffer.toString('utf8')
       void (source + acornEngine.exportsTap(source, TAP, false, true).snippets)
     },
+  },
+  {
+    label: 'acorn tap: hono Context, binding only — fast path (11 KB)',
+    run: () => acornEngine.exportsTap(honoSource, HONO_TAP, false, true),
+  },
+  {
+    label: 'acorn tap: hono Context, privates bridge rewrite (11 KB)',
+    run: () => acornEngine.exportsTap(honoSource, HONO_TAP_PRIVATES, false, true),
   },
   {
     // iitm's per-module analysis step (es-module-lexer): the fair mechanism

@@ -12,6 +12,7 @@
 //! their input/output types.
 
 mod export_index;
+mod privates;
 mod rewrite;
 mod snippet;
 mod source_map;
@@ -23,18 +24,25 @@ use oxc_sourcemap::SourceMap;
 use oxc_span::SourceType;
 
 use export_index::{NamedKind, build_export_index};
+use privates::{apply_private_bridges, merged_privates, plan_private_bridges};
 use rewrite::{FreshNames, RewriteOps, apply_rewrites, resolve_binding};
 use snippet::{Accessor, build_snippet, push_star_stub};
 use source_map::chain_source_maps;
 
 /// One patch entry's inputs to the exports tap, mirroring the JS config
 /// entry. `alias_index` keeps the injected import alias unique when several
-/// entries patch the same module in import delivery.
+/// entries patch the same module in import delivery. `privates` maps a
+/// class name to the private names whose bridge the class body should
+/// publish — see the `privates` module and docs/design-private-bindings.md.
+/// (An `IndexMap`, not a `HashMap`: the bridge emission follows the JS
+/// object's insertion order, and determinism is part of the emission
+/// contract.)
 pub struct TapEntry {
   pub bindings: Vec<String>,
   pub patch_name: String,
   pub patch_from: String,
   pub alias_index: u32,
+  pub privates: Option<indexmap::IndexMap<String, Vec<String>>>,
 }
 
 /// What the tap asks the caller to do to one module, for all its patch
@@ -127,6 +135,18 @@ pub fn exports_tap(
   if cjs {
     let mut snippets = String::new();
     for entry in entries {
+      if entry
+        .privates
+        .as_ref()
+        .is_some_and(|privates| !privates.is_empty())
+      {
+        // the CJS tap never parses source — there is no class body to
+        // inject into, so a privates request on a CJS module is a config
+        // error (message shared verbatim with the acorn engine)
+        return Err(
+          "privates: only ESM modules are supported (requested for a CJS module)".to_string(),
+        );
+      }
       let accessors: Vec<Accessor> = entry
         .bindings
         .iter()
@@ -233,7 +253,12 @@ pub fn exports_tap(
     ));
   }
 
-  if ops.is_empty() {
+  // privates validate after bindings so the existing error precedence (a
+  // missing export fires first) is preserved; any planned bridge forces the
+  // rewrite path even when every binding took the fast path
+  let bridges = plan_private_bridges(&program, &merged_privates(entries))?;
+
+  if ops.is_empty() && bridges.is_empty() {
     return Ok(TapOutput {
       snippets,
       code: None,
@@ -241,6 +266,7 @@ pub fn exports_tap(
     });
   }
 
+  apply_private_bridges(&allocator, &mut program, bridges)?;
   apply_rewrites(&allocator, &mut program, &ops)?;
   let ret = Codegen::new()
     .with_options(CodegenOptions {

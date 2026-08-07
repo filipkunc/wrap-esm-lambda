@@ -18,9 +18,9 @@ import type { BridgePlan } from './privates.mjs'
 
 /**
  * One patch entry's inputs, mirroring the native `TapEntryInput`.
- * `privates` (PROTOTYPE, this engine only until the native port lands) maps
- * a class name to the private names whose bridge the class body should
- * publish — see privates.mts and docs/design-private-bindings.md.
+ * `privates` maps a class name to the private names whose bridge the class
+ * body should publish — see privates.mts and
+ * docs/design-private-bindings.md.
  */
 export interface TapEntryInput {
   bindings: string[]
@@ -322,7 +322,7 @@ function mergedPrivates(entries: TapEntryInput[]): Map<string, string[]> {
 function applyBridges(ms: MagicString, input: string, bridges: BridgePlan[]): void {
   for (const bridge of bridges) {
     const lead = input[bridge.insertAt - 1] === '\n' ? '' : '\n'
-    ms.appendLeft(bridge.insertAt, `${lead}  ${bridge.member}\n`)
+    ms.appendLeft(bridge.insertAt, `${lead}${bridge.member}\n`)
   }
 }
 
