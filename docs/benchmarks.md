@@ -25,8 +25,10 @@ in-process, amortized over many calls — `pnpm bench` for the table,
 `pnpm bench:chart` for the charts. The input is not a toy: it is
 `@smithy/core`'s client submodule, the file every `@aws-sdk/client-*`
 `send()` funnels through, both as the 1.8 KB `dist-es` file and padded to
-the 42 KB of the real `dist-cjs` bundle. Two charts, split by what they
-compare — not by speed — with the exact value printed on each bar.
+the 42 KB of the real `dist-cjs` bundle — plus, for the privates bridge,
+hono's `Context` (11 KB, a class hiding request state behind ~20 private
+fields). Two charts, split by what they compare — not by speed — with the
+exact value printed on each bar.
 
 The first is the **mechanism comparison**, apples to apples: one bar per
 tool, each doing its per-module analysis/transform of the same 1.8 KB
@@ -57,6 +59,14 @@ and `acorn` — this package's two engines — plus the neighbors, `iitm`
   actually ships. The acorn engine has no zero-copy variant: it parses
   in-process, so there is no napi boundary for a buffer to save.
 
+The `hono Context` pair prices the
+[privates bridge](design-private-bindings.md) on the same real input:
+`binding only` is the append-only fast path on that file, `privates bridge
+rewrite` adds the class-body injection and therefore the full rewrite —
+parse, graft, whole-module regeneration (codegen on oxc, magic-string
+splicing on acorn). The difference between the two bars is the bridge's
+marginal cost.
+
 The neighbors, for mechanism-fair comparison: `iitm: lexEsm analysis step`
 is import-in-the-middle's per-module scan (es-module-lexer) — its full cost
 additionally includes generating and evaluating a facade module per
@@ -86,6 +96,8 @@ Representative numbers (Node 22, x86_64 Linux, `pnpm bench`):
 | exports tap, ESM parse + validate (1.8 KB)           |          ~14 µs |          ~86 µs |
 | whole hook op on a 42 KB module                      |          ~41 µs |          ~91 µs |
 | exports tap, CJS snippet (no parse)                  |         ~2.9 µs |         ~0.4 µs |
+| hono `Context` tap, fast path (11 KB)                |          ~56 µs |         ~350 µs |
+| hono `Context` tap, privates bridge rewrite (11 KB)  |         ~111 µs |         ~370 µs |
 | runtime-hook cold start (fixture app, `.mjs` config) |          ~72 ms |          ~86 ms |
 
 What the numbers say:
@@ -98,6 +110,13 @@ What the numbers say:
   the acorn engine does it in-process for ~0.4 µs while the native call pays
   ~2.5 µs of napi overhead just to reach Rust. Boundary costs are real in
   both directions.
+- **The rewrite path costs the engines differently — and the privates
+  bridge makes it visible.** Forcing the rewrite on the 11 KB hono file
+  roughly doubles the oxc tap (~56 → ~111 µs): the injection itself is one
+  grafted AST node, but codegen regenerates the whole module. The acorn
+  engine splices in place, so the same request barely registers
+  (~350 → ~370 µs) — its cost was already the parse. oxc still wins
+  outright; the point is where each engine's budget goes.
 - **Cold start favors the native addon, mildly.** The JS engine swaps the
   addon's dlopen for the acorn + magic-string + remapping module graph,
   which reads as ~14 ms more on the fixture app. Both sit well under the

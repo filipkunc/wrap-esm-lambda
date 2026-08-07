@@ -1014,6 +1014,17 @@ jobs:
         run: |
           cd hooks && ./bench_hooks.sh && cd ..
           cat hooks/benchTable.md >> $GITHUB_STEP_SUMMARY
+          # The transform-latency table too, so every case in
+          # benchmark/tap-cases.ts (tap tiers, plumbing, the privates-bridge
+          # rewrite pair) leaves a per-commit trail on main, not only the
+          # A/B numbers a PR run produces.
+          {
+            echo ''
+            echo '## Transform latency'
+            echo '```'
+            pnpm --silent bench
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Benchmark base vs head (PR)
         if: github.event_name == 'pull_request'
         run: |
