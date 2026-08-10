@@ -1196,23 +1196,52 @@ jobs:
         # version.
         run: pnpm publish -r --dry-run --no-git-checks --filter './packages/*'
       - name: Prepublish the addon (dry run)
-        # Heads up: this MUTATES package.json even under --dry-run — it injects
-        # the per-platform packages as optionalDependencies, which is what a
-        # real publish needs and what must never be committed. Harmless in this
-        # throwaway checkout; do not add a `pnpm install` after it, and if you
-        # run it locally, discard the change.
+        # Contrary to what this step's comment used to claim, --dry-run does
+        # NOT touch package.json: in the napi CLI the optionalDependencies
+        # injection sits behind `if (!dryRun)` alongside the actual publish.
+        # This step validates the flow; the injection a preview needs happens
+        # in the next step.
         run: pnpm exec napi prepublish -t npm --dry-run
+      - name: Inject platform optionalDependencies for the preview
+        # The step a real `napi prepublish` performs and the dry-run above
+        # skips: write the per-platform packages into the addon's
+        # optionalDependencies. Without this the preview of the addon ships
+        # with NO platform entries — nothing for npm or pnpm to install — and
+        # every preview consumer silently falls back to the acorn engine
+        # (that fallback masked this gap until the tutorial smoke test
+        # enforced the native engine). The entries are generated from the
+        # npm/ dirs napi just filled, so the target list can never drift from
+        # napi.targets; the version value is a placeholder — pkg.pr.new
+        # rewrites each entry BY NAME to its commit-keyed tarball URL.
+        # Mutates package.json in this throwaway checkout only — never
+        # commit it, and do not add a `pnpm install` after it.
+        run: |
+          node -e '
+            const fs = require("fs")
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"))
+            pkg.optionalDependencies = Object.fromEntries(
+              fs
+                .readdirSync("npm")
+                .sort()
+                .map((dir) => {
+                  const p = JSON.parse(fs.readFileSync(`npm/${dir}/package.json`, "utf8"))
+                  return [p.name, p.version]
+                }),
+            )
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n")
+            console.log("injected:", Object.keys(pkg.optionalDependencies).join(", "))
+          '
       - name: Publish preview (pkg.pr.new)
         # Installable previews for every green push, without touching npmjs.
-        # This step sits here, after the prepublish dry-run, on purpose:
+        # This step sits here, after the injection above, on purpose:
         # everything a preview needs is already assembled at this point — the
         # tested .node binaries under npm/, the glue the test lanes ran
-        # against, and the per-platform optionalDependencies the dry-run just
-        # injected into package.json. pkg.pr.new rewrites every sibling
-        # reference (the workspace:^ links between the packages AND those
-        # injected platform pins) to its own commit-keyed tarball URLs, so a
-        # consumer machine installs the full dependency chain from the printed
-        # URLs with no registry and no token.
+        # against, and the per-platform optionalDependencies just injected
+        # into package.json. pkg.pr.new rewrites every sibling reference (the
+        # workspace:^ links between the packages AND those injected platform
+        # pins) to its own commit-keyed tarball URLs, so a consumer machine
+        # installs the full dependency chain from the printed URLs with no
+        # registry and no token.
         #
         # Prerequisite: the pkg.pr.new GitHub App must be installed on this
         # repository (https://github.com/apps/pkg-pr-new) — without it the
@@ -1369,6 +1398,15 @@ jobs:
         working-directory: examples/pkg-pr-new/${{ matrix.dir }}
         run: |
           set -euo pipefail
+          # The sha-pinned lane just uploaded this commit's previews, platform
+          # binaries included — so there, a missing native addon is a broken
+          # preview chain, not a soft-fallback situation: name the engine and
+          # make it fatal. The PR lane installs @main, which may predate a
+          # native-affecting fix, and readers run without this variable — it
+          # stays on the default engine fallback.
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            export WRAP_ESM_LAMBDA_ENGINE=oxc
+          fi
           npm start | tee output.log
           grep -F '[wrap-esm-lambda] GET /hello/world' output.log
           grep -F "response = { hello: 'world' }" output.log
