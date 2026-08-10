@@ -46,8 +46,15 @@ minimumReleaseAgeExclude:
 #   ajv wants ^3 and fast-json-stringify wants ^4 — so a single pin would
 #   force one of them onto a major it does not declare. The fix shipped inside
 #   both lines (3.1.5 and 4.1.2), so each range is pinned to its own.
+# - nanoid: GHSA-2v37-7h3g-55p8, custom generators can loop indefinitely
+#   when size is zero, fixed in 3.3.17. Unlike the entries above this one is
+#   reachable from a published tree — packages/unplugin > unplugin > webpack
+#   > minimizer-webpack-plugin > postcss — so it fails the audit gate, not
+#   just the dev warning lane. Scoped to ^3 (postcss's line); the 5.x in the
+#   tree is not in the advisory's range.
 overrides:
   postcss: '^8.5.25'
   sharp: '^0.35.3'
   fast-uri@^3: '^3.1.5'
   fast-uri@^4: '^4.1.2'
+  nanoid@^3: '^3.3.17'
