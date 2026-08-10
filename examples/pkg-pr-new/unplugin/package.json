@@ -1,0 +1,20 @@
+{
+  "name": "tutorial-unplugin-instrumentation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tutorial: patch express at build time via the unplugin (esbuild here), installing wrap-esm-lambda from pkg.pr.new previews.",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs && node dist/app.mjs"
+  },
+  "devDependencies": {
+    "@wrap-esm-lambda/core": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/core@main",
+    "@wrap-esm-lambda/unplugin": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/unplugin@main",
+    "esbuild": "^0.28.1",
+    "express": "^5.2.1"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

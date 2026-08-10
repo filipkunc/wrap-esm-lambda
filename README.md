@@ -255,6 +255,13 @@ way to exercise what a consumer actually gets (dependency resolution between
 the packages, the native addon's `optionalDependencies`, exports maps) without
 burning a version number on npmjs.
 
+To try the toolkit without building anything: every green push to `main`
+publishes installable previews of all packages to
+[pkg.pr.new](https://pkg.pr.new), prebuilt native binaries included.
+[examples/pkg-pr-new](examples/pkg-pr-new) holds two self-contained tutorial
+projects — runtime and build-time — that consume those previews exactly as a
+project outside this repo would.
+
 Details — why the first build is mandatory, generated files, the TypeScript 7
 setup, the CI matrix and the release process — are in
 **[CONTRIBUTING.md](CONTRIBUTING.md)**.
