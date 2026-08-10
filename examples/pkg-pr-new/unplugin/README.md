@@ -1,10 +1,11 @@
 # Tutorial: build-time instrumentation, from zero
 
-Patch express so every request logs one line — **baked into the bundle at
-build time, with zero runtime cost**. This directory is self-contained: it
-installs `wrap-esm-lambda` from [pkg.pr.new](https://pkg.pr.new) previews the
-way any project outside this repo would (see [../README.md](../README.md) for
-how those URLs work).
+Patch [hono](https://hono.dev) — a modern **dual package** (native ESM
+`dist/`, bundled CJS `dist/cjs/`) — so every request logs one line, **baked
+into the bundle at build time, with zero runtime cost**. This directory is
+self-contained: it installs `wrap-esm-lambda` from
+[pkg.pr.new](https://pkg.pr.new) previews the way any project outside this
+repo would (see [../README.md](../README.md) for how those URLs work).
 
 It is the build-time twin of [`../runtime`](../runtime): the app, the config
 and the patch function are byte-for-byte identical. Only the delivery
@@ -32,8 +33,9 @@ The first line comes from the patch; the app never wrote it.
 **[`app.mjs`](app.mjs)**, **[`wrap.config.mjs`](wrap.config.mjs)** and
 **[`patches/log-requests.mjs`](patches/log-requests.mjs)** are unchanged from
 the runtime tutorial — the app knows nothing, the config says _what_ to patch
-(express `>=5 <6`, `lib/express.js`, the `application` export), the patch
-says _how_. Read the [runtime tutorial](../runtime/README.md#2-what-just-happened--the-three-files)
+(hono `>=4 <5`, `dist/hono.js`, the `Hono` export), the patch says _how_
+(rebind `Hono` to a subclass that installs one logging middleware). Read the
+[runtime tutorial](../runtime/README.md#2-what-just-happened--the-three-files)
 for the walk-through of each.
 
 **[`build.mjs`](build.mjs)** is the only new file. It runs esbuild with one
@@ -50,15 +52,16 @@ await build({
   format: 'esm',
   platform: 'node',
   outfile: 'dist/app.mjs',
-  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
   plugins: [esbuildPlugin(config)],
 })
 ```
 
-The plugin intercepts `lib/express.js` in the bundler's transform stage —
+The plugin intercepts `dist/hono.js` in the bundler's transform stage —
 before bundling, so the config's file matching works unchanged — and appends
-the same exports tap the runtime hook would. esbuild is just this tutorial's
-pick: `@wrap-esm-lambda/unplugin` exports the same plugin for Vite/Rolldown,
+the same exports tap the runtime hook would. Bundling `import`s hono, so
+esbuild resolves the ESM tree of the dual package, where rebinding the
+export works on the local binding. esbuild is just this tutorial's pick:
+`@wrap-esm-lambda/unplugin` exports the same plugin for Vite/Rolldown,
 Rollup, webpack and Rspack.
 
 ## 3. The payoff: nothing ships
@@ -70,7 +73,7 @@ node dist/app.mjs
 ```
 
 Every package this project installs is a `devDependency` on purpose — the
-toolkit, esbuild, even express exist only at build time, and cold start pays
+toolkit, esbuild, even hono exist only at build time, and cold start pays
 nothing for instrumentation. Grep the bundle for `logRequests` to see the
 patch and the tap sitting inline.
 

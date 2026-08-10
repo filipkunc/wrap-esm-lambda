@@ -1,12 +1,10 @@
-// A completely ordinary express app — nothing in this file knows it is being
-// instrumented. It serves one route, fires a request at itself, and exits.
-import express from 'express'
+// A completely ordinary hono app — nothing in this file knows it is being
+// instrumented. Hono is fetch-based, so no server is needed: app.request()
+// dispatches a request in-process. It serves one route, calls it, and exits.
+import { Hono } from 'hono'
 
-const app = express()
-app.get('/hello/:name', (req, res) => res.json({ hello: req.params.name }))
+const app = new Hono()
+app.get('/hello/:name', (c) => c.json({ hello: c.req.param('name') }))
 
-const server = app.listen(0)
-await new Promise((resolve) => server.once('listening', resolve))
-const response = await fetch(`http://127.0.0.1:${server.address().port}/hello/world`)
+const response = await app.request('/hello/world')
 console.log('response =', await response.json())
-server.close()
