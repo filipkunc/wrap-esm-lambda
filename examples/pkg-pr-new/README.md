@@ -8,10 +8,11 @@ project outside this repository would** — one per delivery mode:
 - [`unplugin/`](unplugin) — build-time instrumentation:
   `@wrap-esm-lambda/unplugin` driving esbuild, zero runtime cost
 
-Both patch the same thing from the same three files (app, config, patch
-function), so diffing the two directories shows precisely what switching
-delivery mode costs: one dependency and one activation line. Nothing else
-changes.
+Both patch the same target — [hono](https://hono.dev), a modern dual
+package (native ESM plus bundled CJS) — from the same three files (app,
+config, patch function), so diffing the two directories shows precisely what
+switching delivery mode costs: one dependency and one activation line.
+Nothing else changes.
 
 ## Where the packages come from
 

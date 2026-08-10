@@ -11,8 +11,5 @@ await build({
   format: 'esm',
   platform: 'node',
   outfile: 'dist/app.mjs',
-  // express's CJS graph requires node builtins; esbuild's ESM output needs
-  // the standard createRequire shim for those (unrelated to the plugin)
-  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
   plugins: [esbuildPlugin(config)],
 })

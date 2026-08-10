@@ -3,14 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Tutorial: patch express at runtime with one node --import flag, installing wrap-esm-lambda from pkg.pr.new previews.",
+  "description": "Tutorial: patch hono (a dual ESM+CJS package) at runtime with one node --import flag, installing wrap-esm-lambda from pkg.pr.new previews.",
   "scripts": {
     "start": "WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs node --import @wrap-esm-lambda/hooks/register app.mjs"
   },
   "dependencies": {
     "@wrap-esm-lambda/core": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/core@main",
     "@wrap-esm-lambda/hooks": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/hooks@main",
-    "express": "^5.2.1"
+    "hono": "^4.12.34"
   },
   "engines": {
     "node": ">=22.15.0"
