@@ -17,6 +17,11 @@ npm init -y
 npm install express @wrap-esm-lambda/core @wrap-esm-lambda/hooks
 ```
 
+(To run against unreleased `main` instead, install the
+[pkg.pr.new](https://pkg.pr.new) previews CI publishes on every green push —
+[examples/pkg-pr-new](../examples/pkg-pr-new) is this tutorial's endpoint
+pre-wired to those URLs, one directory per delivery mode.)
+
 Requirements: Node >= 22.15 for the runtime mode (`module.registerHooks`);
 build-time mode has no runtime floor.
 
