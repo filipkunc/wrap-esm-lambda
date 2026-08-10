@@ -59,3 +59,16 @@ npm start
 
 Once the packages are released on npmjs, the tutorial flow is identical with
 version ranges in place of the preview URLs.
+
+## Tested in CI, and deliberately not published
+
+These directories are consumed by CI, never published: the preview upload's
+globs (`'.'`, `'./npm/*'`, `'./packages/*'`) don't touch `examples/`, and
+every published package has a `files` whitelist besides — the previews the
+tutorials install can never contain the tutorials themselves. The
+`tutorial-previews` job in [CI.yml](../../.github/workflows/CI.yml) proves
+both directions: on every push to `main` it runs both tutorials with plain
+npm against that commit's own freshly uploaded previews, and on every pull
+request against the committed `@main` URLs exactly as a reader would
+install them — checking the patched output either way, and failing if a
+tutorial file ever leaks into an installed package.
