@@ -1298,3 +1298,90 @@ jobs:
             examples/hono-lambda/coldStartChart.svg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  tutorial-previews:
+    name: Tutorials on pkg.pr.new previews
+    # The examples/pkg-pr-new tutorials consumed for real: plain npm, no
+    # workspace, installing published previews the way a machine outside
+    # this repo would. Two guarantees per run:
+    #
+    # 1. The preview chain works end to end — pkg.pr.new rewrote the
+    #    workspace:^ links and the addon's platform pins, npm resolved them,
+    #    and both delivery modes patch a real request.
+    # 2. No recursion: the tutorials reference the previews, so the previews
+    #    must not contain the tutorials. They can't by construction — the
+    #    publish step's globs ('.', './npm/*', './packages/*') never touch
+    #    examples/, and every published package has a `files` whitelist —
+    #    but "can't by construction" is exactly what a regression looks like
+    #    the day someone widens a glob, so the job asserts it on the
+    #    installed tree.
+    #
+    # Which previews depends on the event. On push and dispatch the publish
+    # job just uploaded previews for this exact commit, so the tutorials'
+    # committed @main URLs are swapped for its sha — @main is a moving tag
+    # and a concurrent push could win the race between our upload and this
+    # install. On a pull request the publish job never runs (nothing is
+    # keyed to a PR sha), so the tutorials run exactly as committed, against
+    # the newest previews `main` published — the URLs a reader would
+    # copy-paste, which is its own thing worth gating.
+    #
+    # The explicit skipped/success split matters: `needs` normally hides
+    # this job whenever publish is skipped, and on PRs publish is always
+    # skipped. `!cancelled()` opts out of that implicit success() so the PR
+    # lane can run; the push/dispatch lane still demands a successful
+    # upload.
+    needs:
+      - publish
+    if: >-
+      !cancelled() &&
+      ((github.event_name == 'pull_request' && needs.publish.result == 'skipped') ||
+       ((github.event_name == 'push' || github.event_name == 'workflow_dispatch') && needs.publish.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [runtime, unplugin]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Install the previews
+        working-directory: examples/pkg-pr-new/${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          # push/dispatch: pin to this commit's fresh upload; PR: leave the
+          # committed @main URLs untouched and test what a reader installs
+          if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
+            short_sha="${GITHUB_SHA:0:7}"
+            sed -i "s/@main\"/@${short_sha}\"/" package.json
+          fi
+          grep '"@wrap-esm-lambda/' package.json
+          # on push/dispatch the upload finished before this job started
+          # (needs: publish), so retries only cover transient network trouble
+          for attempt in 1 2 3; do
+            npm install --no-audit --no-fund && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep $((attempt * 10))
+          done
+      - name: Run the tutorial
+        working-directory: examples/pkg-pr-new/${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          npm start | tee output.log
+          grep -F '[wrap-esm-lambda] GET /hello/world' output.log
+          grep -F "response = { hello: 'world' }" output.log
+      - name: Assert the previews do not contain the tutorials
+        working-directory: examples/pkg-pr-new/${{ matrix.dir }}
+        run: |
+          set -euo pipefail
+          # every installed piece of the toolkit: the scoped packages plus
+          # the root addon and its platform packages (hoisted by npm)
+          roots=$(ls -d node_modules/@wrap-esm-lambda node_modules/wrap-esm-lambda*)
+          leaked=$(find $roots -maxdepth 2 \( -name examples -o -name 'wrap.config.mjs' \))
+          if [ -n "$leaked" ]; then
+            echo "published tarballs leaked tutorial files:" >&2
+            echo "$leaked" >&2
+            exit 1
+          fi
