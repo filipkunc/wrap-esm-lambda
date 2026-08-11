@@ -1246,7 +1246,15 @@ jobs:
         # Prerequisite: the pkg.pr.new GitHub App must be installed on this
         # repository (https://github.com/apps/pkg-pr-new) — without it the
         # upload is rejected and this step fails.
-        run: pnpm exec pkg-pr-new publish '.' './npm/*' './packages/*'
+        #
+        # --config.verify-deps-before-run=false: the injected platform pins
+        # deliberately diverge package.json from pnpm-lock.yaml in this
+        # throwaway checkout, and pnpm 11's verify-deps-before-run check
+        # would otherwise react to `pnpm exec` by auto-running an install —
+        # frozen-lockfile in CI, so it hard-fails instead. Only the outer
+        # exec needs the flag: `pnpm pack`, which pkg-pr-new spawns per
+        # package, does not run that check (verified against pnpm 11.20).
+        run: pnpm --config.verify-deps-before-run=false exec pkg-pr-new publish '.' './npm/*' './packages/*'
       - name: Publish
         # Two things must both be true to reach npm: a human dispatched this
         # workflow, and they typed the confirmation. A tag or a version-shaped
