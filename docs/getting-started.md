@@ -17,10 +17,25 @@ npm init -y
 npm install express @wrap-esm-lambda/core @wrap-esm-lambda/hooks
 ```
 
-(To run against unreleased `main` instead, install the
-[pkg.pr.new](https://pkg.pr.new) previews CI publishes on every green push —
-[examples/pkg-pr-new](../examples/pkg-pr-new) is this tutorial's endpoint
-pre-wired to those URLs, one directory per delivery mode.)
+**Installing from pkg.pr.new instead.** Until the packages are released on
+npmjs — or whenever you want unreleased `main` — install the previews CI
+publishes to [pkg.pr.new](https://pkg.pr.new) on every green push to `main`.
+Swap each package name for its preview URL; everything else in this tutorial
+is identical, and the previews carry the full dependency chain, prebuilt
+native binaries included — no registry, no token:
+
+```sh
+npm install express \
+  https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/core@main \
+  https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/hooks@main
+```
+
+`@main` always resolves to the newest green `main` commit; `@<short sha>`
+pins an exact commit, `@<number>` takes a pull request's build. The same
+swap works for `@wrap-esm-lambda/unplugin` in
+[step 5](#5-run-it--build-time-mode). Two runnable projects pre-wired to
+these URLs — and smoke-tested in CI against every preview upload — live in
+[examples/pkg-pr-new](../examples/pkg-pr-new).
 
 Requirements: Node >= 22.15 for the runtime mode (`module.registerHooks`);
 build-time mode has no runtime floor.
@@ -129,6 +144,10 @@ pays nothing:
 ```sh
 npm install esbuild @wrap-esm-lambda/unplugin
 ```
+
+(From pkg.pr.new previews instead — same deal as
+[step 1](#1-set-up-a-project):
+`npm install esbuild https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/unplugin@main`.)
 
 ```js
 // build.mjs
