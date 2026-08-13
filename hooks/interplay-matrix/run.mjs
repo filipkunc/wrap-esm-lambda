@@ -48,7 +48,13 @@ const scenarios = readdirSync(scenarioDir)
 // the patch fixture app, in both module systems. napi addons are ABI-stable,
 // so one build serves every Node in the ladder.
 const tapFixture = (name) => join(repoRoot, '__test__', 'fixtures', 'patch', name)
-const tapEnv = { ...process.env, WRAP_ESM_LAMBDA_CONFIG: tapFixture('wrap.config.mjs') }
+const tapEnv = {
+  ...process.env,
+  WRAP_ESM_LAMBDA_CONFIG: tapFixture('wrap.config.mjs'),
+  // A missing or unloadable native artifact must fail the real-hook cells,
+  // not quietly turn this compatibility matrix into an Acorn-only run.
+  WRAP_ESM_LAMBDA_ENGINE: 'oxc',
+}
 // The serverless delivery shape: on managed runtimes the CLI is not ours to
 // change — AWS Lambda injects flags via the NODE_OPTIONS env var, Azure
 // Functions via languageWorkers__node__arguments — and the process' main is

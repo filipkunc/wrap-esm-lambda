@@ -294,6 +294,60 @@ jobs:
             ${{ env.APP_NAME }}.wasi.cjs
             ${{ env.APP_NAME }}.wasi-browser.js
           if-no-files-found: error
+  node-interplay:
+    name: Node exact-minor compatibility
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Setup pnpm
+        uses: pnpm/action-setup@008330803749db0355799c700092d9a85fd074e9 # v6
+      - name: Setup host node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --ignore-scripts
+      - name: Build packages
+        run: pnpm build:packages
+      - name: Download native binding
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: bindings-x86_64-unknown-linux-gnu
+          path: .
+      - name: Download generated JS glue
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: binding-glue
+          path: .
+      - name: Cache exact Node releases
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: /tmp/wrap-esm-lambda-node-matrix
+          key: node-interplay-${{ hashFiles('hooks/interplay-matrix/run.mjs') }}
+      # This is deliberately an exact-minor ladder, not setup-node's moving
+      # 22/24/26 aliases. It brackets known Node loader regressions and their
+      # fix releases, then runs the real native hook on every rung.
+      - name: Run exact-minor interplay matrix
+        run: node hooks/interplay-matrix/run.mjs
+      - name: Assert behavior matches the reviewed snapshot
+        run: git diff --exit-code -- hooks/interplay-matrix/matrix.md
+      - name: Publish compatibility matrix
+        if: always()
+        run: |
+          echo '## Node exact-minor compatibility' >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          cat hooks/interplay-matrix/matrix.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload compatibility matrix
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: node-interplay-matrix
+          path: hooks/interplay-matrix/matrix.md
+          if-no-files-found: error
   test-linux-binding:
     name: Test ${{ matrix.target }} - node@${{ matrix.node }}
     needs:
