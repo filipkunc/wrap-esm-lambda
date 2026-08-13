@@ -1,16 +1,5 @@
-// The declarative config surface — the part users touch. A config is a list
-// of patch entries (`module` + `patch` + `bindings`): the generic exports
-// tap — Module._load-monkey-patching ergonomics, delivered by source
-// transform. The user's patch function receives the module's live bindings
-// as get/set accessors and does ordinary imperative patching against real
-// objects.
-//
-// This used to carry a second entry kind — wrap entries, the original
-// Lambda-handler transform (`match` + `handler` + `wrapper`) — until the
-// tap's rewrite path could rebind every shape the wrap could, and the
-// aws-lambda preset covered the runtime discovery. The standalone transform
-// survives as the native addon's `transformLambda*` exports (the benchmark
-// comparison subject); the config surface is tap-only.
+// The public declarative config: where to patch, which function applies the
+// patch, and which live bindings it receives.
 import { createRequire } from 'node:module'
 import { isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'

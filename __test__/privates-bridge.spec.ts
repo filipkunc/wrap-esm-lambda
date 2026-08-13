@@ -17,7 +17,7 @@ import type * as OxcEngine from '../index.js'
 // byte-level parity of the two engines' emissions is pinned separately in
 // engine-parity.spec.ts.
 
-type Engine = typeof OxcEngine
+type Engine = Omit<typeof OxcEngine, 'resolveStarBindings'>
 
 // The native addon loads the way it does for a consumer: optionally. The
 // JS-only CI lane ships the loader with no binding next to it, and the

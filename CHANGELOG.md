@@ -6,6 +6,19 @@ would break a consumer.
 
 ## Unreleased
 
+### Changed
+
+- **The native addon is now `@wrap-esm-lambda/engine-oxc`.** Core loads both
+  engines from parallel scoped package names; the native binary and its
+  platform package names remain unchanged. This is a breaking package rename.
+
+### Performance
+
+- **OXC resolves an entire `export *` graph inside one native call.** File IO,
+  parsing, package resolution, cycle handling, caching and origin comparison
+  now stay in Rust instead of crossing napi once per module. Acorn retains the
+  equivalent JavaScript walk.
+
 ### Fixed
 
 - **A CJS module that exits through a top-level `return` is now patched.**

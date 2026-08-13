@@ -17,7 +17,9 @@ import { isMissingExportError } from '@wrap-esm-lambda/core'
 // formatted sources even that output converges byte-for-byte, which these
 // tests pin so the engines can never drift apart silently.
 
-type Engine = typeof oxc
+// The graph resolver is an OXC-specific coarse-grained optimization, not part
+// of the transform behavior both engines promise.
+type Engine = Omit<typeof oxc, 'resolveStarBindings'>
 const engines: [string, Engine][] = [
   ['oxc', oxc],
   ['acorn', acorn as Engine],

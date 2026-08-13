@@ -56,13 +56,13 @@ Then install from it, in any project on the machine:
 
 ```sh
 rm -rf node_modules package-lock.json
-npm install wrap-esm-lambda @wrap-esm-lambda/hooks --registry http://localhost:4875
+npm install @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/hooks --registry http://localhost:4875
 ```
 
 Deleting the lockfile is not optional on a reinstall: a previous install
 recorded the native package as an **absent optional dependency** — which is how
 a missing addon presents, since `@wrap-esm-lambda/core` depends on
-`wrap-esm-lambda` optionally and npm skips optional deps it cannot resolve
+`@wrap-esm-lambda/engine-oxc` optionally and npm skips optional deps it cannot resolve
 without erroring — and npm will not revisit that on its own.
 
 The registry stays up between commands, so the loop is edit → `pnpm build` →

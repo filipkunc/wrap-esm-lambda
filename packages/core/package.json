@@ -45,7 +45,7 @@
     "@wrap-esm-lambda/engine-acorn": "workspace:^"
   },
   "optionalDependencies": {
-    "wrap-esm-lambda": "workspace:^"
+    "@wrap-esm-lambda/engine-oxc": "workspace:^"
   },
   "scripts": {
     "build": "tsc -b",

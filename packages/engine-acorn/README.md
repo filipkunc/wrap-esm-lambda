@@ -1,7 +1,7 @@
 # `@wrap-esm-lambda/engine-acorn`
 
 The pure-JavaScript transform engine: the same API surface as the native
-`wrap-esm-lambda` oxc addon (the contract lives in the root
+`@wrap-esm-lambda/engine-oxc` addon (the contract lives in the root
 [`index.d.ts`](../../index.d.ts)), implemented on
 [acorn](https://github.com/acornjs/acorn) (parse),
 [magic-string](https://github.com/rich-harris/magic-string) (edit + source

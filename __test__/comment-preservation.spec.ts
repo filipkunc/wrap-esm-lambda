@@ -21,7 +21,7 @@ import * as acorn from '@wrap-esm-lambda/engine-acorn'
 // tree-shake on the surviving @__PURE__ (with an unannotated control kept),
 // and webpack must honor a surviving webpackIgnore.
 
-type Engine = typeof oxc
+type Engine = Omit<typeof oxc, 'resolveStarBindings'>
 const engines: [string, Engine][] = [
   ['oxc', oxc],
   ['acorn', acorn as Engine],

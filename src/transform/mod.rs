@@ -16,6 +16,7 @@ mod privates;
 mod rewrite;
 mod snippet;
 mod source_map;
+mod stars;
 
 use oxc_allocator::Allocator;
 use oxc_codegen::{Codegen, CodegenOptions};
@@ -74,6 +75,21 @@ pub struct ReexportInfo {
   pub exported: String,
   pub imported: String,
   pub source: String,
+}
+
+pub(crate) use stars::resolve_module;
+
+pub fn resolve_star_bindings(
+  missing: &[String],
+  star_sources: &[String],
+  module_path: &std::path::Path,
+) -> Result<Vec<StarResolution>, String> {
+  stars::resolve_star_bindings(missing, star_sources, module_path).map(|items| {
+    items
+      .into_iter()
+      .map(|(binding, source)| StarResolution { binding, source })
+      .collect()
+  })
 }
 
 /// A caller-provided resolution for a name forwarded by a bare
