@@ -7,7 +7,7 @@
 // real pipeline, star walk and fs reads included), reports the minimum, and
 // a sha256 of the instrumented output so the parent can assert the engines
 // produced byte-identical results where byte-identity is promised.
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
 import { performance } from 'node:perf_hooks'
@@ -95,4 +95,4 @@ const measured: BenchTarget[] = targets.map((target) => {
 
 const info = nearestPackage(requireEntry)
 const report: BenchReport = { engine: engineName(), version: info?.version ?? 'unknown', targets: measured }
-console.log(JSON.stringify(report))
+writeSync(process.stdout.fd, `${JSON.stringify(report)}\n`)

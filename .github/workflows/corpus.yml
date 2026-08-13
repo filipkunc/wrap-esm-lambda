@@ -96,8 +96,17 @@ jobs:
       # stripping does not typecheck, so tsc does, before anything runs
       - name: Typecheck corpus
         run: pnpm exec tsc --noEmit -p corpus/tsconfig.json
-      - name: Run corpus
+      - name: Run corpus (OXC)
+        env:
+          WRAP_ESM_LAMBDA_ENGINE: oxc
         run: node corpus/run.mts
+      # The benchmark compares bytes and speed, but only executing the full
+      # battery proves that both engines preserve behavior on real packages.
+      # --check keeps the OXC snapshot as the canonical artifact.
+      - name: Run corpus (Acorn conformance)
+        env:
+          WRAP_ESM_LAMBDA_ENGINE: acorn
+        run: node corpus/run.mts --check
       # the engine shoot-out doubles as the widest append-tier byte-parity
       # check available (asserted per entry); CI timings are informational —
       # runner noise is why the bench reports minimums

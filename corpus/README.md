@@ -199,8 +199,8 @@ is noise). Two headline results from the pinned corpus:
   is _engine-styled_ by construction — oxc regenerates through codegen
   (normalized formatting), acorn edits via magic-string (original
   formatting preserved) — so it is reported, not asserted; semantic parity
-  of the rewrite is covered by the identity battery, which passes under
-  either engine (`WRAP_ESM_LAMBDA_ENGINE=acorn node corpus/run.mts`).
+  of the rewrite is covered by the identity battery, which CI runs in full
+  under both engines.
 
 ## Running it
 
@@ -208,14 +208,16 @@ is noise). Two headline results from the pinned corpus:
 pnpm build && pnpm build:packages   # the addon and the TS packages
 node corpus/run.mts                 # full corpus -> corpus/matrix.md
 node corpus/run.mts zod rxjs        # a subset (prints, does not write)
+WRAP_ESM_LAMBDA_ENGINE=acorn node corpus/run.mts --check # full conformance, preserve matrix.md
 node corpus/bench.mts               # engine shoot-out -> corpus/engines.md
 pnpm exec tsc --noEmit -p corpus/tsconfig.json   # typecheck (stripping does not)
 ```
 
 Two schedules in CI ([corpus.yml](../.github/workflows/corpus.yml)):
 
-- **pinned** (push/PR): the versions in `pnpm-lock.yaml` — deterministic; a
-  red run means a transform regression.
+- **pinned** (push/PR): the versions in `pnpm-lock.yaml`, with the complete
+  behavioral battery under both OXC and Acorn — deterministic; a red run
+  means a transform or engine-parity regression.
 - **nightly latest**: `pnpm --dir corpus up --latest` first — the
   oxc-monitor analog; a red run means the ecosystem moved (a bundler release
   emitting a new exports shape) and the corpus caught it before a user did.

@@ -6,6 +6,7 @@
 //
 //   pnpm corpus                           # full corpus
 //   node corpus/run.mts zod rxjs          # just these packages
+//   node corpus/run.mts --check            # full corpus, do not replace matrix.md
 //
 // The battery, per package:
 //   enumerate  resolve both entry conditions, enumerate the export surface,
@@ -93,7 +94,14 @@ const RUNS_KEY = "Symbol.for('wrap-esm-lambda-corpus.runs')"
   }
 }
 
-const only = process.argv.slice(2)
+const args = process.argv.slice(2)
+const checkOnly = args.includes('--check')
+const unknownOptions = args.filter((arg) => arg.startsWith('--') && arg !== '--check')
+if (unknownOptions.length > 0) {
+  console.error(`unknown option(s): ${unknownOptions.join(', ')}`)
+  process.exit(2)
+}
+const only = args.filter((arg) => !arg.startsWith('--'))
 const selected =
   only.length > 0 ? packages.filter((p) => only.includes(p.name) || only.includes(keyFor(p.name))) : packages
 if (selected.length === 0) {
@@ -268,10 +276,11 @@ async function buildCells(
   writeFileSync(
     buildEntry,
     [
+      `import { writeSync } from 'node:fs'`,
       `import { fingerprint } from ${JSON.stringify(fingerprintPath)}`,
       `import * as ns from ${JSON.stringify(entry.name)}`,
       `const runs = ((globalThis as Record<symbol, unknown>)[${RUNS_KEY}] as number | undefined) ?? 0`,
-      `console.log(JSON.stringify({ runs, fingerprint: fingerprint(ns) }))`,
+      `writeSync(process.stdout.fd, JSON.stringify({ runs, fingerprint: fingerprint(ns) }) + '\\n')`,
       '',
     ].join('\n'),
   )
@@ -534,8 +543,8 @@ const md = [
 publishReport({
   file: join(here, 'matrix.md'),
   markdown: md,
-  summaryTitle: 'Corpus results',
-  writeSnapshot: only.length === 0,
+  summaryTitle: `Corpus results (${engine})`,
+  writeSnapshot: only.length === 0 && !checkOnly,
 })
 
 if (deviations.length > 0) {
