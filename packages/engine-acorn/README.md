@@ -21,6 +21,11 @@ node --import @wrap-esm-lambda/hooks/register app.mjs
 Both shells (runtime hook and bundler plugin) work unchanged on either
 engine; the whole test suite runs against both in CI.
 
+For TypeScript targets, this engine uses Node's built-in, position-preserving
+type stripping before the Acorn tap. It accepts erasable TypeScript syntax;
+syntax requiring JavaScript generation, such as enums, remains an explicit
+Acorn limitation. OXC lowers those forms in Rust.
+
 ## Why it exists
 
 - **A JS-only deployment story.** The native addon needs a prebuilt binary

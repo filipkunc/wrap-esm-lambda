@@ -39,8 +39,8 @@ const esmBigBuffer = Buffer.from(esmBigSource)
 
 // A generated TypeScript module makes the engines perform the complete
 // parse → binding rewrite → type erasure → codegen → map-chain operation.
-// OXC keeps that pipeline in Rust; Acorn lazily invokes the JS TypeScript
-// compiler before its own parse and MagicString rewrite.
+// OXC keeps that pipeline in Rust; Acorn invokes Node's built-in,
+// position-preserving type stripping before its own parse and rewrite.
 const tsSource =
   Array.from({ length: 300 }, (_, i) => `interface Shape${i} { value: number; next?: Shape${i + 1} }`).join('\n') +
   '\nexport const Client: { new(): object } = class Client {}\n'
