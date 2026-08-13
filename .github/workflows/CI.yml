@@ -1073,8 +1073,8 @@ jobs:
           cd hooks && ./bench_hooks.sh && cd ..
           cat hooks/benchTable.md >> $GITHUB_STEP_SUMMARY
           # The transform-latency table too, so every case in
-          # benchmark/tap-cases.ts (tap tiers, plumbing, the privates-bridge
-          # rewrite pair) leaves a per-commit trail on main, not only the
+          # production applyMatched cases leave a per-commit trail on main,
+          # not only the
           # A/B numbers a PR run produces.
           {
             echo ''
@@ -1111,7 +1111,8 @@ jobs:
             echo '## Cold start — base vs head (same runner, interleaved)'
             cat coldCompare.md
           } >> "$GITHUB_STEP_SUMMARY"
-          # Transform latency + in-process cold-start medians, per tree.
+          # Production transform diagnostics, per tree. Cold start is the
+          # interleaved Hyperfine table above, not re-measured here.
           {
             echo ''
             echo '## Transform latency — head'
@@ -1142,7 +1143,7 @@ jobs:
           set -euo pipefail
           pnpm --silent bench:chart > /dev/null
           mkdir -p bench-charts
-          cp hooks/tapMechanismChart.svg hooks/tapEngineChart.svg bench-charts/
+          cp hooks/tapEngineChart.svg bench-charts/
           if [ "${{ github.event_name }}" = "push" ]; then
             cp hooks/benchChart.svg bench-charts/
           fi
@@ -1365,7 +1366,6 @@ jobs:
             echo '## Charts'
             echo ''
             for chart in \
-              hooks/tapMechanismChart.svg \
               hooks/tapEngineChart.svg \
               hooks/benchChart.svg \
               examples/hono-lambda/coldStartChart.svg; do
@@ -1384,7 +1384,6 @@ jobs:
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm
             hooks/benchChart.svg
-            hooks/tapMechanismChart.svg
             hooks/tapEngineChart.svg
             examples/hono-lambda/coldStartChart.svg
         env:

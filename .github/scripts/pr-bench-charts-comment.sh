@@ -23,13 +23,9 @@ body_file=$(mktemp)
   echo "$marker"
   echo '### Benchmark charts'
   echo
-  echo "The committed reference charts at $HEAD_SHA — the set the release page embeds. This run's own numbers: the [run summary]($RUN_URL) carries the base-vs-head cold-start table and both transform-latency tables, and the \`bench-charts\` artifact on the same page holds these charts re-rendered from this run."
+  echo "The committed reference charts at $HEAD_SHA — the set the release page embeds. This run's own numbers: the [run summary]($RUN_URL) carries the base-vs-head cold-start table and transform diagnostics, and the \`bench-charts\` artifact on the same page holds these charts re-rendered from this run."
   echo
-  echo "**Per-module transform cost, one bar per tool** ([cases](https://github.com/$GITHUB_REPOSITORY/blob/$HEAD_SHA/benchmark/tap-cases.ts)):"
-  echo
-  echo "![Per-module transform cost, one bar per tool]($raw/hooks/tapMechanismChart.svg)"
-  echo
-  echo '**The two engines in detail** (tiers, plumbing, input sizes):'
+  echo '**The two engines in detail** (production transform pipeline, Tinybench p50/p99):'
   echo
   echo "![The two engines in detail]($raw/hooks/tapEngineChart.svg)"
   echo

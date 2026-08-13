@@ -30,21 +30,13 @@ against each other; core does not send `privates` yet.
   across engines for the bridge (field pairs, single slots, lone accessors,
   static privates, composition with a `const` demotion), and identical
   refusal messages.
-- `benchmark/tap-cases.ts` — the bridge priced on a real class-heavy
-  module: hono's `Context` (11 KB, ~20 private fields). Representative
-  numbers (release build, one machine): oxc fast-path tap ~56 µs vs bridge
-  rewrite ~111 µs (the whole-module codegen regeneration is the cost);
-  acorn ~348 µs vs ~370 µs (magic-string splices in place, so the parse
-  dominates and the bridge is nearly free). Both sit far under
-  orchestrion's ~1 ms body rewrite on a file a sixth the size.
-
-Answer to the design's driving question: the surgery is **not invasive** in
-either engine. Acorn: one append-only insertion per class body, composing
-with the export rewrites on the same MagicString with zero coordination.
-Native: one `ClassElement` pushed per class body, composing with the
-statement-level rewrite ops untouched (the bridge never renumbers
-statements). Neither engine's source maps needed special handling — the
-native graft zeroes the synthetic spans so codegen's map skips them.
+  Answer to the design's driving question: the surgery is **not invasive** in
+  either engine. Acorn: one append-only insertion per class body, composing
+  with the export rewrites on the same MagicString with zero coordination.
+  Native: one `ClassElement` pushed per class body, composing with the
+  statement-level rewrite ops untouched (the bridge never renumbers
+  statements). Neither engine's source maps needed special handling — the
+  native graft zeroes the synthetic spans so codegen's map skips them.
 
 ## How the two emissions stay byte-identical
 
