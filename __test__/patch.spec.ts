@@ -125,6 +125,28 @@ test('applyMatched buffer fast path: Buffer in, Buffer out, same bytes as the st
   )
 })
 
+test('applyMatched chains a rewrite map through its upstream map', () => {
+  const source = 'export const value = 1;\n'
+  const upstreamMap = JSON.stringify({
+    version: 3,
+    file: 'compiled.js',
+    sources: ['original.ts'],
+    sourcesContent: ['export const value: number = 1;\n'],
+    names: [],
+    mappings: 'AAAA',
+  })
+  const entries = [
+    { module: { path: '/tmp/compiled.js' }, patch: { name: 'patchIt', from: '/abs/patch.ts' }, bindings: ['value'] },
+  ]
+  const applied = core.applyMatched(source, entries, '/tmp/compiled.js', {
+    format: 'module',
+    delivery: 'registry',
+    upstreamMap,
+  })
+  assert.ok(applied?.map)
+  assert.deepStrictEqual(JSON.parse(applied.map).sources, ['original.ts'])
+})
+
 test('requesting a missing export fails loudly at transform time', () => {
   const err = captureThrows(() => exportsTap('export class Client {}\n', [tapEntry(['Klient'])], false, false))
   assert.match(err.message, /export 'Klient' not found/)

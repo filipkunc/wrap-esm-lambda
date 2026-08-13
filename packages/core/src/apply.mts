@@ -22,6 +22,8 @@ export interface ApplyOptions {
   /** 'commonjs' | 'module' when the caller knows (the runtime hook always does) */
   format?: string
   delivery?: Delivery
+  /** Source map for `source`; rewrite maps are chained through it in-engine. */
+  upstreamMap?: string
 }
 
 /** Instrumented output: `code` stays a Buffer on the byte-in fast path. */
@@ -138,7 +140,7 @@ export function applyMatched(
       cjs,
       registry,
       filename,
-      undefined,
+      options.upstreamMap,
     )
     if (cjs) {
       // splice, don't just append: a top-level `return` in the CJS wrapper
@@ -174,7 +176,7 @@ export function applyMatched(
     cjs,
     registry,
     filename,
-    undefined,
+    options.upstreamMap,
   )
   if (cjs) {
     const wrap = cjsEvalWrap(text, tap.snippets)
