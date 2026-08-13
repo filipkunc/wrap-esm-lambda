@@ -12,6 +12,13 @@ would break a consumer.
   engines from parallel scoped package names; the native binary and its
   platform package names remain unchanged. This is a breaking package rename.
 
+- **Matched TypeScript modules are lowered during instrumentation.** OXC keeps
+  parsing, binding rewrites, type lowering, code generation and source-map
+  chaining in Rust. Acorn uses Node's position-preserving built-in type
+  stripping and therefore supports erasable TypeScript syntax; generated forms
+  such as enums require OXC. TypeScript export-star graphs are indexed with
+  filename-aware parsing in both engines.
+
 ### Performance
 
 - **OXC resolves an entire `export *` graph inside one native call.** File IO,
