@@ -4,7 +4,7 @@
 // shells run, star walk included) over it. Prints one JSON report on
 // stdout. For the repeated-measurement engine comparison, see
 // lib/bench-worker.mts.
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { performance } from 'node:perf_hooks'
 import { applyMatched, engineName, nearestPackage } from '@wrap-esm-lambda/core'
@@ -73,4 +73,4 @@ const enumerated: EnumeratedTarget[] = targets.map((target) => {
 
 const info = nearestPackage(requireEntry)
 const report: EnumerateReport = { engine: engineName(), version: info?.version ?? 'unknown', targets: enumerated }
-console.log(JSON.stringify(report))
+writeSync(process.stdout.fd, `${JSON.stringify(report)}\n`)

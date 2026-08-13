@@ -11,6 +11,7 @@
 // Converting this file would silently change the corridor the cell exists
 // to test, and on Node 22 break it.
 'use strict'
+const { writeSync } = require('node:fs')
 const { fingerprint } = require('./fingerprint.cts')
 
 const pkg = process.env.CORPUS_PKG
@@ -18,4 +19,4 @@ if (!pkg) throw new Error('CORPUS_PKG not set')
 
 const exportsObject = require(pkg)
 const runs = globalThis[Symbol.for('wrap-esm-lambda-corpus.runs')] ?? 0
-console.log(JSON.stringify({ runs, fingerprint: fingerprint(exportsObject) }))
+writeSync(process.stdout.fd, `${JSON.stringify({ runs, fingerprint: fingerprint(exportsObject) })}\n`)
