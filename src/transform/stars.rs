@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::OnceLock;
 
 use oxc_resolver::{ResolveOptions, Resolver};
@@ -30,11 +30,24 @@ pub(crate) fn resolve_module(specifier: &str, from_dir: &Path) -> Option<PathBuf
 
 fn resolve_star_source(specifier: &str, from_dir: &Path) -> Option<PathBuf> {
   if specifier.starts_with("./") || specifier.starts_with("../") {
-    let joined = from_dir.join(specifier);
-    Some(fs::canonicalize(&joined).unwrap_or(joined))
+    Some(normalize_path(&from_dir.join(specifier)))
   } else {
     resolve_module(specifier, from_dir)
   }
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+  let mut normalized = PathBuf::new();
+  for component in path.components() {
+    match component {
+      Component::CurDir => {}
+      Component::ParentDir => {
+        normalized.pop();
+      }
+      other => normalized.push(other.as_os_str()),
+    }
+  }
+  normalized
 }
 
 #[derive(Default)]
@@ -227,4 +240,18 @@ pub(crate) fn resolve_star_bindings(
     }
   }
   Ok(resolutions)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::normalize_path;
+  use std::path::Path;
+
+  #[test]
+  fn relative_star_paths_are_normalized_without_filesystem_access() {
+    assert_eq!(
+      normalize_path(Path::new("/pkg/dist/barrels/../functions/./add.js")),
+      Path::new("/pkg/dist/functions/add.js"),
+    );
+  }
 }
