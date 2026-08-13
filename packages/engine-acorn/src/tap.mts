@@ -7,7 +7,7 @@
 // append statements), so untouched lines keep their exact source text and
 // the emitted map stays sparse.
 import MagicString from 'magic-string'
-import { createRequire } from 'node:module'
+import { stripTypeScriptTypes } from 'node:module'
 import type { AnyNode } from 'acorn'
 import { NamedKind, buildExportIndex, parseModule } from './exports-index.mjs'
 import type { ExportIndex, ExportStatement, NamedExport } from './exports-index.mjs'
@@ -44,28 +44,15 @@ export interface TapOutcome {
   map: string | null
 }
 
-const requireTypeScript = createRequire(import.meta.url)
-
 function isTypeScriptFilename(filename: string | undefined | null): filename is string {
   return filename != null && /\.(?:[cm]?ts|tsx)$/.test(filename)
 }
 
-function transpileTypeScript(input: string, filename: string): { code: string; map: string } {
-  const ts = requireTypeScript('typescript-legacy') as typeof import('typescript-legacy')
-  const result = ts.transpileModule(input, {
-    fileName: filename,
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ESNext,
-      sourceMap: true,
-      inlineSources: true,
-    },
-  })
-  if (result.sourceMapText == null) throw new Error(`TypeScript did not emit a source map for ${filename}`)
-  return {
-    code: result.outputText.replace(/\n?\/\/# sourceMappingURL=.*?(?:\n|$)$/, '\n'),
-    map: result.sourceMapText,
-  }
+function stripTypeScript(input: string): string {
+  // Strip mode replaces erasable syntax with whitespace, preserving source
+  // positions without an intermediate map. Syntax requiring code generation
+  // (for example enums) remains an explicit Acorn-engine limitation.
+  return stripTypeScriptTypes(input, { mode: 'strip' })
 }
 
 /** An export specifier split out into a rebindable local. */
@@ -398,12 +385,22 @@ export function exportsTap(
   starResolutions?: TapStarResolution[] | undefined | null,
 ): TapOutcome {
   if (!cjs && isTypeScriptFilename(filename)) {
-    const transpiled = transpileTypeScript(input, filename)
-    const transpileMap = upstreamMap == null ? transpiled.map : chainMaps(transpiled.map, upstreamMap)
-    const jsFilename = filename.replace(/\.(?:[cm]?ts|tsx)$/, '.mjs')
-    const tapped = exportsTap(transpiled.code, entries, false, registry, jsFilename, transpileMap, starResolutions)
-    return tapped.code == null ? { ...tapped, code: transpiled.code, map: transpileMap } : tapped
+    const stripped = stripTypeScript(input)
+    const tapped = exportsTapJavaScript(stripped, entries, false, registry, filename, upstreamMap, starResolutions)
+    return tapped.code == null ? { ...tapped, code: stripped, map: upstreamMap ?? null } : tapped
   }
+  return exportsTapJavaScript(input, entries, cjs, registry, filename, upstreamMap, starResolutions)
+}
+
+function exportsTapJavaScript(
+  input: string,
+  entries: TapEntryInput[],
+  cjs: boolean,
+  registry: boolean,
+  filename?: string | undefined | null,
+  upstreamMap?: string | undefined | null,
+  starResolutions?: TapStarResolution[] | undefined | null,
+): TapOutcome {
   if (cjs) {
     return cjsTap(entries, registry)
   }
