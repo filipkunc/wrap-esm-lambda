@@ -37,6 +37,21 @@ const esmBuffer = readFileSync(esmPath)
 const esmBigSource = esmSource + `\n/* ${'x'.repeat(cjsSource.length - esmSource.length - 8)} */\n`
 const esmBigBuffer = Buffer.from(esmBigSource)
 
+// A generated TypeScript module makes the engines perform the complete
+// parse → binding rewrite → type erasure → codegen → map-chain operation.
+// OXC keeps that pipeline in Rust; Acorn lazily invokes the JS TypeScript
+// compiler before its own parse and MagicString rewrite.
+const tsSource =
+  Array.from({ length: 300 }, (_, i) => `interface Shape${i} { value: number; next?: Shape${i + 1} }`).join('\n') +
+  '\nexport const Client: { new(): object } = class Client {}\n'
+const tsUpstreamMap = JSON.stringify({
+  version: 3,
+  sources: ['generated-schema.ts'],
+  sourcesContent: [tsSource],
+  names: [],
+  mappings: 'AAAA',
+})
+
 // The privates bridge (docs/design-private-bindings.md) on a real
 // class-heavy module: hono's Context — an 11 KB ESM file whose class hides
 // request state behind ~20 private fields, exactly the kind no public
@@ -89,7 +104,8 @@ export function measureUs(fn: () => void, warmupMs = 200, measureMs = 800): numb
 export const inputDescription =
   `input: @smithy/core@${corePkg.version}\n` +
   `  dist-es client.js: ${esmSource.length} bytes, dist-cjs index.js: ${cjsSource.length} bytes\n` +
-  `  hono dist/context.js (privates bridge): ${honoSource.length} bytes`
+  `  hono dist/context.js (privates bridge): ${honoSource.length} bytes\n` +
+  `  generated TypeScript + upstream map: ${tsSource.length} bytes`
 
 // Every label reads `tool: operation (input)` — the tool first (oxc and
 // acorn are the two engines of THIS package, iitm and orchestrion the
@@ -160,6 +176,10 @@ export const cases: { label: string; run: () => void; mechanism?: boolean }[] = 
     run: () => exportsTap(honoSource, HONO_TAP_PRIVATES, false, true),
   },
   {
+    label: `oxc tap: TypeScript lower + rewrite + map (${Math.round(tsSource.length / 1024)} KB)`,
+    run: () => exportsTap(tsSource, TAP, false, true, 'schema.ts', tsUpstreamMap),
+  },
+  {
     // the same parse+validate through the pure-JS engine: what the tap costs
     // with no Rust in the loop (acorn parse instead of oxc-across-napi)
     label: 'acorn tap: ESM parse + validate (1.8 KB)',
@@ -193,6 +213,10 @@ export const cases: { label: string; run: () => void; mechanism?: boolean }[] = 
   {
     label: 'acorn tap: hono Context, privates bridge rewrite (11 KB)',
     run: () => acornEngine.exportsTap(honoSource, HONO_TAP_PRIVATES, false, true),
+  },
+  {
+    label: `acorn tap: TypeScript lower + rewrite + map (${Math.round(tsSource.length / 1024)} KB)`,
+    run: () => acornEngine.exportsTap(tsSource, TAP, false, true, 'schema.ts', tsUpstreamMap),
   },
   {
     // iitm's per-module analysis step (es-module-lexer): the fair mechanism

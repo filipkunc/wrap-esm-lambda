@@ -98,6 +98,7 @@ Representative numbers (Node 22, x86_64 Linux, `pnpm bench`):
 | exports tap, CJS snippet (no parse)                  |         ~2.9 µs |         ~0.4 µs |
 | hono `Context` tap, fast path (11 KB)                |          ~56 µs |         ~350 µs |
 | hono `Context` tap, privates bridge rewrite (11 KB)  |         ~111 µs |         ~370 µs |
+| TypeScript lower + rewrite + map chain (16 KB)       |         ~170 µs |        ~3100 µs |
 | runtime-hook cold start (fixture app, `.mjs` config) |          ~72 ms |          ~86 ms |
 
 What the numbers say:
@@ -117,6 +118,10 @@ What the numbers say:
   engine splices in place, so the same request barely registers
   (~350 → ~370 µs) — its cost was already the parse. oxc still wins
   outright; the point is where each engine's budget goes.
+- **A complete TypeScript operation widens the gap to ~18x.** The 16 KB case
+  includes parsing, a binding rewrite, type erasure, codegen and chaining an
+  upstream map. OXC performs the pipeline in Rust in one call; Acorn lazily
+  loads the pure-JS TypeScript compiler, then parses and rewrites its output.
 - **Cold start favors the native addon, mildly.** The JS engine swaps the
   addon's dlopen for the acorn + magic-string + remapping module graph,
   which reads as ~14 ms more on the fixture app. Both sit well under the
