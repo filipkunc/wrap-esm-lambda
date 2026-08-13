@@ -92,42 +92,17 @@ iitm 3.x, which needs Node >= 22.22.3 / 24.11.1 / 26):
 | build time (bundled output) | n/a                | patched     |
 
 One number in the transform table needs its scope read carefully: iitm's
-`lexEsm` (~5 µs) is only its _scan step_ — export names out of es-module-lexer,
-nothing else — while the tap's ~14 µs is the _complete_ per-module operation:
-full-AST parse, binding validation with local-name and const-ness resolution,
-and the emitted accessors. iitm's remaining per-module work (facade source
-generation, evaluating an extra module per interception, Hook callback
-dispatch) happens inside Node's loader and resists isolated measurement — a
-hand-rolled top-level scanner could match the lexer's scan speed natively,
-but was rejected as the wrong trade: several hundred lines of
-regex-heuristic lexing to shave microseconds off a once-per-matched-file
-cost. The honest like-for-like comparison is whole processes — the
-cold-start section of `pnpm bench` on the fixture app (median of 9,
-Node 24):
+Parser and scanner microbenchmarks are intentionally not compared here: an
+`es-module-lexer` scan, a full AST transform, and evaluating a generated
+facade perform different work. Since instrumentation normally transforms a
+matched module once, the honest mechanism comparison is whole-process cold
+start. [`hooks/bench_hooks.sh`](../hooks/bench_hooks.sh) uses Hyperfine for
+that comparison, and CI interleaves base and head commands on the same runner;
+see [benchmarks.md](benchmarks.md).
 
-| setup                                   | cold start |    overhead |
-| --------------------------------------- | ---------: | ----------: |
-| baseline (no instrumentation)           |     ~34 ms |           — |
-| exports tap, runtime hook (.mjs config) |     ~62 ms |      +28 ms |
-| iitm sync (`registerHooks`)             |     ~55 ms |      +21 ms |
-| exports tap, runtime hook (.ts config)  |    ~105 ms | +43 ms more |
-| iitm off-thread (`module.register`)     |     ~96 ms |      +62 ms |
-
-Mechanism to mechanism the tap and sync-mode iitm are peers, and both are
-~3x cheaper than the off-thread loader that ships as the OTel default. (At
-the time of that table most of the tap's +7 ms delta over iitm was loading
-`semver`; core has since replaced it with an in-package range matcher —
-differential-tested against `semver` in
-[`__test__/range.spec.ts`](../__test__/range.spec.ts) — which cut the
-.mjs-config hook's measured overhead roughly in half, from ~57 ms to
-~29 ms on the container that re-measured it. Core now has no third-party
-JS dependencies at all.) The `.ts` config row
-is a convenience tax, not mechanism: Node's type-stripping toolchain
-(amaro/SWC-wasm) costs ~40+ ms to initialize in the child — use a `.mjs`
-config where cold start matters. What iitm cannot offer at any price: the
-require() chain (the path the real AWS SDK takes under plain `node`) and a
-build-time story — while its namespace-level patching does work without any
-native addon, which remains its deployment advantage.
+What iitm cannot offer at any price is the require() chain (the path the real
+AWS SDK takes under plain `node`) or a build-time story. Its namespace-level
+patching works without a native addon, which remains its deployment advantage.
 
 One reach edge favors the loader proxy: because its facade's exports are
 settable, iitm can swap even getter-only exports of bundled CJS packages,

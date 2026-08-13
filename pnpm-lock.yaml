@@ -138,6 +138,9 @@ importers:
       semver:
         specifier: ^7.8.5
         version: 7.8.5
+      tinybench:
+        specifier: 6.1.2
+        version: 6.1.2
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -4078,6 +4081,10 @@ packages:
     resolution: {integrity: sha512-Cc+OraorugtXNfs50hU9KS369rFXCfgGLpfCfvlc+Ud5u6VWmUQsOAa9HbTvheQdYnrdJqqv1e5oIqXppMYnSw==}
     engines: {node: '>=8'}
 
+  tinybench@6.1.2:
+    resolution: {integrity: sha512-REdMxUreK3VSUeWcLd5+ijUGNKFyHT8s1trKmYEE/tlYE6ggdOkFOlKba/vI/l1fIqh/NTEEr1Cyw4AwttOicA==}
+    engines: {node: '>=20.0.0'}
+
   to-regex-range@5.0.1:
     resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
     engines: {node: '>=8.0'}
@@ -7709,6 +7716,8 @@ snapshots:
       real-require: 1.0.0
 
   tildify@2.0.0: {}
+
+  tinybench@6.1.2: {}
 
   to-regex-range@5.0.1:
     dependencies:
