@@ -133,7 +133,7 @@ cmd_down() {
 # a republish can retract first. Platform names follow the built binaries:
 # only the host's exist locally, and that is all this registry ever serves.
 published_names() {
-  echo '@wrap-esm-lambda/core @wrap-esm-lambda/engine-acorn @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin wrap-esm-lambda'
+  echo '@wrap-esm-lambda/core @wrap-esm-lambda/engine-acorn @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin'
   for suffix in $(host_suffixes); do echo "wrap-esm-lambda-$suffix"; done
 }
 
@@ -215,13 +215,13 @@ cmd_publish() {
   ' "$state/root/package.json" "$(echo "$suffixes" | tr '\n' ' ')"
   (cd "$state/root" && npm publish --access public --ignore-scripts > /dev/null)
   rm -f "$state/$root_pack"
-  echo "  wrap-esm-lambda"
+  echo "  @wrap-esm-lambda/engine-oxc"
 
   echo
   echo "published to $registry — install into a consumer with:"
   echo
   echo "  rm -rf node_modules package-lock.json"
-  echo "  npm install wrap-esm-lambda @wrap-esm-lambda/hooks --registry $registry"
+  echo "  npm install @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/hooks --registry $registry"
   echo
   echo "the lockfile has to go: a previous install recorded the native package"
   echo "as an absent optional dependency, and npm will not revisit that on its own."
@@ -294,12 +294,12 @@ export function wrapGreet(bindings) {
 }
 EOF
   echo 'installing ...'
-  (cd "$consumer" && npm install wrap-esm-lambda @wrap-esm-lambda/core @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin \
+  (cd "$consumer" && npm install @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/core @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin \
     --registry "$registry" > /dev/null)
 
   echo 'smoke: native addon through the installed platform package ...'
   (cd "$consumer" && node -e '
-const { exportsTap } = require("wrap-esm-lambda")
+const { exportsTap } = require("@wrap-esm-lambda/engine-oxc")
 if (typeof exportsTap !== "function") throw new Error("native exportsTap missing")
 console.log("  native binding resolves from the registry install")')
 

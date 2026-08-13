@@ -1,40 +1,6 @@
-// The engine indirection: every transform call in core goes through this
-// module, which binds to one of two implementations of the same surface —
-//
-// - 'oxc' (default): the native `wrap-esm-lambda` addon — oxc parse and
-//   codegen in Rust, sources crossing napi (zero-copy for Buffers);
-// - 'acorn': `@wrap-esm-lambda/engine-acorn` — acorn + magic-string, no
-//   native code at all.
-//
-// The binding is process-wide (the runtime hook and a build both instrument
-// every matched module with one engine) and LAZY: nothing loads until the
-// first transform call actually needs an engine, so importing core — a
-// config file pulling in `definePatches`, a shell whose config turns out
-// inert — costs no engine at all. Only the selected engine ever loads; the
-// unused one's cost (the addon's dlopen or the JS engine's module graph)
-// never lands. Loading is `require()`-based — including `require(esm)` for
-// the acorn engine (Node >= 22.12) — because the first use can sit inside a
-// SYNCHRONOUS `registerHooks` load hook, where nothing can be awaited. The
-// runtime shell still binds at startup when its config has anything to
-// instrument (registerConfig calls `engineName()`), so a missing or
-// mismatched explicitly-named engine stays a startup failure, not a
-// per-module surprise.
-//
-// Both engines emit byte-identical snippets and share the tap contract
-// (enforced by __test__/engine-parity.spec.ts); rewrite-path output differs
-// in formatting only (oxc codegen regenerates, magic-string edits in place).
-// `TransformEngine` below is that contract as a type, and the ENGINES map is
-// declared to hold it — so a drift between the addon's generated
-// `index.d.ts` and the acorn engine's exports is a build error now, not only
-// a test failure. The types are written out here rather than imported from
-// `wrap-esm-lambda` on purpose: the addon is an optional dependency, and
-// core's own declarations have to stay resolvable without it.
-//
-// The default binding is also the one recovery path core takes on its own: a
-// native addon that cannot be loaded (no prebuilt binary for the platform, a
-// stripped container layer, npm's optional-dependency bug) degrades to the
-// acorn engine with a warning rather than throwing out of `--import`. See
-// engine-select.mts — an explicitly requested engine is never substituted.
+// Lazy, process-wide binding to one of two implementations of the same
+// synchronous transform contract. The native engine falls back to Acorn only
+// when it was not selected explicitly.
 import { createRequire } from 'node:module'
 import { selectEngine } from './engine-select.mjs'
 import { debug, warnOnce } from './diagnostics.mjs'
@@ -139,6 +105,7 @@ export interface TransformEngine {
   ): TapResult
   hasModuleSyntax(input: string): boolean
   resolveModule(specifier: string, fromDir: string): string | null
+  resolveStarBindings?(missing: string[], starSources: string[], modulePath: string): TapStarResolution[]
 }
 
 const requireEngine = createRequire(import.meta.url)
@@ -147,7 +114,7 @@ const requireEngine = createRequire(import.meta.url)
 // hook. The addon is CJS; the acorn engine is ESM without top-level await,
 // which require() loads synchronously on the Nodes core supports.
 const ENGINES: Record<string, () => TransformEngine> = {
-  oxc: () => requireEngine('wrap-esm-lambda') as TransformEngine,
+  oxc: () => requireEngine('@wrap-esm-lambda/engine-oxc') as TransformEngine,
   acorn: () => requireEngine('@wrap-esm-lambda/engine-acorn') as TransformEngine,
 }
 
@@ -173,7 +140,7 @@ function verifyContract(engine: TransformEngine): void {
   if (reported !== TAP_CONTRACT_VERSION) {
     throw new Error(
       `transform contract mismatch: core expects ${TAP_CONTRACT_VERSION}, the engine reports ${String(reported)} ` +
-        `— install a matching 'wrap-esm-lambda' addon version`,
+        `— install matching '@wrap-esm-lambda/engine-oxc' and core versions`,
     )
   }
 }
@@ -218,3 +185,12 @@ export const exportsTapFromBuffer: TransformEngine['exportsTapFromBuffer'] = (..
 export const hasModuleSyntax: TransformEngine['hasModuleSyntax'] = (input) => boundEngine().hasModuleSyntax(input)
 export const resolveModule: TransformEngine['resolveModule'] = (specifier, fromDir) =>
   boundEngine().resolveModule(specifier, fromDir)
+
+/** Native engines can keep the complete star graph walk on their side of the boundary. */
+export function engineStarBindings(
+  missing: string[],
+  starSources: string[],
+  modulePath: string,
+): TapStarResolution[] | undefined {
+  return boundEngine().resolveStarBindings?.(missing, starSources, modulePath)
+}

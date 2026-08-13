@@ -203,11 +203,11 @@ export function wrapGreet(bindings) {
   bindings.greet = (name) => `patched:${original(name)}`
 }
 EOF
-(cd "$consumer" && npm install wrap-esm-lambda @wrap-esm-lambda/core @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin > /dev/null)
+(cd "$consumer" && npm install @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/core @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin > /dev/null)
 
 echo 'smoke: native addon through the installed platform package ...'
 (cd "$consumer" && node -e '
-const { exportsTap } = require("wrap-esm-lambda")
+const { exportsTap } = require("@wrap-esm-lambda/engine-oxc")
 if (typeof exportsTap !== "function") throw new Error("native exportsTap missing")
 console.log("native binding resolves and loads from the registry install")')
 

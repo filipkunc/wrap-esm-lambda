@@ -4,8 +4,7 @@ mod transform;
 
 use napi::bindgen_prelude::Buffer;
 use napi_derive::napi;
-use oxc_resolver::{ResolveOptions, Resolver};
-use std::sync::OnceLock;
+use std::path::Path;
 
 /// The version of the transform contract this addon implements: the emitted
 /// snippet shapes plus the `TapEntryInput` / `TapResult` surfaces core depends
@@ -100,33 +99,24 @@ pub struct EsmExportsInfo {
   pub reexports: Vec<EsmReexport>,
 }
 
-static STAR_RESOLVER: OnceLock<Resolver> = OnceLock::new();
-
-/// Resolve a module specifier from a directory, the way an `import` (or an
-/// ESM `export * from`) would: full Node/bundler resolution via
-/// [oxc_resolver](https://docs.rs/oxc_resolver) — `node_modules` walk,
-/// `"exports"` maps under the `node`/`import` conditions, `"module"` before
-/// `"main"` for map-less packages (the ESM tree is what a star re-export
-/// forwards), symlink-real paths (pnpm layouts included). This is what lets
-/// core's star-graph walk follow `export * from "pkg"` with a **bare**
-/// specifier: the walk needs the file behind the specifier to learn which
-/// names it provides, while the emitted shadow export keeps importing from
-/// the original specifier — resolution informs the transform, it never
-/// lands in the output. Returns null when the specifier does not resolve;
-/// the caller keeps its loud unresolved-star error.
 #[napi]
 pub fn resolve_module(specifier: String, from_dir: String) -> Option<String> {
-  let resolver = STAR_RESOLVER.get_or_init(|| {
-    Resolver::new(ResolveOptions {
-      condition_names: vec!["node".into(), "import".into()],
-      main_fields: vec!["module".into(), "main".into()],
-      ..ResolveOptions::default()
-    })
-  });
-  resolver
-    .resolve(&from_dir, &specifier)
-    .ok()
-    .map(|resolution| resolution.full_path().to_string_lossy().into_owned())
+  transform::resolve_module(&specifier, Path::new(&from_dir))
+    .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// Resolve all requested names behind a module's bare star exports in one
+/// native call. File reads, parsing, resolution and graph traversal remain in
+/// Rust instead of crossing napi once per source file.
+#[napi]
+pub fn resolve_star_bindings(
+  missing: Vec<String>,
+  star_sources: Vec<String>,
+  module_path: String,
+) -> napi::Result<Vec<TapStarResolution>> {
+  transform::resolve_star_bindings(&missing, &star_sources, Path::new(&module_path))
+    .map(star_resolutions_out)
+    .map_err(napi::Error::from_reason)
 }
 
 /// Whether the source contains ESM module syntax (`import`/`export`
@@ -163,6 +153,16 @@ fn star_resolutions_in(
     .unwrap_or_default()
     .into_iter()
     .map(|resolution| transform::StarResolution {
+      binding: resolution.binding,
+      source: resolution.source,
+    })
+    .collect()
+}
+
+fn star_resolutions_out(resolutions: Vec<transform::StarResolution>) -> Vec<TapStarResolution> {
+  resolutions
+    .into_iter()
+    .map(|resolution| TapStarResolution {
       binding: resolution.binding,
       source: resolution.source,
     })

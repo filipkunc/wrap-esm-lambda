@@ -84,7 +84,7 @@ and cannot intercept on identical targets — is in
 Every transform in core runs through one of two interchangeable engines
 (selected by `WRAP_ESM_LAMBDA_ENGINE`, see the
 [core README](../packages/core/README.md#choosing-the-engine)): the native
-`wrap-esm-lambda` oxc addon, and the pure-JS
+`@wrap-esm-lambda/engine-oxc` addon, and the pure-JS
 [`@wrap-esm-lambda/engine-acorn`](../packages/engine-acorn) built on acorn +
 magic-string. They emit byte-identical snippets and pass the identical test
 suite, so the numbers below isolate exactly one variable — whether the parse

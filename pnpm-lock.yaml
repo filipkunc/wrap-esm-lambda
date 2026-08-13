@@ -362,7 +362,7 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
     optionalDependencies:
-      wrap-esm-lambda:
+      '@wrap-esm-lambda/engine-oxc':
         specifier: workspace:^
         version: link:../..
 
