@@ -26,8 +26,8 @@ function nearestPackageType(filePath: string): ModuleType {
  */
 export function runtimeFormatFor(idOrUrl: string): ModuleType {
   const path = cleanPath(idOrUrl)
-  if (path.endsWith('.cjs')) return 'commonjs'
-  if (path.endsWith('.mjs')) return 'module'
+  if (/\.c(?:js|ts)$/.test(path)) return 'commonjs'
+  if (/\.m(?:js|ts)$/.test(path) || /\.(?:ts|tsx)$/.test(path)) return 'module'
   return nearestPackageType(path)
 }
 
@@ -49,8 +49,8 @@ export function moduleKindFor(idOrUrl: string, format?: string, sourceText?: () 
   if (format === 'commonjs') return 'cjs'
   if (format === 'module') return 'esm'
   const path = cleanPath(idOrUrl)
-  if (path.endsWith('.cjs')) return 'cjs'
-  if (path.endsWith('.mjs')) return 'esm'
+  if (/\.c(?:js|ts)$/.test(path)) return 'cjs'
+  if (/\.m(?:js|ts)$/.test(path) || /\.(?:ts|tsx)$/.test(path)) return 'esm'
   if (path.includes('/dist-cjs/')) return 'cjs'
   if (sourceText !== undefined) {
     return hasModuleSyntax(sourceText()) ? 'esm' : 'cjs'

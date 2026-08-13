@@ -7,6 +7,7 @@
 // append statements), so untouched lines keep their exact source text and
 // the emitted map stays sparse.
 import MagicString from 'magic-string'
+import { createRequire } from 'node:module'
 import type { AnyNode } from 'acorn'
 import { NamedKind, buildExportIndex, parseModule } from './exports-index.mjs'
 import type { ExportIndex, ExportStatement, NamedExport } from './exports-index.mjs'
@@ -41,6 +42,30 @@ export interface TapOutcome {
   snippets: string
   code: string | null
   map: string | null
+}
+
+const requireTypeScript = createRequire(import.meta.url)
+
+function isTypeScriptFilename(filename: string | undefined | null): filename is string {
+  return filename != null && /\.(?:[cm]?ts|tsx)$/.test(filename)
+}
+
+function transpileTypeScript(input: string, filename: string): { code: string; map: string } {
+  const ts = requireTypeScript('typescript-legacy') as typeof import('typescript-legacy')
+  const result = ts.transpileModule(input, {
+    fileName: filename,
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ESNext,
+      sourceMap: true,
+      inlineSources: true,
+    },
+  })
+  if (result.sourceMapText == null) throw new Error(`TypeScript did not emit a source map for ${filename}`)
+  return {
+    code: result.outputText.replace(/\n?\/\/# sourceMappingURL=.*?(?:\n|$)$/, '\n'),
+    map: result.sourceMapText,
+  }
 }
 
 /** An export specifier split out into a rebindable local. */
@@ -372,6 +397,13 @@ export function exportsTap(
   upstreamMap?: string | undefined | null,
   starResolutions?: TapStarResolution[] | undefined | null,
 ): TapOutcome {
+  if (!cjs && isTypeScriptFilename(filename)) {
+    const transpiled = transpileTypeScript(input, filename)
+    const transpileMap = upstreamMap == null ? transpiled.map : chainMaps(transpiled.map, upstreamMap)
+    const jsFilename = filename.replace(/\.(?:[cm]?ts|tsx)$/, '.mjs')
+    const tapped = exportsTap(transpiled.code, entries, false, registry, jsFilename, transpileMap, starResolutions)
+    return tapped.code == null ? { ...tapped, code: transpiled.code, map: transpileMap } : tapped
+  }
   if (cjs) {
     return cjsTap(entries, registry)
   }

@@ -92,6 +92,18 @@ test('build-time format fallback: module syntax decides when no format or tellin
   )
 })
 
+test('applyMatched lowers a TypeScript target without a prior bundler transform', () => {
+  const entries = [
+    { module: { path: '/tmp/module.ts' }, patch: { name: 'patchIt', from: '/abs/patch.ts' }, bindings: ['value'] },
+  ]
+  const applied = core.applyMatched('export const value: number = 1\n', entries, '/tmp/module.ts', {
+    delivery: 'registry',
+  })
+  assert.ok(applied?.code.includes('export let value'))
+  assert.ok(!applied?.code.includes(': number'))
+  assert.ok(applied?.map)
+})
+
 test('buffer-input tap emission: identical to the string variant', () => {
   // The runtime-hook shape: source stays the UTF-8 Buffer nextLoad provided
   const source = 'export class Client {}\nexport const VERSION = "1.0.0";\n'
