@@ -21,8 +21,10 @@ mod stars;
 use oxc_allocator::Allocator;
 use oxc_codegen::{Codegen, CodegenOptions};
 use oxc_parser::Parser;
+use oxc_semantic::SemanticBuilder;
 use oxc_sourcemap::SourceMap;
 use oxc_span::SourceType;
+use oxc_transformer::{TransformOptions, Transformer};
 
 use export_index::{NamedKind, build_export_index};
 use privates::{apply_private_bridges, merged_privates, plan_private_bridges};
@@ -206,8 +208,14 @@ pub fn exports_tap(
     });
   }
 
+  let source_path = std::path::Path::new(filename.unwrap_or("module.mjs"));
+  let source_type = SourceType::from_path(source_path).unwrap_or_else(|_| SourceType::mjs());
+  let typescript = source_type.is_typescript();
   let allocator = Allocator::default();
-  let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
+  let parsed = Parser::new(&allocator, source_text, source_type).parse();
+  if !parsed.diagnostics.is_empty() {
+    return Err(format!("could not parse {}", source_path.display()));
+  }
   let mut program = parsed.program;
   let index = build_export_index(&program);
   let mut ops = RewriteOps::default();
@@ -274,7 +282,7 @@ pub fn exports_tap(
   // rewrite path even when every binding took the fast path
   let bridges = plan_private_bridges(&program, &merged_privates(entries))?;
 
-  if ops.is_empty() && bridges.is_empty() {
+  if ops.is_empty() && bridges.is_empty() && !typescript {
     return Ok(TapOutput {
       snippets,
       code: None,
@@ -284,6 +292,26 @@ pub fn exports_tap(
 
   apply_private_bridges(&allocator, &mut program, bridges)?;
   apply_rewrites(&allocator, &mut program, &ops)?;
+  if typescript {
+    let semantic = SemanticBuilder::new()
+      .with_excess_capacity(2.0)
+      .with_enum_eval(true)
+      .build(&program);
+    if !semantic.diagnostics.is_empty() {
+      return Err(format!(
+        "could not analyze TypeScript module {}",
+        source_path.display()
+      ));
+    }
+    let transformed = Transformer::new(&allocator, source_path, &TransformOptions::default())
+      .build_with_scoping(semantic.semantic.into_scoping(), &mut program);
+    if !transformed.diagnostics.is_empty() {
+      return Err(format!(
+        "could not transform TypeScript module {}",
+        source_path.display()
+      ));
+    }
+  }
   let ret = Codegen::new()
     .with_options(CodegenOptions {
       source_map_path: filename.map(std::path::PathBuf::from),

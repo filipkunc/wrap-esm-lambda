@@ -66,6 +66,37 @@ for (const [label, source, bindings] of SHAPES) {
   })
 }
 
+test('both engines lower TypeScript while applying the tap and preserve map provenance', () => {
+  const source = [
+    'interface Hidden { value: number }',
+    'export const value: number = 1',
+    'export class Box { item: string = "x" }',
+    '',
+  ].join('\n')
+  const upstreamMap = JSON.stringify({
+    version: 3,
+    sources: ['original.ts'],
+    sourcesContent: [source],
+    names: [],
+    mappings: 'AAAA;AACA;AACA',
+  })
+  for (const [name, engine] of engines) {
+    const out = engine.exportsTap(
+      source,
+      [{ ...ENTRY, bindings: ['value', 'Box'] }],
+      false,
+      true,
+      'module.ts',
+      upstreamMap,
+    )
+    assert.ok(out.code, `${name} emits JavaScript for TypeScript input`)
+    assert.ok(!out.code.includes('interface Hidden'), `${name} erases interfaces`)
+    assert.ok(!out.code.includes(': number'), `${name} erases type annotations`)
+    assert.ok(out.snippets.includes('set value(v) { value = v; }'))
+    assert.deepStrictEqual(JSON.parse(out.map!).sources, ['original.ts'])
+  }
+})
+
 test('CJS mode: identical snippets, including module.exports rebinding and verified setters', () => {
   for (const bindings of [['Client'], ['module.exports'], ['Client', 'send']]) {
     const fromOxc = oxc.exportsTap('', [{ ...ENTRY, bindings }], true, true)

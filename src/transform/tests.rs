@@ -1,6 +1,37 @@
 use super::*;
 
 #[test]
+fn test_exports_tap_lowers_typescript_and_maps_to_ts_source() {
+  let source = "interface Hidden { value: number }\nexport const value: number = 1;\n";
+  let out = exports_tap(
+    source,
+    &[TapEntry {
+      bindings: vec!["value".to_string()],
+      patch_name: "patchIt".to_string(),
+      patch_from: "/abs/patch.ts".to_string(),
+      alias_index: 0,
+      privates: None,
+    }],
+    false,
+    true,
+    Some("module.ts"),
+    None,
+    &[],
+  )
+  .expect("TypeScript tap should apply");
+  let code = out.code.expect("TypeScript always emits JavaScript");
+  assert!(!code.contains("interface Hidden"));
+  assert!(!code.contains(": number"));
+  assert!(code.contains("export let value"));
+  assert!(
+    out
+      .map
+      .expect("TypeScript emits a map")
+      .contains("module.ts")
+  );
+}
+
+#[test]
 fn test_exports_tap_chained_upstream_map() {
   // Simulate the tsc pipeline without tsc: `original` plays handler.ts.
   // Codegen strips its blank lines, producing an intermediate handler.js
