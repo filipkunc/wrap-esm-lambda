@@ -15,6 +15,7 @@ import type {
   Program,
   VariableDeclaration,
 } from 'acorn'
+import { isTypeScriptFilename, stripTypeScript } from './typescript.mjs'
 
 /** Parse a module the way oxc's `SourceType::mjs()` does. */
 export function parseModule(source: string): Program {
@@ -338,4 +339,9 @@ export function esmModuleExports(input: string): {
     }
   }
   return { names, starSources: index.starSources, reexports }
+}
+
+/** Export surface after position-preserving type stripping when required. */
+export function esmModuleExportsForFile(input: string, filename: string): ReturnType<typeof esmModuleExports> {
+  return esmModuleExports(isTypeScriptFilename(filename) ? stripTypeScript(input) : input)
 }

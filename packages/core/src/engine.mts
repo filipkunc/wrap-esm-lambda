@@ -95,6 +95,7 @@ type TapTail = [
 export interface TransformEngine {
   tapContractVersion(): number
   esmModuleExports(input: string): EsmExportsInfo
+  esmModuleExportsForFile(input: string, filename: string): EsmExportsInfo
   exportsTap(input: string, entries: TapEntryInput[], cjs: boolean, registry: boolean, ...tail: TapTail): TapResult
   exportsTapFromBuffer(
     input: Buffer,
@@ -130,10 +131,8 @@ const ENGINES: Record<string, () => TransformEngine> = {
  * treated the same way, which for the default engine means degrading to the
  * pure-JS one rather than trusting it.
  */
-// Version 2: the wrap transform left the contract — the engine surface is
-// tap-only (the native addon still exports `transformLambda*`, but as
-// standalone functions core never calls).
-export const TAP_CONTRACT_VERSION = 2
+// Version 3 adds filename-aware export indexing for TypeScript star graphs.
+export const TAP_CONTRACT_VERSION = 3
 
 function verifyContract(engine: TransformEngine): void {
   const reported = typeof engine.tapContractVersion === 'function' ? engine.tapContractVersion() : undefined
@@ -179,6 +178,9 @@ export function engineName(): string {
 }
 
 export const esmModuleExports: TransformEngine['esmModuleExports'] = (input) => boundEngine().esmModuleExports(input)
+export function moduleExportsForFile(input: string, filename: string): EsmExportsInfo {
+  return boundEngine().esmModuleExportsForFile(input, filename)
+}
 export const exportsTap: TransformEngine['exportsTap'] = (...args) => boundEngine().exportsTap(...args)
 export const exportsTapFromBuffer: TransformEngine['exportsTapFromBuffer'] = (...args) =>
   boundEngine().exportsTapFromBuffer(...args)

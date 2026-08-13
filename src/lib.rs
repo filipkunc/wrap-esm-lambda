@@ -18,10 +18,7 @@ use std::path::Path;
 /// an addon that will not load at all.
 #[napi]
 pub fn tap_contract_version() -> u32 {
-  // 2: the wrap transform left the addon — the surface IS the tap contract.
-  // The original handler-wrap lives on only in the project's history
-  // (docs/history.md, the research-phase presentations).
-  2
+  3
 }
 
 /// One patch entry's inputs to the exports tap — mirrors the JS config entry.
@@ -131,7 +128,20 @@ pub fn has_module_syntax(input: String) -> bool {
 
 #[napi]
 pub fn esm_module_exports(input: String) -> EsmExportsInfo {
-  let (names, star_sources, reexports) = transform::esm_module_exports(&input);
+  exports_info_out(transform::esm_module_exports(&input))
+}
+
+#[napi]
+pub fn esm_module_exports_for_file(input: String, filename: String) -> EsmExportsInfo {
+  exports_info_out(transform::esm_module_exports_for_file(
+    &input,
+    Path::new(&filename),
+  ))
+}
+
+fn exports_info_out(
+  (names, star_sources, reexports): (Vec<String>, Vec<String>, Vec<transform::ReexportInfo>),
+) -> EsmExportsInfo {
   EsmExportsInfo {
     names,
     star_sources,

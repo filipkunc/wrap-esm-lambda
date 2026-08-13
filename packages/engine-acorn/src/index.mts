@@ -22,10 +22,10 @@
  * so the two implementations cannot drift apart across published versions.
  */
 export function tapContractVersion(): number {
-  return 2
+  return 3
 }
 
-export { esmModuleExports, hasModuleSyntax } from './exports-index.mjs'
+export { esmModuleExports, esmModuleExportsForFile, hasModuleSyntax } from './exports-index.mjs'
 export { exportsTap, exportsTapFromBuffer } from './tap.mjs'
 export { resolveModule } from './resolve.mjs'
 // The well-known symbol key the privates bridge publishes under. This

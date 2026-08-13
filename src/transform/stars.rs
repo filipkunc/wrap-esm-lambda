@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 
 use oxc_resolver::{ResolveOptions, Resolver};
 
-use super::{ReexportInfo, esm_module_exports};
+use super::{ReexportInfo, esm_module_exports_for_file};
 
 static RESOLVER: OnceLock<Resolver> = OnceLock::new();
 
@@ -49,7 +49,7 @@ fn module_info<'a>(path: &Path, cache: &'a mut HashMap<PathBuf, ModuleInfo>) -> 
     let Ok(source) = fs::read_to_string(path) else {
       return ModuleInfo::default();
     };
-    let (names, stars, reexports) = esm_module_exports(&source);
+    let (names, stars, reexports) = esm_module_exports_for_file(&source, path);
     ModuleInfo {
       names: names.into_iter().collect(),
       stars,

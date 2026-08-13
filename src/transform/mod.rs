@@ -364,8 +364,23 @@ pub fn has_module_syntax(source_text: &str) -> bool {
 /// `export * as ns` names) plus the specifiers of bare `export * from`
 /// statements, whose forwarded names require reading those sources.
 pub fn esm_module_exports(source_text: &str) -> (Vec<String>, Vec<String>, Vec<ReexportInfo>) {
+  esm_module_exports_with_type(source_text, SourceType::mjs())
+}
+
+pub fn esm_module_exports_for_file(
+  source_text: &str,
+  path: &std::path::Path,
+) -> (Vec<String>, Vec<String>, Vec<ReexportInfo>) {
+  let source_type = SourceType::from_path(path).unwrap_or_else(|_| SourceType::mjs());
+  esm_module_exports_with_type(source_text, source_type)
+}
+
+fn esm_module_exports_with_type(
+  source_text: &str,
+  source_type: SourceType,
+) -> (Vec<String>, Vec<String>, Vec<ReexportInfo>) {
   let allocator = Allocator::default();
-  let parsed = Parser::new(&allocator, source_text, SourceType::mjs()).parse();
+  let parsed = Parser::new(&allocator, source_text, source_type).parse();
   let index = build_export_index(&parsed.program);
   let mut names: Vec<String> = index
     .named

@@ -97,6 +97,21 @@ test('both engines lower TypeScript while applying the tap and preserve map prov
   }
 })
 
+test('both engines index exports from TypeScript files', () => {
+  const source = 'interface Hidden {}\nexport const value: number = 1\nexport * from "./dep.ts"\n'
+  const expected = { names: ['value'], starSources: ['./dep.ts'], reexports: [] }
+  assert.deepStrictEqual(oxc.esmModuleExportsForFile(source, 'module.ts'), expected)
+  assert.deepStrictEqual(acorn.esmModuleExportsForFile(source, 'module.ts'), expected)
+})
+
+test('Acorn keeps generated TypeScript forms an explicit limitation', () => {
+  assert.throws(
+    () =>
+      acorn.exportsTap('export enum State { Ready }\n', [{ ...ENTRY, bindings: ['State'] }], false, true, 'state.ts'),
+    /TypeScript enum is not supported in strip-only mode/,
+  )
+})
+
 test('CJS mode: identical snippets, including module.exports rebinding and verified setters', () => {
   for (const bindings of [['Client'], ['module.exports'], ['Client', 'send']]) {
     const fromOxc = oxc.exportsTap('', [{ ...ENTRY, bindings }], true, true)
