@@ -7,7 +7,6 @@
 // append statements), so untouched lines keep their exact source text and
 // the emitted map stays sparse.
 import MagicString from 'magic-string'
-import { stripTypeScriptTypes } from 'node:module'
 import type { AnyNode } from 'acorn'
 import { NamedKind, buildExportIndex, parseModule } from './exports-index.mjs'
 import type { ExportIndex, ExportStatement, NamedExport } from './exports-index.mjs'
@@ -16,6 +15,7 @@ import type { Accessor } from './snippets.mjs'
 import { chainMaps } from './sourcemaps.mjs'
 import { planPrivateBridges } from './privates.mjs'
 import type { BridgePlan } from './privates.mjs'
+import { isTypeScriptFilename, stripTypeScript } from './typescript.mjs'
 
 /**
  * One patch entry's inputs, mirroring the native `TapEntryInput`.
@@ -42,17 +42,6 @@ export interface TapOutcome {
   snippets: string
   code: string | null
   map: string | null
-}
-
-function isTypeScriptFilename(filename: string | undefined | null): filename is string {
-  return filename != null && /\.(?:[cm]?ts|tsx)$/.test(filename)
-}
-
-function stripTypeScript(input: string): string {
-  // Strip mode replaces erasable syntax with whitespace, preserving source
-  // positions without an intermediate map. Syntax requiring code generation
-  // (for example enums) remains an explicit Acorn-engine limitation.
-  return stripTypeScriptTypes(input, { mode: 'strip' })
 }
 
 /** An export specifier split out into a rebindable local. */
