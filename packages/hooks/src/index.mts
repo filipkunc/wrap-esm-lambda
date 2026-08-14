@@ -194,7 +194,7 @@ const requireBuiltin = createRequire(import.meta.url)
  * named import all observe it, because the ESM facade for a core module is
  * created at first import, which this precedes. This never touches
  * `Module._load`, so it works identically on the pre-fix Node minors where
- * sync hooks and the patch point miscomposed (see hooks/interplay-matrix —
+ * sync hooks and the patch point miscomposed (see tests/interplay-matrix —
  * `builtin-eager-patch` is PATCHED_ALL on every rung).
  *
  * Mirrors the tap's validation contract: a requested binding missing from the

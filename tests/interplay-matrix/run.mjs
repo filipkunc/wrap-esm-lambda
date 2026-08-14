@@ -4,8 +4,8 @@
 // writes the result table to matrix.md. Linux x64 only (downloads official
 // tarballs from nodejs.org and extracts just bin/node).
 //
-//   node hooks/interplay-matrix/run.mjs             # full ladder
-//   node hooks/interplay-matrix/run.mjs 22.22.2 ... # explicit versions
+//   node tests/interplay-matrix/run.mjs             # full ladder
+//   node tests/interplay-matrix/run.mjs 22.22.2 ... # explicit versions
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -47,7 +47,7 @@ const scenarios = readdirSync(scenarioDir)
 // The repo's real runtime hook (native tap addon + registerHooks shell) on
 // the patch fixture app, in both module systems. napi addons are ABI-stable,
 // so one build serves every Node in the ladder.
-const tapFixture = (name) => join(repoRoot, '__test__', 'fixtures', 'patch', name)
+const tapFixture = (name) => join(repoRoot, 'tests', 'fixtures', 'patch', name)
 const tapEnv = {
   ...process.env,
   WRAP_ESM_LAMBDA_CONFIG: tapFixture('wrap.config.mjs'),

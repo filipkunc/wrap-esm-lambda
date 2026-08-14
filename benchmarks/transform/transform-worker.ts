@@ -34,7 +34,7 @@ const hono = readFileSync(honoPath)
 
 const entry = (bindings: string[]): InstrumentEntry => ({
   module: { name: 'benchmark-target' },
-  patch: { name: 'patch', from: '/benchmark/patch.mjs' },
+  patch: { name: 'patch', from: '/benchmarks/transform/patch.mjs' },
   bindings,
 })
 
@@ -77,7 +77,7 @@ const cases: TransformCase[] = [
     operation: `TypeScript rewrite + map (${Math.round(tsSource.length / 1024)} KB)`,
     source: tsSource,
     entries: [entry(['Client'])],
-    url: 'file:///benchmark/schema.ts',
+    url: 'file:///benchmarks/transform/schema.ts',
     options: { ...runtime, format: 'module', upstreamMap: tsUpstreamMap },
   },
 ]

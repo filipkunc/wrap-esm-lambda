@@ -179,7 +179,7 @@ test('a mapped bundle whose first line is a banner needs no correction: map stay
   // is empty; the wrap must notice and stay quiet.
   const dir = await mkdtemp(join(tmpdir(), 'wrap-esm-lambda-minmap-'))
   try {
-    const axiosMin = fileURLToPath(new URL('../corpus/node_modules/axios/dist/axios.min.js', import.meta.url))
+    const axiosMin = fileURLToPath(new URL('./corpus/node_modules/axios/dist/axios.min.js', import.meta.url))
     const patchPath = join(dir, 'patch.cjs')
     await writeFile(patchPath, CJS_PATCH)
     const applied = applyMatched(

@@ -65,7 +65,7 @@ would break a consumer.
   When nothing mapped moves (no map; a banner comment owns the first line,
   as in axios's minified dist) the result stays `map: null` and the output
   is byte-identical to before. Pinned by
-  `__test__/cjs-minified-map.spec.ts` against the real shipped js-yaml and
+  `tests/cjs-minified-map.spec.ts` against the real shipped js-yaml and
   axios artifacts.
 
 ## 0.3.0 (2026-08-05)
@@ -206,7 +206,7 @@ proof-of-composition and the platform accounting to go with it.
   HTTP handler, SNS under the SQS consumer) and short-circuits before
   credentials or network exist — the interception point that instruments
   the SDK is the one that makes an AWS stand-in unnecessary for testing.
-- `__test__/hono-lambda.spec.ts` drives the example through the RIC's
+- `tests/hono-lambda.spec.ts` drives the example through the RIC's
   load sequence on every lane, both handler shapes plus the
   inert-outside-Lambda leg.
 
@@ -253,7 +253,7 @@ proof-of-composition and the platform accounting to go with it.
   zero-copy buffer paths) against orchestrion-js and import-in-the-middle
   on the real `@smithy/core` client module, plus cold starts —
   and `pnpm bench:chart` charts those cases. The hyperfine cold-start
-  harness (`hooks/bench_hooks.sh`) times the real register entry on both
+  harness (`benchmarks/hooks/bench_hooks.sh`) times the real register entry on both
   engines against a no-op-hook floor and orchestrion. Retired with the
   wrap: the Babel/acorn/swc/regex wrap re-implementations, the swc wasm
   comparison plugin (`swc-plugin-esm-lambda`), the wrap-based loader-hook
@@ -316,7 +316,7 @@ proof-of-composition and the platform accounting to go with it.
   case now runs entirely on the generic exports tap — no wrap entry, no
   static handler knowledge; outside Lambda the preset emits no entry, so
   the config is inert. Verified end-to-end against the RIC's load sequence
-  in `__test__/lambda-generic.spec.ts` and through AWS's real runtime
+  in `tests/lambda-generic.spec.ts` and through AWS's real runtime
   interface client on the `public.ecr.aws/lambda/nodejs` images in the CI
   Lambda lane.
 - `wrap-esm-lambda-validate` (a `bin` of `@wrap-esm-lambda/core`): checks a

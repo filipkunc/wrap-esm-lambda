@@ -22,13 +22,13 @@
   // version.cjs). Editor type-checking comes from the LSP-based TypeScript
   // Native Preview extension instead — TypeScriptTeam.native-preview, which
   // extensions.json recommends. Without it VS Code falls back to its bundled
-  // 6.0.3, which cannot resolve @types/node for the __test__ project under any
+  // 6.0.3, which cannot resolve @types/node for the tests project under any
   // configuration tried, and reports ~300 errors `tsc` does not.
   //
   // A tsdk override is unnecessary because the versions already agree: the
   // extension bundles its own compiler and it is 7.0.2, the same as the
   // devDependency. Verified by running the extension's own lib/tsc against
-  // __test__ and corpus — zero errors, 82 @types/node files loaded, matching
+  // tests and corpus — zero errors, 82 @types/node files loaded, matching
   // `pnpm typecheck` exactly.
   //
   // Worth knowing if that stops being true: the extension pins its compiler
@@ -49,10 +49,10 @@
   // `include` is what scopes discovery to the suite; the glob is left in the
   // `**`-prefixed form the extension's own schema documents, because whether
   // filePatterns is matched workspace-relative or include-relative is not
-  // specified. A narrower `__test__/*.spec.ts` would match nothing under the
+  // specified. A narrower `tests/*.spec.ts` would match nothing under the
   // second reading, and "discovered zero tests" is the one failure this repo
   // has learned to distrust — it looks identical to a green run.
-  "nodejs-testing.include": ["./__test__"],
+  "nodejs-testing.include": ["./tests"],
   "nodejs-testing.extensions": [
     {
       "extensions": ["ts"],
@@ -65,7 +65,7 @@
   // is an oxc-only view: there is one env per workspace, so parity work still
   // goes through the two "Debug spec file" configs or the test:file task.
   "nodejs-testing.env": {
-    "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
+    "OXC_TSCONFIG_PATH": "./tests/tsconfig.json",
     "WRAP_ESM_LAMBDA_ENGINE": "oxc"
   },
   // packages/*/dist is what the specs import, so the Testing view needs the
@@ -96,7 +96,7 @@
   "search.exclude": {
     "**/target": true,
     "**/dist": true,
-    "corpus/.scratch": true
+    "tests/corpus/.scratch": true
   },
   // The suite is node's own test runner driven through the launch configs and
   // tasks above; VS Code's auto-detected npm script lenses only add noise.

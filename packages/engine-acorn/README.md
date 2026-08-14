@@ -1,8 +1,8 @@
 # `@wrap-esm-lambda/engine-acorn`
 
 The pure-JavaScript transform engine: the same API surface as the native
-`@wrap-esm-lambda/engine-oxc` addon (the contract lives in the root
-[`index.d.ts`](../../index.d.ts)), implemented on
+`@wrap-esm-lambda/engine-oxc` addon (the shared contract is
+[`TransformEngine`](../core/src/engine.mts)), implemented on
 [acorn](https://github.com/acornjs/acorn) (parse),
 [magic-string](https://github.com/rich-harris/magic-string) (edit + source
 map) and [`@jridgewell/remapping`](https://github.com/jridgewell/sourcemaps)
@@ -41,7 +41,7 @@ Acorn limitation. OXC lowers those forms in Rust.
 
 ## The contract it upholds
 
-[`__test__/engine-parity.spec.ts`](../../__test__/engine-parity.spec.ts)
+[`tests/engine-parity.spec.ts`](../../tests/engine-parity.spec.ts)
 pins, against the native engine:
 
 - **byte-identical snippets** for every tap emission (registry and import
@@ -55,7 +55,7 @@ pins, against the native engine:
 - **identical `esmModuleExports` surfaces** — the star walk behaves the same
   on either engine.
 
-[`__test__/comment-preservation.spec.ts`](../../__test__/comment-preservation.spec.ts)
+[`tests/comment-preservation.spec.ts`](../../tests/comment-preservation.spec.ts)
 additionally pins that the rewrite path keeps bundler-semantic comments on
 both engines (`/* @__PURE__ */`, webpack magic comments, `/*!` legal
 comments) — and proves it downstream: bundles built through the unplugin
@@ -64,7 +64,7 @@ tree-shake on the surviving annotation, and webpack honors a surviving
 `webpackIgnore`. magic-string makes preservation structural (unedited bytes
 cannot change); oxc codegen preserves comments as a feature.
 
-[`__test__/bundlers.spec.ts`](../../__test__/bundlers.spec.ts) runs the full
+[`tests/bundlers.spec.ts`](../../tests/bundlers.spec.ts) runs the full
 tap-shapes fixture through rollup, rolldown, webpack and rspack for both
 engines —
 webpack's production pipeline is the harshest consumer, and promptly caught
@@ -82,12 +82,13 @@ export statement, append the redirects — so untouched lines keep their
 exact bytes and the emitted source map is sparse. Maps still chain through
 an upstream (e.g. tsc) map, via `remapping` instead of `oxc_sourcemap`.
 
-The module layout mirrors the native side ([`src/transform.rs`](../../src/transform.rs)):
+The module layout mirrors the native side ([`src/transform/mod.rs`](../../src/transform/mod.rs)):
 
 | module                                           | responsibility                                             |
 | ------------------------------------------------ | ---------------------------------------------------------- |
 | [`src/exports-index.mts`](src/exports-index.mts) | one-pass export surface index (`build_export_index` twin)  |
 | [`src/snippets.mts`](src/snippets.mts)           | emitted-text builders, byte-identical to the Rust emission |
 | [`src/tap.mts`](src/tap.mts)                     | the exports tap: fast path + magic-string rewrites         |
-| [`src/wrap.mts`](src/wrap.mts)                   | the original handler-wrap transform                        |
+| [`src/privates.mts`](src/privates.mts)           | private-field bridge metadata and rewrite helpers          |
+| [`src/typescript.mts`](src/typescript.mts)       | erasable TypeScript stripping before Acorn parsing         |
 | [`src/sourcemaps.mts`](src/sourcemaps.mts)       | map chaining (`remapping`) and data-URL inlining           |

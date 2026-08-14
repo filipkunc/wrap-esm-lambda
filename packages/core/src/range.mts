@@ -3,7 +3,7 @@
 // module graph costs milliseconds; matching needs microseconds of logic).
 // It implements the subset of node-semver's grammar that version-gating
 // configs actually use — differential-tested against the real `semver`
-// package in __test__/range.spec.ts:
+// package in tests/range.spec.ts:
 //
 // - comparators `>=` `>` `<=` `<` `=`, bare versions, partials (`>=3`, `<5`)
 // - caret `^1.2.3` (incl. the 0.x rules), tilde `~1.2.3`

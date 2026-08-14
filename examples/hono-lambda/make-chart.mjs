@@ -1,5 +1,5 @@
 // Renders coldStartChart.svg from coldStartTable.md — the same treatment
-// hooks/make-chart.mjs gives the register-entry cold starts: horizontal
+// benchmarks/hooks/make-chart.mjs gives the register-entry cold starts: horizontal
 // bars, dark background, each bar's value printed at its right end because
 // a static SVG has no tooltips. Data lives in the table, provenance
 // included; this script only draws it.

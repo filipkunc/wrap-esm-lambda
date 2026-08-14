@@ -299,7 +299,8 @@ Deep dives:
   TypeScript, composing maps in Rust
 - [docs/history.md](docs/history.md) — the Node loader breakage trail that
   shaped the design
-- [hooks/interplay-matrix](hooks/interplay-matrix) — the Node 22/24/26
+- [tests/interplay-matrix](tests/interplay-matrix) — the Node 22/24/26
   hook/`Module._load` interplay matrix (`pnpm matrix`)
-- [Presentation.md](Presentation.md) / [RustPresentation.md](RustPresentation.md) —
-  slide decks from the project's research phase
+- [Presentation.md](docs/presentations/Presentation.md) /
+  [RustPresentation.md](docs/presentations/RustPresentation.md) — slide decks
+  from the project's research phase

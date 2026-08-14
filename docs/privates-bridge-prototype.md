@@ -22,11 +22,11 @@ against each other; core does not send `privates` yet.
   surfaces. On the native side the field crosses napi as an `IndexMap`
   (napi's `object_indexmap` feature) so the emission follows the JS
   object's insertion order — determinism is part of the emission contract.
-- `__test__/privates-bridge.spec.ts` — end-to-end per engine: transformed
+- `tests/privates-bridge.spec.ts` — end-to-end per engine: transformed
   modules actually evaluate, and the bridge operates on genuine branded
   instances, including through the subclass-wrapper patch pattern the
   design validated.
-- `__test__/engine-parity.spec.ts` — byte-identical whole-module rewrites
+- `tests/engine-parity.spec.ts` — byte-identical whole-module rewrites
   across engines for the bridge (field pairs, single slots, lone accessors,
   static privates, composition with a `const` demotion), and identical
   refusal messages.

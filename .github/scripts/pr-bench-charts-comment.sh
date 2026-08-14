@@ -27,11 +27,11 @@ body_file=$(mktemp)
   echo
   echo '**The two engines in detail** (production transform pipeline, Tinybench p50/p99):'
   echo
-  echo "![The two engines in detail]($raw/hooks/tapEngineChart.svg)"
+  echo "![The two engines in detail]($raw/benchmarks/hooks/tapEngineChart.svg)"
   echo
   echo '**Cold start by hooking mechanism** (hyperfine, committed table):'
   echo
-  echo "![Cold start by hooking mechanism]($raw/hooks/benchChart.svg)"
+  echo "![Cold start by hooking mechanism]($raw/benchmarks/hooks/benchChart.svg)"
 } > "$body_file"
 
 auth="Authorization: Bearer $GITHUB_TOKEN"

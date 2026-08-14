@@ -6,7 +6,7 @@
 // mechanism; every package runs the same battery (see run.mjs).
 //
 // Per-entry knobs:
-//   name          npm package name (must be a dependency of corpus/package.json)
+//   name          npm package name (must be a dependency of tests/corpus/package.json)
 //   group         which shape family the entry represents (table column)
 //   build         false skips the esbuild parity + hybrid cells, with `notes` saying why
 //   buildExternal esbuild externals for optional deps the package requires lazily
@@ -22,7 +22,7 @@
 export type CellName = 'import' | 'require' | 'build' | 'hybrid' | 'probe'
 
 export interface CorpusEntry {
-  /** npm package name (must be a dependency of corpus/package.json) */
+  /** npm package name (must be a dependency of tests/corpus/package.json) */
   name: string
   /** which shape family the entry represents (table column) */
   group: 'handwritten-cjs' | 'transpiled-cjs' | 'dual' | 'esm' | 'instrumentation'
@@ -118,7 +118,7 @@ export const packages: CorpusEntry[] = [
     // `export *` sources (./format.js, ./parse.js) that forward the SAME
     // origin binding. The star walk used to refuse it by provider count;
     // it now compares transitive origins the way ResolveExport does (see
-    // core/src/stars.mts and __test__/stars-dedup.spec.ts), so the full
+    // core/src/stars.mts and tests/stars-dedup.spec.ts), so the full
     // surface taps. The excludeBindings knob this finding introduced stays
     // available for future gaps.
     notes: 'per-function dual behind a huge exports map; longFormatters exercises same-binding star dedup',
@@ -198,7 +198,7 @@ export function keyFor(name: string): string {
  * Deliberate exclusions, so absence reads as a decision instead of an
  * oversight:
  * - express / fastify / hono / @smithy-core — already pinned one-per-shape by
- *   __test__/frameworks.spec.ts and __test__/aws.spec.ts (docs/real-packages.md).
+ *   tests/frameworks.spec.ts and tests/aws.spec.ts (docs/real-packages.md).
  * - next / @angular/* — platforms that own their module graph, exercised as
  *   HOSTS for the runtime hook (instrumentation.ts, NODE_OPTIONS), not as tap
  *   targets; see docs/real-packages.md.

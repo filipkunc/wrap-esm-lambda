@@ -2,7 +2,7 @@
 // (@apm-js-collab/code-transformer) instrumenting the same @smithy/core
 // Client#send the smithy entry taps — registered the same way the runtime
 // shell is (node --import), transforming the module as it loads. Mirrors
-// hooks/sync-hooks-orchestrion.mjs and the orchestrion-compare spec: the
+// benchmarks/hooks/sync-hooks-orchestrion.mjs and the orchestrion-compare spec: the
 // mechanism's load-time cost is what the measurement wants, so no
 // diagnostics_channel subscriber is attached (the hooks bench table makes
 // the same choice and prices subscribers separately).

@@ -113,4 +113,4 @@ of this pattern is
 logger with exception capture (logged and rethrown), consumed by
 [examples/function-logger-app](../examples/function-logger-app) and verified
 end-to-end (both runtime activations plus the bundled build) by
-[`__test__/packaging.spec.ts`](../__test__/packaging.spec.ts).
+[`tests/packaging.spec.ts`](../tests/packaging.spec.ts).

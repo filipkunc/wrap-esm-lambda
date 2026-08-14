@@ -83,4 +83,4 @@ await build({
 ```
 
 Both modes are exercised end-to-end by
-[`__test__/packaging.spec.ts`](../../__test__/packaging.spec.ts).
+[`tests/packaging.spec.ts`](../../tests/packaging.spec.ts).

@@ -81,7 +81,7 @@ Having everything in one file is very convenient:
 import { register } from "node:module";
 register(import.meta.url); //< no extra file!
 
-import { transformLambda } from "../benchmark/lib/babel-transform.js";
+import { transformLambda } from "../../benchmarks/transform/lib/babel-transform.js";
 export async function load(url, context, nextLoad) { ... }
 ```
 
@@ -254,4 +254,4 @@ Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/b
 
 ---
 
-![bg contain](hooks/benchChart.svg)
+![bg contain](../../benchmarks/hooks/benchChart.svg)

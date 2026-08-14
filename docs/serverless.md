@@ -4,7 +4,7 @@ Runtime instrumentation of managed platforms was historically blocked by
 broken Node module-loading functionality (the issue trail in
 [history.md](history.md)), so the runtime shell's soundness on those
 platforms is checked empirically, not assumed. What
-[hooks/interplay-matrix](../hooks/interplay-matrix) verifies across the
+[tests/interplay-matrix](../tests/interplay-matrix) verifies across the
 Node 22/24/26 ladder — including every pre-fix minor:
 
 - **Delivery**: on managed runtimes you don't own the node CLI. Lambda
@@ -96,7 +96,7 @@ For Azure the delivery question above is only half the story, because the
 platform ships something Lambda does not: an extension pipeline of its own.
 What the worker actually does (v4 programming model;
 `Azure/azure-functions-nodejs-worker`, mirrored line-for-line by
-[`__test__/azure-functions.spec.ts`](../__test__/azure-functions.spec.ts)):
+[`tests/azure-functions.spec.ts`](../tests/azure-functions.spec.ts)):
 
 - **Hooks execute strictly in registration order** — a plain array, pushed by
   `registerHook`, iterated as a sequential awaited loop. There is no priority

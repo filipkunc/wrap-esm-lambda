@@ -161,6 +161,6 @@ license, start, or keep compatible. A forwarding APM patch would keep the
 original `send` and time around `original.call(this, command, ...rest)`
 instead of returning a stub — the interception point is the same.
 
-[`__test__/hono-lambda.spec.ts`](../../__test__/hono-lambda.spec.ts) drives
+[`tests/hono-lambda.spec.ts`](../../tests/hono-lambda.spec.ts) drives
 this example on every CI lane; the Lambda lane additionally runs it through
 the real RIC as above.

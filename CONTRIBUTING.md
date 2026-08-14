@@ -4,6 +4,25 @@ How to build, test and release this repo. The short version is in the README's
 [building and running locally](README.md#building-and-running-locally); this
 page keeps the details.
 
+## Repository layout
+
+The top-level directories are grouped by purpose:
+
+```text
+packages/              published TypeScript packages
+examples/              runnable consumer examples
+tests/                 specs, fixtures, compatibility matrix, and ecosystem corpus
+benchmarks/            cold-start and transform benchmarks
+experiments/           one-off research that is not part of CI or a published package
+docs/                  guides, release notes, and research presentations
+src/ + Cargo.toml       native @wrap-esm-lambda/engine-oxc implementation
+```
+
+The native package remains at the repository root because the N-API build,
+platform artifacts, and release assembly currently share that boundary. Moving
+it under `packages/` is intentionally a separate release-infrastructure change,
+not part of a directory-only cleanup.
+
 ## Building and testing
 
 1. `pnpm install` — install dependencies
@@ -31,7 +50,7 @@ The packages import each other by their published specifiers, so the suite
 runs against the same `dist/` a consumer installs — `pnpm build:packages`
 first, or the imports resolve to nothing.
 
-All four workspace packages are written in TypeScript (`src/*.mts`) and ship
+The workspace packages are written in TypeScript (`src/*.mts`) and ship
 compiled ESM plus declarations (`dist/*.mjs` + `dist/*.d.mts`, with
 declaration and source maps back to the `.mts`), so a config file gets real
 completion on `definePatches`, and `TransformEngine` — the surface the native

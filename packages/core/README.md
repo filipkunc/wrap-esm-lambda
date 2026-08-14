@@ -218,7 +218,7 @@ subtlest constraints:
 ### Dependencies
 
 A patch module may carry a full dependency graph of its own — this is tested,
-not assumed (`__test__/patch.spec.ts`, the `patch dependencies` pair):
+not assumed (`tests/patch.spec.ts`, the `patch dependencies` pair):
 
 - **Relative imports** (including TypeScript files, stripped by Node) and
   **bare npm specifiers** both work, resolving from the patch file's own

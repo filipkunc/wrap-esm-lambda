@@ -21,7 +21,7 @@ stay on their original lines — a `throw` on line 2 of the original resolves
 to line 2 through the rewrite map. Both engines emit one:
 [oxc](https://oxc.rs/) builds it in codegen (native side), the acorn engine
 builds it from magic-string edits, and
-[`__test__/engine-parity.spec.ts`](../__test__/engine-parity.spec.ts) pins
+[`tests/engine-parity.spec.ts`](../tests/engine-parity.spec.ts) pins
 that positions in untouched code resolve to the original source either way.
 
 ## The CJS evaluation wrap
@@ -65,7 +65,7 @@ caveat: inlining re-homes an external map, so its `sources` now resolve
 relative to the module file rather than the map file — the same place
 whenever the two share a directory, which is where build tools put them.
 
-[`__test__/cjs-minified-map.spec.ts`](../__test__/cjs-minified-map.spec.ts)
+[`tests/cjs-minified-map.spec.ts`](../tests/cjs-minified-map.spec.ts)
 pins all of this against the real shipped js-yaml and axios artifacts:
 stack frames of the wrapped minified bundle under `--enable-source-maps`
 are asserted identical to the unwrapped module's, through the runtime hook
