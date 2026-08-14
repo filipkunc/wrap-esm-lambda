@@ -1,0 +1,33 @@
+{
+  "name": "wrap-esm-lambda",
+  "version": "0.4.0",
+  "description": "Compatibility package for the renamed @wrap-esm-lambda/engine-oxc native addon. Forwards the complete CommonJS and TypeScript surface.",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/filipkunc/wrap-esm-lambda.git",
+    "directory": "packages/engine-oxc-compat"
+  },
+  "homepage": "https://github.com/filipkunc/wrap-esm-lambda/tree/main/packages/engine-oxc-compat#readme",
+  "bugs": {
+    "url": "https://github.com/filipkunc/wrap-esm-lambda/issues"
+  },
+  "engines": {
+    "node": ">= 22.0.0"
+  },
+  "dependencies": {
+    "@wrap-esm-lambda/engine-oxc": "workspace:^"
+  }
+}

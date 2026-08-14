@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Tutorial: patch hono (a dual ESM+CJS package) at runtime with one node --import flag, installing wrap-esm-lambda from pkg.pr.new previews.",
   "scripts": {
-    "start": "WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs node --import @wrap-esm-lambda/hooks/register app.mjs"
+    "start": "WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs node --import @wrap-esm-lambda/hooks/register app.mjs",
+    "check:compat": "node compat-check.cjs"
   },
   "dependencies": {
     "@wrap-esm-lambda/core": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/core@main",
@@ -14,5 +15,9 @@
   },
   "engines": {
     "node": ">=22.15.0"
+  },
+  "optionalDependencies": {
+    "@wrap-esm-lambda/engine-oxc": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/engine-oxc@main",
+    "wrap-esm-lambda": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/wrap-esm-lambda@main"
   }
 }

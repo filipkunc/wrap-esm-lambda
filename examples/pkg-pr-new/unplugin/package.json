@@ -6,7 +6,8 @@
   "description": "Tutorial: patch hono (a dual ESM+CJS package) at build time via the unplugin (esbuild here), installing wrap-esm-lambda from pkg.pr.new previews.",
   "scripts": {
     "build": "node build.mjs",
-    "start": "node build.mjs && node dist/app.mjs"
+    "start": "node build.mjs && node dist/app.mjs",
+    "check:compat": "node compat-check.cjs"
   },
   "devDependencies": {
     "@wrap-esm-lambda/core": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/core@main",
@@ -16,5 +17,9 @@
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "optionalDependencies": {
+    "@wrap-esm-lambda/engine-oxc": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/@wrap-esm-lambda/engine-oxc@main",
+    "wrap-esm-lambda": "https://pkg.pr.new/filipkunc/wrap-esm-lambda/wrap-esm-lambda@main"
   }
 }

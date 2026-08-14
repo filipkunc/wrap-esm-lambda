@@ -1326,12 +1326,15 @@ jobs:
           set -euo pipefail
           npm config set provenance true
           echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-          # the workspace packages first, in dependency order (pnpm handles
-          # that): core depends on engine-acorn, and publishing it first would
-          # leave a window where the dependency does not resolve
-          pnpm publish -r --access public --no-git-checks --filter './packages/*'
-          # then the addon, through the napi flow its prepublishOnly runs
+          # Publish the workspace packages in dependency order, except for
+          # the old-name compatibility package: it has to follow the addon it
+          # forwards or a new install could briefly resolve an absent target.
+          pnpm publish -r --access public --no-git-checks \
+            --filter './packages/*' --filter '!wrap-esm-lambda'
+          # Publish the addon through the napi flow its prepublishOnly runs,
+          # then publish the compatibility package last.
           npm publish --access public
+          pnpm --filter wrap-esm-lambda publish --access public --no-git-checks
       - name: Publish skipped
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'publish'
         run: |
@@ -1396,7 +1399,8 @@ jobs:
     #
     # 1. The preview chain works end to end — pkg.pr.new rewrote the
     #    workspace:^ links and the addon's platform pins, npm resolved them,
-    #    and both delivery modes patch a real request.
+    #    the old addon name forwards the new one, and both delivery modes
+    #    patch a real request.
     # 2. No recursion: the tutorials reference the previews, so the previews
     #    must not contain the tutorials. They can't by construction — the
     #    publish step's globs ('.', './npm/*', './packages/*') never touch
@@ -1447,7 +1451,7 @@ jobs:
             short_sha="${GITHUB_SHA:0:7}"
             sed -i "s/@main\"/@${short_sha}\"/" package.json
           fi
-          grep '"@wrap-esm-lambda/' package.json
+          grep 'pkg.pr.new' package.json
           # on push/dispatch the upload finished before this job started
           # (needs: publish), so retries only cover transient network trouble
           for attempt in 1 2 3; do
@@ -1467,6 +1471,10 @@ jobs:
           # stays on the default engine fallback.
           if [ "${GITHUB_EVENT_NAME}" != "pull_request" ]; then
             export WRAP_ESM_LAMBDA_ENGINE=oxc
+            # PR jobs consume the current @main previews, which do not contain
+            # a package introduced by that PR yet. Push/dispatch jobs consume
+            # this commit's fresh previews and must prove the rename bridge.
+            npm run check:compat
           fi
           npm start | tee output.log
           grep -F '[wrap-esm-lambda] GET /hello/world' output.log
@@ -1483,7 +1491,7 @@ jobs:
             while IFS= read -r scope; do
               find "$scope" -mindepth 1 -maxdepth 1 -type d -print
             done < <(find node_modules -type d -name '@wrap-esm-lambda')
-            find node_modules -type d -name 'wrap-esm-lambda-*' -prune -print
+            find node_modules -type d \( -name 'wrap-esm-lambda' -o -name 'wrap-esm-lambda-*' \) -prune -print
           )
           if [ "${#roots[@]}" -eq 0 ]; then
             echo "no installed wrap-esm-lambda packages found" >&2

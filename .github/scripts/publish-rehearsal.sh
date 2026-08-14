@@ -103,8 +103,9 @@ export NPM_CONFIG_USERCONFIG="$scratch/npmrc"
 export npm_config_cache="$scratch/npm-cache"
 
 # --- publish, the same shapes the CI publish job runs
-echo 'publishing workspace packages (pnpm publish -r) ...'
-(cd "$repo" && pnpm publish -r --force --access public --no-git-checks --filter './packages/*' --registry "$registry")
+echo 'publishing workspace packages except the compatibility shim ...'
+(cd "$repo" && pnpm publish -r --force --access public --no-git-checks \
+  --filter './packages/*' --filter '!wrap-esm-lambda' --registry "$registry")
 
 # package.json's publishConfig.registry pins the real npmjs — correct for
 # the real release, and it outranks every other registry setting at publish
@@ -164,6 +165,11 @@ node -e '
 ' "$scratch/root-pkg/package.json" "$suffixes"
 (cd "$scratch/root-pkg" && npm publish --access public --ignore-scripts)
 
+# The old package name forwards the root addon, so publish it only after its
+# target exists in the registry.
+echo 'publishing the compatibility package ...'
+(cd "$repo" && pnpm --filter wrap-esm-lambda publish --force --access public --no-git-checks --registry "$registry")
+
 # --- the consumer: a scratch project that knows nothing about the repo,
 # installing from the rehearsal registry and running the README quick-start
 # shape through the RUNTIME hook — installed hooks, installed core,
@@ -203,13 +209,15 @@ export function wrapGreet(bindings) {
   bindings.greet = (name) => `patched:${original(name)}`
 }
 EOF
-(cd "$consumer" && npm install @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/core @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin > /dev/null)
+(cd "$consumer" && npm install wrap-esm-lambda @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/core @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin > /dev/null)
 
 echo 'smoke: native addon through the installed platform package ...'
 (cd "$consumer" && node -e '
-const { exportsTap } = require("@wrap-esm-lambda/engine-oxc")
-if (typeof exportsTap !== "function") throw new Error("native exportsTap missing")
-console.log("native binding resolves and loads from the registry install")')
+const legacy = require("wrap-esm-lambda")
+const current = require("@wrap-esm-lambda/engine-oxc")
+if (legacy !== current) throw new Error("legacy package did not forward the native module object")
+if (typeof current.exportsTap !== "function") throw new Error("native exportsTap missing")
+console.log("native binding and compatibility package resolve from the registry install")')
 
 echo 'smoke: unplugin surface loads ...'
 (cd "$consumer" && node -e 'import("@wrap-esm-lambda/unplugin").then((m) => {
