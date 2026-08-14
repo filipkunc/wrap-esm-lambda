@@ -16,7 +16,7 @@ processes.
 
 ```sh
 sudo apt update && sudo apt install -y hyperfine
-cd hooks && ./bench_hooks.sh
+cd benchmarks/hooks && ./bench_hooks.sh
 ```
 
 The committed result is [benchmarks/hooks/benchTable.md](../benchmarks/hooks/benchTable.md):

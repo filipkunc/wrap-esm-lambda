@@ -301,6 +301,5 @@ Deep dives:
   shaped the design
 - [tests/interplay-matrix](tests/interplay-matrix) — the Node 22/24/26
   hook/`Module._load` interplay matrix (`pnpm matrix`)
-- [Presentation.md](docs/presentations/Presentation.md) /
-  [RustPresentation.md](docs/presentations/RustPresentation.md) — slide decks
-  from the project's research phase
+- [Concepts.md](docs/presentations/Concepts.md) — a current conceptual tour of
+  the exports tap, its two delivery modes, and its reach

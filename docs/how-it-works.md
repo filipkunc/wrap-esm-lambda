@@ -131,8 +131,9 @@ way back to an original `.ts` when an upstream map exists — composed in Rust
 without leaving the addon ([source-maps.md](source-maps.md)). The research
 that got here — the wrap re-implemented with [Babel](https://babeljs.io/),
 [Acorn](https://github.com/acornjs/acorn), [swc.rs](https://swc.rs/) and
-loader hooks of every flavor — lives in [history.md](history.md) and the
-[presentations](presentations/Presentation.md); today's benchmark compares the tap
+loader hooks of every flavor — lives in [history.md](history.md). The current
+[concepts presentation](presentations/Concepts.md) explains the design that
+replaced it; today's benchmark compares the tap
 against [orchestrion-js](https://github.com/nodejs/orchestrion-js) and
 [import-in-the-middle](https://github.com/nodejs/import-in-the-middle) on a
 real AWS SDK module ([benchmarks.md](benchmarks.md)).

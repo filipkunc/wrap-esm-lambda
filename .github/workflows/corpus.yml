@@ -19,7 +19,11 @@ name: Corpus
       - src/**
       - Cargo.toml
       - Cargo.lock
+      - build.rs
+      - package.json
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - tsconfig.base.json
       - .github/workflows/corpus.yml
   pull_request:
     paths:
@@ -28,7 +32,11 @@ name: Corpus
       - src/**
       - Cargo.toml
       - Cargo.lock
+      - build.rs
+      - package.json
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - tsconfig.base.json
       - .github/workflows/corpus.yml
   schedule:
     # nightly, off the top of the hour to be polite to the scheduler
