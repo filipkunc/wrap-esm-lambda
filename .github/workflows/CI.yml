@@ -1480,7 +1480,9 @@ jobs:
           # Discover each package root separately so the depth-limited leak
           # check cannot wander into unrelated transitive dependencies.
           mapfile -t roots < <(
-            find node_modules -type d -path '*/node_modules/@wrap-esm-lambda/*' -prune -print
+            while IFS= read -r scope; do
+              find "$scope" -mindepth 1 -maxdepth 1 -type d -print
+            done < <(find node_modules -type d -name '@wrap-esm-lambda')
             find node_modules -type d -name 'wrap-esm-lambda-*' -prune -print
           )
           if [ "${#roots[@]}" -eq 0 ]; then
