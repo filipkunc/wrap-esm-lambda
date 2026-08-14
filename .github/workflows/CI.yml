@@ -1475,10 +1475,19 @@ jobs:
         working-directory: examples/pkg-pr-new/${{ matrix.dir }}
         run: |
           set -euo pipefail
-          # every installed piece of the toolkit: the scoped packages plus
-          # the root addon and its platform packages (hoisted by npm)
-          roots=$(ls -d node_modules/@wrap-esm-lambda node_modules/wrap-esm-lambda*)
-          leaked=$(find $roots -maxdepth 2 \( -name examples -o -name 'wrap.config.mjs' \))
+          # Every installed toolkit package: scoped public packages plus
+          # unscoped platform packages, wherever npm placed optional deps.
+          # Discover each package root separately so the depth-limited leak
+          # check cannot wander into unrelated transitive dependencies.
+          mapfile -t roots < <(
+            find node_modules -type d -path '*/node_modules/@wrap-esm-lambda/*' -prune -print
+            find node_modules -type d -name 'wrap-esm-lambda-*' -prune -print
+          )
+          if [ "${#roots[@]}" -eq 0 ]; then
+            echo "no installed wrap-esm-lambda packages found" >&2
+            exit 1
+          fi
+          leaked=$(find "${roots[@]}" -maxdepth 2 \( -name examples -o -name 'wrap.config.mjs' \))
           if [ -n "$leaked" ]; then
             echo "published tarballs leaked tutorial files:" >&2
             echo "$leaked" >&2
