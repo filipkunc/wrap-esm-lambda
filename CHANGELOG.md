@@ -4,13 +4,15 @@ Notable changes to `wrap-esm-lambda` and the `@wrap-esm-lambda/*` packages. The
 `0.x` line makes no compatibility promises yet; entries call out anything that
 would break a consumer.
 
-## Unreleased
+## 0.4.0 - 2026-08-14
 
 ### Changed
 
 - **The native addon is now `@wrap-esm-lambda/engine-oxc`.** Core loads both
   engines from parallel scoped package names; the native binary and its
-  platform package names remain unchanged. This is a breaking package rename.
+  platform package names remain unchanged. The previous `wrap-esm-lambda`
+  package remains available as a compatibility shim that forwards the complete
+  CommonJS and TypeScript API, so existing installs and imports keep working.
 
 - **Matched TypeScript modules are lowered during instrumentation.** OXC keeps
   parsing, binding rewrites, type lowering, code generation and source-map

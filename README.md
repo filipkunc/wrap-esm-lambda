@@ -114,6 +114,11 @@ Under both shells sits the native transform: the root
 it for you and fall back to the pure-JS acorn engine when no prebuilt binary
 exists for your platform.
 
+The addon used the unscoped package name `wrap-esm-lambda` through 0.3.x.
+Starting with 0.4.0 that name is a compatibility package which forwards the
+complete API from `@wrap-esm-lambda/engine-oxc`. Existing dependencies and
+imports therefore keep working; new code should use the scoped name.
+
 Because a config is code and patch entries are plain data, instrumentation
 also ships as an ordinary npm package (config + patches + register entry) that
 an app activates with one flag — the pattern an APM vendor would use. See

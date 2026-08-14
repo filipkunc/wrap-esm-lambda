@@ -14,6 +14,30 @@ config, patch function), so diffing the two directories shows precisely what
 switching delivery mode costs: one dependency and one activation line.
 Nothing else changes.
 
+## Compatibility package check
+
+The native addon moved from `wrap-esm-lambda` to
+`@wrap-esm-lambda/engine-oxc` in 0.4.0. The old name is still published as a
+small forwarding package, so existing lockfiles and imports do not break only
+because the package was renamed.
+
+Both tutorials list the old and new addon names as optional preview
+dependencies and include the same explicit check:
+
+```sh
+npm run check:compat
+```
+
+That command loads both names and asserts that the compatibility package
+returns the exact module object—and therefore the complete API—of the scoped
+addon. The dependencies are optional because the tutorials still demonstrate
+the Acorn fallback on unsupported platforms. CI makes the OXC engine mandatory
+for a freshly published preview and runs this compatibility assertion before
+the tutorial itself.
+
+New applications should use `@wrap-esm-lambda/engine-oxc`; the unscoped name
+exists to make migration safe.
+
 ## Where the packages come from
 
 Neither project uses `workspace:^` links. Their dependencies point at
@@ -70,5 +94,6 @@ tutorials install can never contain the tutorials themselves. The
 both directions: on every push to `main` it runs both tutorials with plain
 npm against that commit's own freshly uploaded previews, and on every pull
 request against the committed `@main` URLs exactly as a reader would
-install them — checking the patched output either way, and failing if a
-tutorial file ever leaks into an installed package.
+install them — checking the patched output either way, asserting the old and new addon names
+against freshly published previews, and failing if a tutorial file ever leaks
+into an installed package.

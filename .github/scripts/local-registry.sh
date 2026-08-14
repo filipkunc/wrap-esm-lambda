@@ -55,7 +55,7 @@ write_config() {
   #
   #  - our own names get proxy-less blocks with `publish: $all`. The default
   #    config proxies EVERY pattern to npmjs and demands $authenticated, so
-  #    publishing 0.3.0 locally collides with whatever 0.3.0 npmjs already
+  #    publishing the current version locally collides with whatever npmjs already
   #    knows about (EPUBLISHCONFLICT) and refuses anonymous tokens first.
   #  - `unpublish: $all`, because storage here is persistent: republishing a
   #    version means retracting it first, and that has to be allowed.
@@ -133,7 +133,7 @@ cmd_down() {
 # a republish can retract first. Platform names follow the built binaries:
 # only the host's exist locally, and that is all this registry ever serves.
 published_names() {
-  echo '@wrap-esm-lambda/core @wrap-esm-lambda/engine-acorn @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin'
+  echo 'wrap-esm-lambda @wrap-esm-lambda/core @wrap-esm-lambda/engine-acorn @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin'
   for suffix in $(host_suffixes); do echo "wrap-esm-lambda-$suffix"; done
 }
 
@@ -174,8 +174,9 @@ cmd_publish() {
     npm unpublish "$name" --force --registry "$registry" > /dev/null 2>&1 || true
   done
 
-  echo 'publishing workspace packages ...'
-  (cd "$repo" && pnpm publish -r --force --access public --no-git-checks --filter './packages/*' --registry "$registry")
+  echo 'publishing workspace packages except the compatibility shim ...'
+  (cd "$repo" && pnpm publish -r --force --access public --no-git-checks \
+    --filter './packages/*' --filter '!wrap-esm-lambda' --registry "$registry")
 
   echo 'publishing platform packages ...'
   (cd "$repo" && pnpm exec napi create-npm-dirs > /dev/null)
@@ -217,11 +218,16 @@ cmd_publish() {
   rm -f "$state/$root_pack"
   echo "  @wrap-esm-lambda/engine-oxc"
 
+  # The old package name forwards the root addon, so publish it last.
+  echo 'publishing the compatibility package ...'
+  (cd "$repo" && pnpm --filter wrap-esm-lambda publish --force --access public --no-git-checks --registry "$registry" > /dev/null)
+  echo "  wrap-esm-lambda"
+
   echo
   echo "published to $registry — install into a consumer with:"
   echo
   echo "  rm -rf node_modules package-lock.json"
-  echo "  npm install @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/hooks --registry $registry"
+  echo "  npm install wrap-esm-lambda @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/hooks --registry $registry"
   echo
   echo "the lockfile has to go: a previous install recorded the native package"
   echo "as an absent optional dependency, and npm will not revisit that on its own."
@@ -294,14 +300,16 @@ export function wrapGreet(bindings) {
 }
 EOF
   echo 'installing ...'
-  (cd "$consumer" && npm install @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/core @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin \
+  (cd "$consumer" && npm install wrap-esm-lambda @wrap-esm-lambda/engine-oxc @wrap-esm-lambda/core @wrap-esm-lambda/hooks @wrap-esm-lambda/unplugin \
     --registry "$registry" > /dev/null)
 
   echo 'smoke: native addon through the installed platform package ...'
   (cd "$consumer" && node -e '
-const { exportsTap } = require("@wrap-esm-lambda/engine-oxc")
-if (typeof exportsTap !== "function") throw new Error("native exportsTap missing")
-console.log("  native binding resolves from the registry install")')
+const legacy = require("wrap-esm-lambda")
+const current = require("@wrap-esm-lambda/engine-oxc")
+if (legacy !== current) throw new Error("legacy package did not forward the native module object")
+if (typeof current.exportsTap !== "function") throw new Error("native exportsTap missing")
+console.log("  native binding and compatibility package resolve from the registry install")')
 
   echo 'smoke: runtime hook end to end ...'
   out=$(cd "$consumer" && WRAP_ESM_LAMBDA_ENGINE=oxc WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs \

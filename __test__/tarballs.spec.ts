@@ -53,7 +53,7 @@ const pnpm = await findPnpm()
 // not to re-check packaging.
 const testPacking = pnpm === null ? test.skip : test
 
-const PACKAGES = ['core', 'engine-acorn', 'hooks', 'unplugin'] as const
+const PACKAGES = ['core', 'engine-acorn', 'engine-oxc-compat', 'hooks', 'unplugin'] as const
 /**
  * Third-party runtime deps of the packed packages, and which package declares
  * each: under pnpm's strict layout a dependency lives next to its dependent,
@@ -159,9 +159,12 @@ testPacking('an app installed from the tarballs alone instruments a package', as
     const modules = join(app, 'node_modules')
     await mkdir(join(modules, '@wrap-esm-lambda'), { recursive: true })
 
-    // the packed packages, and nothing else of ours
+    // the packed packages, and nothing else of ours. The compatibility
+    // package deliberately keeps the old unscoped install path.
     for (const [pkg, tgz] of tarballs) {
-      await extract(tgz, join(modules, '@wrap-esm-lambda', pkg))
+      const installRoot =
+        pkg === 'engine-oxc-compat' ? join(modules, 'wrap-esm-lambda') : join(modules, '@wrap-esm-lambda', pkg)
+      await extract(tgz, installRoot)
     }
     // their third-party dependencies, linked from the workspace rather than
     // downloaded — this test is about our own files, not about npm

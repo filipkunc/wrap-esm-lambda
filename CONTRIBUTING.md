@@ -85,7 +85,7 @@ Two departures from a stock verdaccio config are what make this work at all,
 and both are worth knowing if you ever point the flow at a registry of your
 own. Our package names get **proxy-less blocks with `publish: $all`** — the
 default config proxies every pattern to npmjs and requires an authenticated
-user, so publishing `0.3.0` locally collides with whatever `0.3.0` npmjs
+user, so publishing the current version locally collides with the same version npmjs
 already knows about (`EPUBLISHCONFLICT`) and rejects an anonymous token before
 that. And `max_body_size` is raised well past the ~60MB an unstripped
 `build:debug` addon reaches, which the 10mb default refuses with a bare `E413`.
