@@ -36,7 +36,7 @@ and it is what keeps the corpus small enough to run on every push:
   observability patches actually get written for
 
 Deliberate exclusions are documented at the bottom of the manifest
-(express/fastify/hono/smithy live in `__test__/*.spec.ts` one-per-shape;
+(express/fastify/hono/smithy live in `tests/*.spec.ts` one-per-shape;
 Next/Angular are hosts, not tap targets; googleapis-class packages are
 excluded for install weight; native addons have no source to tap).
 
@@ -66,7 +66,7 @@ documented outcome is encoded in the manifest, so the matrix distinguishes
 The corpus itself is TypeScript (`.mts`/`.cts`) running on Node's **native
 type stripping** — no loader, no build step; the runner's Node floor
 (>= 22.22.3, below) is past the 22.18 line where stripping is on by
-default, and `corpus/tsconfig.json` pins `erasableSyntaxOnly` so whatever
+default, and `tests/corpus/tsconfig.json` pins `erasableSyntaxOnly` so whatever
 typechecks is guaranteed runnable by stripping alone. One file is
 deliberate JavaScript: `lib/consumer-require.cjs` (see finding 5).
 
@@ -79,7 +79,7 @@ Shipping the corpus produced seven immediately, which is the point of it:
    hook transformed fails to link its imports (`request for X is from a
 module not been linked`); fixed exactly at the
    [nodejs/node#59929](https://github.com/nodejs/node/pull/59929) boundary
-   (22.22.3 / 24.11.1) the [interplay matrix](../hooks/interplay-matrix)
+   (22.22.3 / 24.11.1) the [interplay matrix](../interplay-matrix)
    pins for the `Module._load` corridors. Reproduced through five real
    packages (nanoid, chalk, p-limit, execa, lodash-es). The runner now
    requires a post-fix Node and says why.
@@ -91,7 +91,7 @@ module not been linked`); fixed exactly at the
    re-exports, namespace re-exports, import-backed list exports) and the
    walk compares providers by transitive origin — same binding resolves,
    genuinely different origins stay a loud refusal naming both origins.
-   Pinned by `__test__/stars-dedup.spec.ts` under both engines; date-fns
+   Pinned by `tests/stars-dedup.spec.ts` under both engines; date-fns
    runs at full surface in the corpus again.
 3. **`export *` from a CJS file as a package's entire import condition** —
    vue's `index.mjs` is one line: `export * from './index.js'` (CJS). A star
@@ -115,7 +115,7 @@ module not been linked`); fixed exactly at the
    under a plain `.cjs` entry works everywhere (which is why
    `lib/fingerprint.cts` is TypeScript and `lib/consumer-require.cjs` is
    not). A candidate scenario for the
-   [interplay matrix](../hooks/interplay-matrix).
+   [interplay matrix](../interplay-matrix).
 6. **Next.js cannot boot under sync-hook instrumentation on Node 22.x** —
    `next/dist/build/next-config-ts/require-hook.js` reads
    `require.extensions['.js']` at module top level (a pirates-style
@@ -185,7 +185,7 @@ is noise). Two headline results from the pinned corpus:
   — parse, per-binding validation and the rewrite tier are where the
   engines genuinely differ, and the biggest rewrite gaps run 4–8× (nanoid,
   execa, chalk, uuid, pg's esm wrapper). Consistent with the ~6× figure in
-  [docs/benchmarks.md](../docs/benchmarks.md): the native edge lives where
+  [docs/benchmarks.md](../../docs/benchmarks.md): the native edge lives where
   parsing lives. The engines converge on the date-fns barrel, whose cost is
   dominated by reading and parsing its 245 star sources rather than by the
   tap itself — but see finding 7 for how much of that row used to be
@@ -206,19 +206,19 @@ is noise). Two headline results from the pinned corpus:
 
 ```sh
 pnpm build && pnpm build:packages   # the addon and the TS packages
-node corpus/run.mts                 # full corpus -> corpus/matrix.md
-node corpus/run.mts zod rxjs        # a subset (prints, does not write)
-WRAP_ESM_LAMBDA_ENGINE=acorn node corpus/run.mts --check # full conformance, preserve matrix.md
-node corpus/bench.mts               # engine shoot-out -> corpus/engines.md
-pnpm exec tsc --noEmit -p corpus/tsconfig.json   # typecheck (stripping does not)
+node tests/corpus/run.mts                 # full corpus -> tests/corpus/matrix.md
+node tests/corpus/run.mts zod rxjs        # a subset (prints, does not write)
+WRAP_ESM_LAMBDA_ENGINE=acorn node tests/corpus/run.mts --check # full conformance, preserve matrix.md
+node tests/corpus/bench.mts               # engine shoot-out -> tests/corpus/engines.md
+pnpm exec tsc --noEmit -p tests/corpus/tsconfig.json   # typecheck (stripping does not)
 ```
 
-Two schedules in CI ([corpus.yml](../.github/workflows/corpus.yml)):
+Two schedules in CI ([corpus.yml](../../.github/workflows/corpus.yml)):
 
 - **pinned** (push/PR): the versions in `pnpm-lock.yaml`, with the complete
   behavioral battery under both OXC and Acorn — deterministic; a red run
   means a transform or engine-parity regression.
-- **nightly latest**: `pnpm --dir corpus up --latest` first — the
+- **nightly latest**: `pnpm --dir tests/corpus up --latest` first — the
   oxc-monitor analog; a red run means the ecosystem moved (a bundler release
   emitting a new exports shape) and the corpus caught it before a user did.
 
@@ -256,7 +256,7 @@ reached only through Next's tree) rather than allowlisted.
 
 ## Extending
 
-Add a dependency to `corpus/package.json`, an entry to `manifest.mts` whose
+Add a dependency to `tests/corpus/package.json`, an entry to `manifest.mts` whose
 `notes` say which shape it claims, and (for instrumentation targets) a
 `probes/<key>.mts` + `probes/<key>.config.mts` + `patches/<key>.mts` trio.
 If the package needs special handling, prefer a manifest knob with a comment

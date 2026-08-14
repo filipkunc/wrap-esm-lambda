@@ -33,5 +33,5 @@ WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs node --import @wrap-esm-lambda/hooks/re
 
 The same config file drives build-time delivery instead — see
 [`@wrap-esm-lambda/unplugin`](../../packages/unplugin) — and
-[`__test__/http-route.spec.ts`](../../__test__/http-route.spec.ts) extends
+[`tests/http-route.spec.ts`](../../tests/http-route.spec.ts) extends
 this exact pattern to fastify and hono.

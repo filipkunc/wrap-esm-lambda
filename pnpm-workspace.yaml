@@ -1,7 +1,7 @@
 packages:
   - 'packages/*'
   - 'examples/*'
-  - 'corpus'
+  - 'tests/corpus'
 
 # Dependencies whose install/postinstall build scripts may run
 # (pnpm blocks dependency build scripts by default).

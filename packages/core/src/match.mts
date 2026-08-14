@@ -76,7 +76,7 @@ export function matchEntries(config: InstrumentConfig, idOrUrl: string): Instrum
  * a core module is created at its first import, which preload precedes.
  * (`Module._load` interception — the classic route to built-ins — only ever
  * covered `require()`: `import` of a builtin has never flowed through it,
- * see hooks/interplay-matrix.) `versionRange` on a builtin entry gates on
+ * see tests/interplay-matrix.) `versionRange` on a builtin entry gates on
  * `process.versions.node`; `files` is meaningless there and rejected loudly.
  */
 /** A patch entry known to target a builtin — `module.name` is always set. */

@@ -78,7 +78,7 @@ patch author contract stays exactly what it is today.
 ## Implementation notes (why this is real work)
 
 - **Engine parity, byte-identical.** Both engines must emit the identical
-  bridge member; this is enforced by `__test__/engine-parity.spec.ts` and is
+  bridge member; this is enforced by `tests/engine-parity.spec.ts` and is
   a `TAP_CONTRACT_VERSION` bump (currently 2). The existing tap snippet is
   appended at module end; this injection lands _inside_ a class body — real
   AST surgery in the Rust rewrite path (`src/transform/rewrite.rs`) and in
@@ -115,7 +115,7 @@ model owns (constructor args, method boundaries, accessors — the setter
 wrapper already decides what gets _stored in_ a private field, and the
 constructor wrapper decides its initial value). The cases that need the
 bridge are privates no public surface exposes. The corpus harness
-(`corpus/`) is the instrument for deciding whether this earns its
+(`tests/corpus/`) is the instrument for deciding whether this earns its
 contract-version bump: survey how often popular packages hide
 instrumentation-relevant state behind privates with no public accessor.
 

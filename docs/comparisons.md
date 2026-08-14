@@ -11,7 +11,7 @@ targets.
 Both tools express the same intent declaratively — a module matcher with a
 semver range plus a description of what to instrument — but differ in what
 the transform does and where user code runs.
-[`__test__/orchestrion-compare.spec.ts`](../__test__/orchestrion-compare.spec.ts)
+[`tests/orchestrion-compare.spec.ts`](../tests/orchestrion-compare.spec.ts)
 runs orchestrion's `{ className: 'Client', methodName: 'send' }` function
 query over the identical `@smithy/core` file and demonstrates the capability
 split: orchestrion rewrites the method body into `tracingChannel` publishes —
@@ -80,7 +80,7 @@ reach is exactly what `Module._load` monkey-patching ever had.
 third mechanism class — a loader proxy (the one OTel and dd-trace use for ESM
 today): it wraps each matched module in a generated facade whose exports are
 settable, and user callbacks patch the namespace at load time.
-[`__test__/iitm-compare.spec.ts`](../__test__/iitm-compare.spec.ts) pins down
+[`tests/iitm-compare.spec.ts`](../tests/iitm-compare.spec.ts) pins down
 the reach difference on the fixture package, in both iitm modes (classic
 off-thread `module.register` and the synchronous `registerHooks` mode of
 iitm 3.x, which needs Node >= 22.22.3 / 24.11.1 / 26):
@@ -96,7 +96,7 @@ Parser and scanner microbenchmarks are intentionally not compared here: an
 `es-module-lexer` scan, a full AST transform, and evaluating a generated
 facade perform different work. Since instrumentation normally transforms a
 matched module once, the honest mechanism comparison is whole-process cold
-start. [`hooks/bench_hooks.sh`](../hooks/bench_hooks.sh) uses Hyperfine for
+start. [`benchmarks/hooks/bench_hooks.sh`](../benchmarks/hooks/bench_hooks.sh) uses Hyperfine for
 that comparison, and CI interleaves base and head commands on the same runner;
 see [benchmarks.md](benchmarks.md).
 

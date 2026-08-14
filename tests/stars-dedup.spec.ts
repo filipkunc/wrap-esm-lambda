@@ -16,7 +16,7 @@ import { applyMatched } from '@wrap-esm-lambda/core'
 // origin.js — while `clash` is two distinct local declarations, the
 // genuinely ambiguous case that must stay a loud refusal. (Found by the
 // corpus: date-fns forwards `longFormatters` through ./format.js and
-// ./parse.js from one _lib module; see corpus/README.md.)
+// ./parse.js from one _lib module; see tests/corpus/README.md.)
 //
 // The native addon is loaded dynamically so this spec also runs on the
 // JS-only fallback lane (no addon built): the acorn legs always run — that

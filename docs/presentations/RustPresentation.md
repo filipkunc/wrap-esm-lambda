@@ -149,7 +149,7 @@ registerHooks({
 To run the hook above use:
 
 ```bash
-node --import ./hooks/sync-hooks-oxc.mjs runtime.mjs
+node --import ../../benchmarks/hooks/sync-hooks-oxc.mjs runtime.mjs
 ```
 
 ---
@@ -208,7 +208,7 @@ Benchmark table via [hyperfine](https://github.com/sharkdp/hyperfine) and `usr/b
 
 ---
 
-![bg contain](hooks/benchChart.svg)
+![bg contain](../../benchmarks/hooks/benchChart.svg)
 
 ---
 

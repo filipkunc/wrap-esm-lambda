@@ -20,7 +20,7 @@ The orchestrion leg is
 [`orchestrion-register.mjs`](orchestrion-register.mjs) —
 `@apm-js-collab/code-transformer` instrumenting the same `@smithy/core`
 `Client#send` the smithy entry taps, no subscriber attached (the
-[hooks bench](../../hooks/benchTable.md) makes the same choice and prices
+[hooks bench](../../benchmarks/hooks/benchTable.md) makes the same choice and prices
 subscribers separately). Both bundle legs were built with
 `WRAP_ESM_LAMBDA_ENGINE=oxc` — the engine exists only at build time for
 the unplugin delivery, and both engines emit byte-identical snippets

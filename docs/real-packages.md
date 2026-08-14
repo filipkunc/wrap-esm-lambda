@@ -5,36 +5,36 @@ per module-system shape. Each section is backed by a spec that runs the real
 package.
 
 (The one-per-shape specs below are the deep end; the wide end is the
-[ecosystem corpus](../corpus) — ~27 popular packages curated by artifact
+[ecosystem corpus](../tests/corpus) — ~27 popular packages curated by artifact
 shape, run through an identity-patch battery on every push and against
-latest versions nightly, results in [corpus/matrix.md](../corpus/matrix.md).)
+latest versions nightly, results in [tests/corpus/matrix.md](../tests/corpus/matrix.md).)
 
 ## Index: the test suite as a recipe book
 
 Each spec runs the real package:
 
-| target                             | what it shows                                                                                                                                                                                                                                       | spec                                                           |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                                                                     | [`aws.spec.ts`](../__test__/aws.spec.ts)                       |
-| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch, and the same config lands through esbuild at build time                                                                                    | [`frameworks.spec.ts`](../__test__/frameworks.spec.ts)         |
-| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself, in both shells                                                                                                                                | [`frameworks.spec.ts`](../__test__/frameworks.spec.ts)         |
-| **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                                                                    | [`frameworks.spec.ts`](../__test__/frameworks.spec.ts)         |
-| **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                                                             | [`http-route.spec.ts`](../__test__/http-route.spec.ts)         |
-| **builtins** (`node:os`)           | eager preload patching at runtime, a resolution-aliased wrapper module at build time — require, default import and named import all observe it either way, single-patched when combined                                                             | [`patch.spec.ts`](../__test__/patch.spec.ts)                   |
-| **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — relative and bare package specifiers alike — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](../__test__/tap-shapes.spec.ts)         |
-| **Lambda handler via `_HANDLER`**  | the generic approach carrying the original problem: the config learns the handler's file and export from the Lambda environment at preload, and the RIC's exact load sequence gets a wrapped handler — ESM rewrite path and CJS property tap alike  | [`lambda-generic.spec.ts`](../__test__/lambda-generic.spec.ts) |
-| **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                                                             | [`hybrid.spec.ts`](../__test__/hybrid.spec.ts)                 |
-| **packaging**                      | instrumentation as one installed npm package (patches + config + register entry): `--import your-apm/register`, package-specifier configs, and the same packaged config bundled at build time                                                       | [`packaging.spec.ts`](../__test__/packaging.spec.ts)           |
-| **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                                                                      | [`patch.spec.ts`](../__test__/patch.spec.ts)                   |
+| target                             | what it shows                                                                                                                                                                                                                                       | spec                                                        |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **AWS SDK** (`@smithy/core`)       | one entry intercepts every `@aws-sdk/client-*` operation via `Client#send` — runtime hook on the SDK's bundled `dist-cjs`, esbuild on its `dist-es`, same patch                                                                                     | [`aws.spec.ts`](../tests/aws.spec.ts)                       |
+| **express** (pure CJS)             | tapping named `module.exports` properties; both `require('express')` and `import express` see the patch, and the same config lands through esbuild at build time                                                                                    | [`frameworks.spec.ts`](../tests/frameworks.spec.ts)         |
+| **fastify** (CJS, callable export) | rebinding the whole export via the reserved `'module.exports'` binding — wrapping the factory itself, in both shells                                                                                                                                | [`frameworks.spec.ts`](../tests/frameworks.spec.ts)         |
+| **hono** (dual package)            | one entry covering both dist trees; _target the defining module, not the barrel_; where rebinding meets bundled-CJS reality and fails loudly instead of silently                                                                                    | [`frameworks.spec.ts`](../tests/frameworks.spec.ts)         |
+| **`http.route` capture**           | the actual APM work: per-request route _templates_ for express/fastify/hono, mirroring each opentelemetry-js-contrib mechanism, delivered declaratively                                                                                             | [`http-route.spec.ts`](../tests/http-route.spec.ts)         |
+| **builtins** (`node:os`)           | eager preload patching at runtime, a resolution-aliased wrapper module at build time — require, default import and named import all observe it either way, single-patched when combined                                                             | [`patch.spec.ts`](../tests/patch.spec.ts)                   |
+| **rewrite shapes**                 | `export const` (the Lambda handler shape), destructured consts, anonymous `export default`, re-export barrels, `export * as ns` and bare `export *` chains — relative and bare package specifiers alike — all rebound, runtime and build mode alike | [`tap-shapes.spec.ts`](../tests/tap-shapes.spec.ts)         |
+| **Lambda handler via `_HANDLER`**  | the generic approach carrying the original problem: the config learns the handler's file and export from the Lambda environment at preload, and the RIC's exact load sequence gets a wrapped handler — ESM rewrite path and CJS property tap alike  | [`lambda-generic.spec.ts`](../tests/lambda-generic.spec.ts) |
+| **hybrid**                         | runtime and build mode produce identical output; the sentinel prevents double-wrapping when both are on                                                                                                                                             | [`hybrid.spec.ts`](../tests/hybrid.spec.ts)                 |
+| **packaging**                      | instrumentation as one installed npm package (patches + config + register entry): `--import your-apm/register`, package-specifier configs, and the same packaged config bundled at build time                                                       | [`packaging.spec.ts`](../tests/packaging.spec.ts)           |
+| **mechanics & footguns**           | emission shapes, loud failures, version gating, patch dependency rules (including the one documented divergence between modes)                                                                                                                      | [`patch.spec.ts`](../tests/patch.spec.ts)                   |
 
 ## The AWS SDK (`@smithy/core`)
 
-[`__test__/aws.spec.ts`](../__test__/aws.spec.ts) proves the tap against the
+[`tests/aws.spec.ts`](../tests/aws.spec.ts) proves the tap against the
 real AWS SDK: every `@aws-sdk/client-*` operation funnels through
 `Client#send` in `@smithy/core`'s client submodule, so a single entry
 intercepts `S3Client`'s `PutObjectCommand` — through the runtime hook on the
 SDK's bundled `dist-cjs` and through esbuild on its `dist-es`, same patch
-code. [`__test__/patch.spec.ts`](../__test__/patch.spec.ts) covers the
+code. [`tests/patch.spec.ts`](../tests/patch.spec.ts) covers the
 mechanics on a fixture package (emission shapes, loud failures, version-range
 gating, CJS getter-only exports, the double-patch guard).
 
@@ -43,7 +43,7 @@ gating, CJS getter-only exports, the double-patch guard).
 The mechanism split people reach for — `Module._load` patching for CJS
 consumers, source transforms for ESM — is not actually needed: the tap
 source-patches both module systems from one declarative entry, and
-[`__test__/frameworks.spec.ts`](../__test__/frameworks.spec.ts) proves it on
+[`tests/frameworks.spec.ts`](../tests/frameworks.spec.ts) proves it on
 the real packages, one per shape:
 
 - **express** (pure CJS, no ESM build): the entry targets `lib/express.js`
@@ -97,11 +97,11 @@ the real packages, one per shape:
 ## The actual work: `http.route`
 
 The toy markers above prove mechanics; the _actual work_ such patches do is
-captured in [`__test__/http-route.spec.ts`](../__test__/http-route.spec.ts):
+captured in [`tests/http-route.spec.ts`](../tests/http-route.spec.ts):
 per-request **`http.route`** — the matched route _template_
 (`/api/users/:id`, never `/users/42`), OTel's hardest-won HTTP semantic
 attribute. Each patch in
-[`patches/http-route.mjs`](../__test__/fixtures/patch/patches/http-route.mjs)
+[`patches/http-route.mjs`](../tests/fixtures/patch/patches/http-route.mjs)
 mirrors the mechanism its opentelemetry-js-contrib counterpart uses,
 delivered declaratively instead of via require-in-the-middle:
 
@@ -120,7 +120,7 @@ delivered declaratively instead of via require-in-the-middle:
 
 Source transforms cannot reach built-ins — `node:http` has no source for a
 load hook or bundler to rewrite — and the classic answer was `Module._load`
-interception. The [interplay matrix](../hooks/interplay-matrix) measures what
+interception. The [interplay matrix](../tests/interplay-matrix) measures what
 that dependence is actually worth: `require('node:http')` through
 `Module._load` survived every rung including the broken window, but
 `import 'node:http'` has **never** flowed through `Module._load` on any

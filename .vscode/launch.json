@@ -21,7 +21,7 @@
       "program": "${file}",
       "runtimeArgs": ["--import", "@oxc-node/core/register", "--test"],
       "env": {
-        "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
+        "OXC_TSCONFIG_PATH": "./tests/tsconfig.json",
         "WRAP_ESM_LAMBDA_ENGINE": "oxc"
       },
       "preLaunchTask": "build:packages",
@@ -39,7 +39,7 @@
       "program": "${file}",
       "runtimeArgs": ["--import", "@oxc-node/core/register", "--test"],
       "env": {
-        "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
+        "OXC_TSCONFIG_PATH": "./tests/tsconfig.json",
         "WRAP_ESM_LAMBDA_ENGINE": "acorn"
       },
       "preLaunchTask": "build:packages",
@@ -64,16 +64,16 @@
       "args": ["--import", "@oxc-node/core/register", "--test", "${file}"],
       "cwd": "${workspaceFolder}",
       "env": {
-        "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json",
+        "OXC_TSCONFIG_PATH": "./tests/tsconfig.json",
         "WRAP_ESM_LAMBDA_ENGINE": "oxc"
       },
       "preLaunchTask": "prepare rust debug",
       "sourceLanguages": ["rust"]
     },
     {
-      // The cold-start bench harness under a debugger: hooks/runtime.mjs (the
+      // The cold-start bench harness under a debugger: benchmarks/hooks/runtime.mjs (the
       // same entry hyperfine times in bench_hooks.sh) with one of the bench's
-      // --import hook entries, picked at launch. cwd is hooks/ so the entry
+      // --import hook entries, picked at launch. cwd is benchmarks/hooks/ so the entry
       // specifiers match the bench script's command lines exactly.
       //
       // The register-tap entries load the compiled workspace packages (hence
@@ -83,9 +83,9 @@
       "name": "Debug hooks bench (pick hook)",
       "type": "node",
       "request": "launch",
-      "program": "${workspaceFolder}/hooks/runtime.mjs",
+      "program": "${workspaceFolder}/benchmarks/hooks/runtime.mjs",
       "runtimeArgs": ["--import", "${input:hookEntry}"],
-      "cwd": "${workspaceFolder}/hooks",
+      "cwd": "${workspaceFolder}/benchmarks/hooks",
       "preLaunchTask": "build:packages",
       "skipFiles": ["<node_internals>/**"],
       "console": "integratedTerminal"
@@ -107,7 +107,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/.vscode/node",
       "args": ["--inspect-brk=9229", "--import", "${input:hookEntry}", "runtime.mjs"],
-      "cwd": "${workspaceFolder}/hooks",
+      "cwd": "${workspaceFolder}/benchmarks/hooks",
       "sourceLanguages": ["rust"]
     },
     {
@@ -118,7 +118,7 @@
       "type": "node",
       "request": "attach",
       "port": 9229,
-      "cwd": "${workspaceFolder}/hooks",
+      "cwd": "${workspaceFolder}/benchmarks/hooks",
       "skipFiles": ["<node_internals>/**", "**/node_modules/@oxc-node/**"]
     }
   ],
@@ -149,7 +149,7 @@
       // debug there that "Debug spec file" does not already cover better).
       "id": "hookEntry",
       "type": "pickString",
-      "description": "Hook entry to --import before hooks/runtime.mjs",
+      "description": "Hook entry to --import before benchmarks/hooks/runtime.mjs",
       "options": [
         "./register-tap-oxc.mjs",
         "./register-tap-acorn.mjs",

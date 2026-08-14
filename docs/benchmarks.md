@@ -6,7 +6,7 @@ not the user-visible headline.
 
 ## Cold start
 
-[`hooks/bench_hooks.sh`](../hooks/bench_hooks.sh) uses
+[`benchmarks/hooks/bench_hooks.sh`](../benchmarks/hooks/bench_hooks.sh) uses
 [`hyperfine`](https://github.com/sharkdp/hyperfine) to launch a fresh Node
 process for every sample. It compares the baseline, a no-op synchronous hook,
 the runtime tap under OXC and Acorn, and neighboring instrumentation
@@ -19,9 +19,9 @@ sudo apt update && sudo apt install -y hyperfine
 cd hooks && ./bench_hooks.sh
 ```
 
-The committed result is [hooks/benchTable.md](../hooks/benchTable.md):
+The committed result is [benchmarks/hooks/benchTable.md](../benchmarks/hooks/benchTable.md):
 
-![Cold start benchmark chart](../hooks/benchChart.svg 'Cold start benchmark chart')
+![Cold start benchmark chart](../benchmarks/hooks/benchChart.svg 'Cold start benchmark chart')
 
 On pull requests, CI builds base and head side by side and interleaves their
 commands in one Hyperfine invocation. This avoids comparing numbers from
@@ -47,7 +47,7 @@ The cases cover:
 Tinybench reports p50, p99, relative margin of error, and sample count. The
 chart uses p50 bars and prints p99 beside them:
 
-![The two engines in detail](../hooks/tapEngineChart.svg 'Production transform latency under OXC and Acorn')
+![The two engines in detail](../benchmarks/hooks/tapEngineChart.svg 'Production transform latency under OXC and Acorn')
 
 ```sh
 pnpm bench        # transform distributions
@@ -61,11 +61,11 @@ investigations when a production case behaves unexpectedly.
 
 ## Real npm packages
 
-The wider engine comparison is [`corpus/bench.mts`](../corpus/bench.mts). It
+The wider engine comparison is [`tests/corpus/bench.mts`](../tests/corpus/bench.mts). It
 runs `applyMatched()` over the statically visible export surfaces of the pinned
 npm corpus, including star graphs and filesystem reads. The companion
 behavioral corpus executes the transformed packages under both engines, so a
-fast result cannot hide broken output. See the [corpus README](../corpus/README.md).
+fast result cannot hide broken output. See the [corpus README](../tests/corpus/README.md).
 
 Transform diagnostics intentionally exclude config loading, package matching,
 Node compilation, and patch execution. Hyperfine cold starts include those

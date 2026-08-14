@@ -9,8 +9,8 @@ umbrella) across a ladder of official Node builds straddling the
 (v22.22.3 / v24.11.1 / v25.1.0):
 
 ```sh
-node hooks/interplay-matrix/run.mjs              # full ladder (linux x64)
-node hooks/interplay-matrix/run.mjs 22.22.2      # explicit versions
+node tests/interplay-matrix/run.mjs              # full ladder (linux x64)
+node tests/interplay-matrix/run.mjs 22.22.2      # explicit versions
 ```
 
 Each scenario is a self-contained script printing one `RESULT:` token; the

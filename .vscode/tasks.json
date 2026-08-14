@@ -89,7 +89,7 @@
       ],
       "options": {
         "env": {
-          "OXC_TSCONFIG_PATH": "./__test__/tsconfig.json"
+          "OXC_TSCONFIG_PATH": "./tests/tsconfig.json"
         }
       },
       "dependsOn": ["build:packages"],

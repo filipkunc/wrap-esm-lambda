@@ -1,4 +1,4 @@
-# The ecosystem corpus (corpus/): popular packages curated by artifact
+# The ecosystem corpus (tests/corpus/): popular packages curated by artifact
 # shape, run through the identity-patch battery on every relevant push/PR at
 # the versions pinned in pnpm-lock.yaml — deterministic, an ordinary red
 # check when a transform regression lands.
@@ -14,7 +14,7 @@ name: Corpus
     branches:
       - main
     paths:
-      - corpus/**
+      - tests/corpus/**
       - packages/**
       - src/**
       - Cargo.toml
@@ -23,7 +23,7 @@ name: Corpus
       - .github/workflows/corpus.yml
   pull_request:
     paths:
-      - corpus/**
+      - tests/corpus/**
       - packages/**
       - src/**
       - Cargo.toml
@@ -86,7 +86,7 @@ jobs:
       - name: Bump corpus to latest (nightly mode)
         if: github.event_name == 'schedule' || inputs.latest == 'latest'
         run: |
-          pnpm --dir corpus up --latest
+          pnpm --dir tests/corpus up --latest
           pnpm install --no-frozen-lockfile
       - name: Build addon
         run: pnpm build
@@ -95,23 +95,23 @@ jobs:
       # the corpus is TypeScript running on Node's native type stripping;
       # stripping does not typecheck, so tsc does, before anything runs
       - name: Typecheck corpus
-        run: pnpm exec tsc --noEmit -p corpus/tsconfig.json
+        run: pnpm exec tsc --noEmit -p tests/corpus/tsconfig.json
       - name: Run corpus (OXC)
         env:
           WRAP_ESM_LAMBDA_ENGINE: oxc
-        run: node corpus/run.mts
+        run: node tests/corpus/run.mts
       # The benchmark compares bytes and speed, but only executing the full
       # battery proves that both engines preserve behavior on real packages.
       # --check keeps the OXC snapshot as the canonical artifact.
       - name: Run corpus (Acorn conformance)
         env:
           WRAP_ESM_LAMBDA_ENGINE: acorn
-        run: node corpus/run.mts --check
+        run: node tests/corpus/run.mts --check
       # the engine shoot-out doubles as the widest append-tier byte-parity
       # check available (asserted per entry); CI timings are informational —
       # runner noise is why the bench reports minimums
       - name: Engine bench (byte-parity + timings)
-        run: node corpus/bench.mts
+        run: node tests/corpus/bench.mts
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -119,9 +119,9 @@ jobs:
           name: corpus-results
           # the chart belongs here too: a job summary cannot inline a
           # relative image, so the summary copy of the bench report points
-          # readers at this artifact for it (see corpus/lib/publish.mts)
+          # readers at this artifact for it (see tests/corpus/lib/publish.mts)
           path: |
-            corpus/matrix.md
-            corpus/engines.md
-            corpus/engines.svg
+            tests/corpus/matrix.md
+            tests/corpus/engines.md
+            tests/corpus/engines.svg
           if-no-files-found: ignore

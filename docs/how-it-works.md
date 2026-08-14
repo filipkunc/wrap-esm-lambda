@@ -113,7 +113,7 @@ targets):
 
 The exports tap patches both module systems from one declarative entry, works
 at build time too, and never touches `Module._load` — the
-[interplay matrix](../hooks/interplay-matrix) shows it behaving identically on
+[interplay matrix](../tests/interplay-matrix) shows it behaving identically on
 every Node 22/24/26 rung, including the minors where sync hooks and
 `Module._load` miscomposed.
 
@@ -132,7 +132,7 @@ without leaving the addon ([source-maps.md](source-maps.md)). The research
 that got here — the wrap re-implemented with [Babel](https://babeljs.io/),
 [Acorn](https://github.com/acornjs/acorn), [swc.rs](https://swc.rs/) and
 loader hooks of every flavor — lives in [history.md](history.md) and the
-[presentations](../Presentation.md); today's benchmark compares the tap
+[presentations](presentations/Presentation.md); today's benchmark compares the tap
 against [orchestrion-js](https://github.com/nodejs/orchestrion-js) and
 [import-in-the-middle](https://github.com/nodejs/import-in-the-middle) on a
 real AWS SDK module ([benchmarks.md](benchmarks.md)).

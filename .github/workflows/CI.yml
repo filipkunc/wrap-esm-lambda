@@ -101,7 +101,7 @@ jobs:
       # the specs are TypeScript too, and nothing else checks them: the runner
       # they execute under strips types without looking at them
       - name: Typecheck specs
-        run: pnpm exec tsc --noEmit -p __test__/tsconfig.json
+        run: pnpm exec tsc --noEmit -p tests/tsconfig.json
       # formatting is checked, not fixed, in CI: `pnpm format` is the local fix
       - name: Prettier
         run: pnpm exec prettier --check .
@@ -327,26 +327,26 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: /tmp/wrap-esm-lambda-node-matrix
-          key: node-interplay-${{ hashFiles('hooks/interplay-matrix/run.mjs') }}
+          key: node-interplay-${{ hashFiles('tests/interplay-matrix/run.mjs') }}
       # This is deliberately an exact-minor ladder, not setup-node's moving
       # 22/24/26 aliases. It brackets known Node loader regressions and their
       # fix releases, then runs the real native hook on every rung.
       - name: Run exact-minor interplay matrix
-        run: node hooks/interplay-matrix/run.mjs
+        run: node tests/interplay-matrix/run.mjs
       - name: Assert behavior matches the reviewed snapshot
-        run: git diff --exit-code -- hooks/interplay-matrix/matrix.md
+        run: git diff --exit-code -- tests/interplay-matrix/matrix.md
       - name: Publish compatibility matrix
         if: always()
         run: |
           echo '## Node exact-minor compatibility' >> "$GITHUB_STEP_SUMMARY"
           echo >> "$GITHUB_STEP_SUMMARY"
-          cat hooks/interplay-matrix/matrix.md >> "$GITHUB_STEP_SUMMARY"
+          cat tests/interplay-matrix/matrix.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload compatibility matrix
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: node-interplay-matrix
-          path: hooks/interplay-matrix/matrix.md
+          path: tests/interplay-matrix/matrix.md
           if-no-files-found: error
   test-linux-binding:
     name: Test ${{ matrix.target }} - node@${{ matrix.node }}
@@ -457,8 +457,8 @@ jobs:
             -w "${{ github.workspace }}" \
             --platform ${{ steps.docker.outputs.PLATFORM }} \
             "${{ steps.docker.outputs.IMAGE }}" sh -eu -c '
-              WRAP_ESM_LAMBDA_ENGINE=oxc OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
-              WRAP_ESM_LAMBDA_ENGINE=acorn OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+              WRAP_ESM_LAMBDA_ENGINE=oxc OXC_TSCONFIG_PATH=./tests/tsconfig.json node --import @oxc-node/core/register --test "tests/*.spec.ts"
+              WRAP_ESM_LAMBDA_ENGINE=acorn OXC_TSCONFIG_PATH=./tests/tsconfig.json node --import @oxc-node/core/register --test "tests/*.spec.ts"
             '
   test-lambda-runtime:
     name: Test lambda/nodejs:${{ matrix.runtime }} - ${{ matrix.target }}
@@ -560,15 +560,15 @@ jobs:
             --platform ${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }} \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
             -w "$GITHUB_WORKSPACE" \
-            -e OXC_TSCONFIG_PATH=./__test__/tsconfig.json \
-            -e WRAP_ESM_LAMBDA_CONFIG="$GITHUB_WORKSPACE/__test__/fixtures/patch/wrap.config.mjs" \
+            -e OXC_TSCONFIG_PATH=./tests/tsconfig.json \
+            -e WRAP_ESM_LAMBDA_CONFIG="$GITHUB_WORKSPACE/tests/fixtures/patch/wrap.config.mjs" \
             "public.ecr.aws/lambda/nodejs:${{ matrix.runtime }}" -eu -c '
               node --version
               # the suite, both engines, engine named explicitly for the same
               # reason as every other lane: an implicit run turns a native
               # artifact that will not load into a green acorn run
-              WRAP_ESM_LAMBDA_ENGINE=oxc node --import @oxc-node/core/register --test "__test__/*.spec.ts"
-              WRAP_ESM_LAMBDA_ENGINE=acorn node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+              WRAP_ESM_LAMBDA_ENGINE=oxc node --import @oxc-node/core/register --test "tests/*.spec.ts"
+              WRAP_ESM_LAMBDA_ENGINE=acorn node --import @oxc-node/core/register --test "tests/*.spec.ts"
               # The delivery shape, cheap and deterministic: hook via
               # NODE_OPTIONS, handler loaded late by an ESM main. This is the
               # same stand-in the 11-version interplay matrix runs, so a
@@ -577,7 +577,7 @@ jobs:
               for app in app.mjs app.cjs; do
                 out=$(WRAP_ESM_LAMBDA_ENGINE=oxc \
                   NODE_OPTIONS="--import @wrap-esm-lambda/hooks/register" \
-                  node hooks/interplay-matrix/fixtures/bootstrap-sim.mjs "__test__/fixtures/patch/$app")
+                  node tests/interplay-matrix/fixtures/bootstrap-sim.mjs "tests/fixtures/patch/$app")
                 if [ "$out" != "patched:sent:hello" ]; then
                   echo "NODE_OPTIONS delivery failed for $app: expected patched:sent:hello, got: $out"
                   exit 1
@@ -599,7 +599,7 @@ jobs:
       - name: Invoke a handler through the real runtime interface client
         run: |
           set -euo pipefail
-          fixture="$GITHUB_WORKSPACE/__test__/fixtures/patch"
+          fixture="$GITHUB_WORKSPACE/tests/fixtures/patch"
           docker run -d --name ric-lane \
             --platform ${{ contains(matrix.target, 'aarch64') && 'linux/arm64' || 'linux/amd64' }} \
             -p 9000:8080 \
@@ -642,7 +642,7 @@ jobs:
       - name: Invoke through the real RIC with the _HANDLER-derived generic config
         run: |
           set -euo pipefail
-          fixture="$GITHUB_WORKSPACE/__test__/fixtures/lambda-generic"
+          fixture="$GITHUB_WORKSPACE/tests/fixtures/lambda-generic"
           invoke() {
             handler="$1"
             port="$2"
@@ -809,15 +809,15 @@ jobs:
       # env: rather than an inline assignment — the default shell here is pwsh
       # on Windows, where `VAR=value cmd` is not a thing
       - name: Test bindings (native engine)
-        run: node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+        run: node --import @oxc-node/core/register --test "tests/*.spec.ts"
         env:
           WRAP_ESM_LAMBDA_ENGINE: oxc
-          OXC_TSCONFIG_PATH: ./__test__/tsconfig.json
+          OXC_TSCONFIG_PATH: ./tests/tsconfig.json
       - name: Test bindings (acorn engine)
-        run: node --import @oxc-node/core/register --test "__test__/*.spec.ts"
+        run: node --import @oxc-node/core/register --test "tests/*.spec.ts"
         env:
           WRAP_ESM_LAMBDA_ENGINE: acorn
-          OXC_TSCONFIG_PATH: ./__test__/tsconfig.json
+          OXC_TSCONFIG_PATH: ./tests/tsconfig.json
   test-wasi:
     name: Test WASI target - node@${{ matrix.node }}
     needs:
@@ -951,9 +951,9 @@ jobs:
         # (`../index`) or pin WRAP_ESM_LAMBDA_ENGINE=oxc in a child process —
         # both are native-by-construction and covered by test-linux-binding.
         run: |
-          SPECS=$(ls __test__/*.spec.ts | grep -vE 'index\.spec|orchestrion-compare|patch\.spec|engine-parity|bundlers|comment-preservation')
+          SPECS=$(ls tests/*.spec.ts | grep -vE 'index\.spec|orchestrion-compare|patch\.spec|engine-parity|bundlers|comment-preservation')
           echo "$SPECS"
-          OXC_TSCONFIG_PATH=./__test__/tsconfig.json node --import @oxc-node/core/register --test $SPECS
+          OXC_TSCONFIG_PATH=./tests/tsconfig.json node --import @oxc-node/core/register --test $SPECS
         shell: bash
   test-azure-functions:
     name: Test Azure Functions (Core Tools) - node@${{ matrix.node }}
@@ -1070,8 +1070,8 @@ jobs:
       - name: Benchmark (main)
         if: github.event_name == 'push'
         run: |
-          cd hooks && ./bench_hooks.sh && cd ..
-          cat hooks/benchTable.md >> $GITHUB_STEP_SUMMARY
+          cd benchmarks/hooks && ./bench_hooks.sh && cd ../..
+          cat benchmarks/hooks/benchTable.md >> $GITHUB_STEP_SUMMARY
           # The transform-latency table too, so every case in
           # production applyMatched cases leave a per-commit trail on main,
           # not only the
@@ -1088,24 +1088,26 @@ jobs:
         run: |
           set -euo pipefail
           # Cold start, base and head interleaved in ONE hyperfine run. The
-          # command set mirrors hooks/bench_hooks.sh; if the base commit
+          # command set mirrors benchmarks/hooks/bench_hooks.sh; if the base commit
           # predates this harness, fall back to a head-only run.
-          if [ -f base/hooks/register-tap-oxc.mjs ]; then
+          base_hooks=base/benchmarks/hooks
+          [ -f "$base_hooks/register-tap-oxc.mjs" ] || base_hooks=base/hooks
+          if [ -f "$base_hooks/register-tap-oxc.mjs" ]; then
             hyperfine --warmup 5 --export-markdown coldCompare.md \
-              -n 'base: baseline' 'cd base/hooks && node runtime.mjs' \
-              -n 'head: baseline' 'cd hooks && node runtime.mjs' \
-              -n 'base: noop hook' 'cd base/hooks && node --import ./sync-hooks-noop.mjs runtime.mjs' \
-              -n 'head: noop hook' 'cd hooks && node --import ./sync-hooks-noop.mjs runtime.mjs' \
-              -n 'base: tap oxc' 'cd base/hooks && node --import ./register-tap-oxc.mjs runtime.mjs' \
-              -n 'head: tap oxc' 'cd hooks && node --import ./register-tap-oxc.mjs runtime.mjs' \
-              -n 'base: tap acorn' 'cd base/hooks && node --import ./register-tap-acorn.mjs runtime.mjs' \
-              -n 'head: tap acorn' 'cd hooks && node --import ./register-tap-acorn.mjs runtime.mjs'
+              -n 'base: baseline' "cd $base_hooks && node runtime.mjs" \
+              -n 'head: baseline' 'cd benchmarks/hooks && node runtime.mjs' \
+              -n 'base: noop hook' "cd $base_hooks && node --import ./sync-hooks-noop.mjs runtime.mjs" \
+              -n 'head: noop hook' 'cd benchmarks/hooks && node --import ./sync-hooks-noop.mjs runtime.mjs' \
+              -n 'base: tap oxc' "cd $base_hooks && node --import ./register-tap-oxc.mjs runtime.mjs" \
+              -n 'head: tap oxc' 'cd benchmarks/hooks && node --import ./register-tap-oxc.mjs runtime.mjs' \
+              -n 'base: tap acorn' "cd $base_hooks && node --import ./register-tap-acorn.mjs runtime.mjs" \
+              -n 'head: tap acorn' 'cd benchmarks/hooks && node --import ./register-tap-acorn.mjs runtime.mjs'
           else
             echo '_base commit predates the cold-start harness — head only:_' > coldCompare.md
             hyperfine --warmup 5 --export-markdown /dev/stdout \
-              -n 'head: baseline' 'cd hooks && node runtime.mjs' \
-              -n 'head: tap oxc' 'cd hooks && node --import ./register-tap-oxc.mjs runtime.mjs' \
-              -n 'head: tap acorn' 'cd hooks && node --import ./register-tap-acorn.mjs runtime.mjs' >> coldCompare.md
+              -n 'head: baseline' 'cd benchmarks/hooks && node runtime.mjs' \
+              -n 'head: tap oxc' 'cd benchmarks/hooks && node --import ./register-tap-oxc.mjs runtime.mjs' \
+              -n 'head: tap acorn' 'cd benchmarks/hooks && node --import ./register-tap-acorn.mjs runtime.mjs' >> coldCompare.md
           fi
           {
             echo '## Cold start — base vs head (same runner, interleaved)'
@@ -1120,7 +1122,7 @@ jobs:
             pnpm --silent bench
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ -f base/benchmark/bench.ts ]; then
+          if [ -f base/benchmarks/transform/bench.ts ] || [ -f base/benchmark/bench.ts ]; then
             {
               echo ''
               echo '## Transform latency — base'
@@ -1143,9 +1145,9 @@ jobs:
           set -euo pipefail
           pnpm --silent bench:chart > /dev/null
           mkdir -p bench-charts
-          cp hooks/tapEngineChart.svg bench-charts/
+          cp benchmarks/hooks/tapEngineChart.svg bench-charts/
           if [ "${{ github.event_name }}" = "push" ]; then
-            cp hooks/benchChart.svg bench-charts/
+            cp benchmarks/hooks/benchChart.svg bench-charts/
           fi
           {
             echo ''
@@ -1243,7 +1245,7 @@ jobs:
         # `pnpm publish -r --dry-run` resolves the workspace: protocol, runs each
         # prepack, and reports exactly what would go up — without contacting the
         # registry. The tarball contents themselves are asserted by
-        # __test__/tarballs.spec.ts, which every test lane runs.
+        # tests/tarballs.spec.ts, which every test lane runs.
         # --filter './packages/*': `-r` alone includes the workspace ROOT, and
         # the root is the addon, which publishes through `npm publish` +
         # `napi prepublish` below. Without the filter the addon would be
@@ -1358,7 +1360,7 @@ jobs:
             echo ''
             echo '## Cold start (hyperfine, committed table)'
             echo ''
-            cat hooks/benchTable.md
+            cat benchmarks/hooks/benchTable.md
           } >> release-body.md
           # The charts, VISIBLE on the release page rather than only linked
           # as assets: embedded via raw URLs pinned to this tag, so every
@@ -1369,8 +1371,8 @@ jobs:
             echo '## Charts'
             echo ''
             for chart in \
-              hooks/tapEngineChart.svg \
-              hooks/benchChart.svg \
+              benchmarks/hooks/tapEngineChart.svg \
+              benchmarks/hooks/benchChart.svg \
               examples/hono-lambda/coldStartChart.svg; do
               [ -f "$chart" ] || continue
               echo "![${chart}](https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/${chart})"
@@ -1386,8 +1388,8 @@ jobs:
           files: |
             ${{ env.APP_NAME }}.*.node
             ${{ env.APP_NAME }}.*.wasm
-            hooks/benchChart.svg
-            hooks/tapEngineChart.svg
+            benchmarks/hooks/benchChart.svg
+            benchmarks/hooks/tapEngineChart.svg
             examples/hono-lambda/coldStartChart.svg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

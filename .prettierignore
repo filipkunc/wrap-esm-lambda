@@ -15,14 +15,14 @@ wasi-worker.mjs
 .yarnrc.yml
 # Source-map demo fixture: the blank lines are load-bearing (they are what
 # codegen strips to shift the throw's line), so prettier must not touch them.
-hooks/sourcemap-demo/handler-throws.mjs
+benchmarks/hooks/sourcemap-demo/handler-throws.mjs
 # Generated tables: update-bench-table.mjs and interplay-matrix/run.mjs write
 # these, so reformatting them here just means the next run undoes it.
-hooks/benchTable.md
-hooks/interplay-matrix/matrix.md
+benchmarks/hooks/benchTable.md
+tests/interplay-matrix/matrix.md
 # Corpus scratch output (gitignored) and the generated corpus results table —
-# corpus/run.mjs writes matrix.md, so reformatting it means the next run
+# tests/corpus/run.mjs writes matrix.md, so reformatting it means the next run
 # undoes it.
-corpus/.scratch
-corpus/matrix.md
-corpus/engines.md
+tests/corpus/.scratch
+tests/corpus/matrix.md
+tests/corpus/engines.md
