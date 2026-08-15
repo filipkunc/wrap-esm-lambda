@@ -59,8 +59,12 @@ The transform adds a small call at the end of a matched module's evaluation:
 
 ```js
 patchClient({
-  get Client() { return Client },
-  set Client(value) { Client = value },
+  get Client() {
+    return Client
+  },
+  set Client(value) {
+    Client = value
+  },
 })
 ```
 
@@ -72,12 +76,12 @@ for every consumer.
 
 # Most modules take the append-only fast path
 
-| Export shape | Transform |
-| --- | --- |
-| Mutable local — function, class, `let`, `var` | Append the tap only |
-| `export const` or anonymous default | Rewrite into a rebindable local |
-| Re-export or `export *` chain | Resolve the provider, then expose a local |
-| CommonJS with a top-level `return` | Use an evaluation wrap, then tap |
+| Export shape                                  | Transform                                 |
+| --------------------------------------------- | ----------------------------------------- |
+| Mutable local — function, class, `let`, `var` | Append the tap only                       |
+| `export const` or anonymous default           | Rewrite into a rebindable local           |
+| Re-export or `export *` chain                 | Resolve the provider, then expose a local |
+| CommonJS with a top-level `return`            | Use an evaluation wrap, then tap          |
 
 Requested bindings are validated first. A missing or ambiguous export is a
 version-drift signal, not a silent no-op.
@@ -105,13 +109,13 @@ so no runtime hook is required.
 
 # The tap closes gaps left by neighboring mechanisms
 
-| Capability | `Module._load` patch | Loader proxy | Exports tap |
-| --- | ---: | ---: | ---: |
-| ESM `import` | Partial | Yes | Yes |
-| Pure `require()` chain | Yes | No | Yes |
-| Rebind exported API | Yes | Yes | Yes |
-| Reach non-exported internals | No | No | No |
-| Build-time delivery | No | No | Yes |
+| Capability                   | `Module._load` patch | Loader proxy | Exports tap |
+| ---------------------------- | -------------------: | -----------: | ----------: |
+| ESM `import`                 |              Partial |          Yes |         Yes |
+| Pure `require()` chain       |                  Yes |           No |         Yes |
+| Rebind exported API          |                  Yes |          Yes |         Yes |
+| Reach non-exported internals |                   No |           No |          No |
+| Build-time delivery          |                   No |           No |         Yes |
 
 Body-rewriting transforms can reach non-exported internals, but solve a
 different problem and perform substantially more work per matched module.
