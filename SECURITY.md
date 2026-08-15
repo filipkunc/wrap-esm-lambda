@@ -29,7 +29,7 @@ waiting for the next commit.
 | CodeQL (JS/TS)           | Opens a code scanning alert                            |
 
 Findings are reported three ways: as check-run annotations on the run itself
-(anchored to the offending `pnpm-lock.yaml` / `Cargo.lock` line, so they render
+(anchored to the offending `pnpm-lock.yaml` / `packages/engine-oxc/Cargo.lock` line, so they render
 inline on a pull request's diff), as a table in the job summary, and as code
 scanning alerts, which is the only one of the three that survives the run and
 can be dismissed with a reason.

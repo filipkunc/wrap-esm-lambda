@@ -16,10 +16,7 @@ name: Corpus
     paths:
       - tests/corpus/**
       - packages/**
-      - src/**
-      - Cargo.toml
-      - Cargo.lock
-      - build.rs
+      - packages/engine-oxc/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -29,10 +26,7 @@ name: Corpus
     paths:
       - tests/corpus/**
       - packages/**
-      - src/**
-      - Cargo.toml
-      - Cargo.lock
-      - build.rs
+      - packages/engine-oxc/**
       - package.json
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
@@ -58,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      # outranks rust-toolchain.toml (the local-machine MSRV pin), keeping
+      # outranks packages/engine-oxc/rust-toolchain.toml (the local-machine MSRV pin), keeping
       # this job on the stable the toolchain action installs — same as CI.yml
       RUSTUP_TOOLCHAIN: stable
     steps:
@@ -86,8 +80,8 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
-          key: corpus-cargo-${{ hashFiles('Cargo.lock') }}
+            packages/engine-oxc/target/
+          key: corpus-cargo-${{ hashFiles('packages/engine-oxc/Cargo.lock') }}
           restore-keys: corpus-cargo-
       - name: Install
         run: pnpm install --frozen-lockfile

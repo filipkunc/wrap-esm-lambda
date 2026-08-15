@@ -16,11 +16,11 @@ export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 pnpm install
 
-# rust-toolchain.toml pins the MSRV. Install it explicitly up front: the
+# packages/engine-oxc/rust-toolchain.toml pins the MSRV. Install it explicitly up front: the
 # container may ship an older stable (one that fails the `rust-version`
 # floor), and paying the toolchain download inside `pnpm build` would make
 # a build failure out of what is really a setup step.
-rustup toolchain install
+(cd packages/engine-oxc && rustup toolchain install)
 
 # The README's "required once after cloning" steps: the release addon plus
 # the generated index.js/index.d.ts glue (gitignored, so a fresh clone has

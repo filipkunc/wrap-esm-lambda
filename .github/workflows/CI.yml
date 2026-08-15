@@ -4,7 +4,7 @@ env:
   APP_NAME: wrap-esm-lambda
   MACOSX_DEPLOYMENT_TARGET: '10.13'
   CARGO_INCREMENTAL: '1'
-  # Outranks the repo's rust-toolchain.toml (which pins local machines to the
+  # Outranks packages/engine-oxc/rust-toolchain.toml (which pins local machines to the
   # MSRV, see the comment there), so every cargo here keeps floating on the
   # stable the dtolnay action installs. The msrv job overrides this with the
   # floor it exists to check.
@@ -71,15 +71,18 @@ jobs:
         run: pnpm lint
       - name: Cargo fmt
         run: cargo fmt -- --check
+        working-directory: packages/engine-oxc
       # A gate, not a report: without -D warnings this job passed with warnings
       # nobody read. The crate carries no lint-level carve-outs, so a warning
       # anywhere — a new deprecation included — fails this job.
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+        working-directory: packages/engine-oxc
       - name: Test
         run: cargo test
+        working-directory: packages/engine-oxc
       # index.d.ts is gitignored and napi only emits it as part of a build, so
-      # the typecheck below cannot resolve `../index` without one. This job
+      # the typecheck below cannot resolve the native engine package without one. This job
       # builds its own rather than waiting on the `build` matrix: it is the
       # fast-fail gate, and making it depend on cross-compiled targets would
       # cost minutes of first feedback.
@@ -110,10 +113,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # keep in step with `rust-version` in Cargo.toml and rust-toolchain.toml;
+      # keep in step with `rust-version` in packages/engine-oxc/Cargo.toml and
+      # packages/engine-oxc/rust-toolchain.toml;
       # overrides the workflow-level `stable` so this job checks the floor
       RUSTUP_TOOLCHAIN: '1.95'
-    # `rust-version = "1.95"` in Cargo.toml is a promise to contributors, and
+    # `rust-version = "1.95"` in packages/engine-oxc/Cargo.toml is a promise to contributors, and
     # until now nothing kept it: every other Rust job floats on stable, so a
     # dependency raising the real floor would surface as somebody's build
     # breaking rather than as a red check. This job is that check. It is
@@ -129,10 +133,10 @@ jobs:
       - name: Install the declared floor
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
-          # keep in step with `rust-version` in Cargo.toml
+          # keep in step with `rust-version` in packages/engine-oxc/Cargo.toml
           toolchain: '1.95'
       - name: Cargo check on 1.95
-        run: cargo check --all-targets --locked
+        run: cargo check --manifest-path packages/engine-oxc/Cargo.toml --all-targets --locked
   # Lives in its own file so the same definition can also run on a nightly
   # schedule — an advisory published against a dependency nobody touched needs
   # to surface without waiting for the next push. `publish` still gates on it
@@ -214,7 +218,7 @@ jobs:
             ~/.cargo/git/db/
             ~/.napi-rs
             .cargo-cache
-            target/
+            packages/engine-oxc/target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
       # Zig is the linker for the musl cross-builds, and it comes from PyPI
       # rather than from a setup action. That is the path cargo-zigbuild
@@ -268,8 +272,8 @@ jobs:
         with:
           name: bindings-${{ matrix.settings.target }}
           path: |
-            ${{ env.APP_NAME }}.*.node
-            ${{ env.APP_NAME }}.*.wasm
+            packages/engine-oxc/${{ env.APP_NAME }}.*.node
+            packages/engine-oxc/${{ env.APP_NAME }}.*.wasm
           if-no-files-found: error
       # The JS loader, its types, and the wasi glue. These are gitignored, so
       # every job that resolves the package needs them from here — including
@@ -286,13 +290,13 @@ jobs:
         with:
           name: binding-glue
           path: |
-            index.js
-            index.d.ts
-            browser.js
-            wasi-worker.mjs
-            wasi-worker-browser.mjs
-            ${{ env.APP_NAME }}.wasi.cjs
-            ${{ env.APP_NAME }}.wasi-browser.js
+            packages/engine-oxc/index.js
+            packages/engine-oxc/index.d.ts
+            packages/engine-oxc/browser.js
+            packages/engine-oxc/wasi-worker.mjs
+            packages/engine-oxc/wasi-worker-browser.mjs
+            packages/engine-oxc/${{ env.APP_NAME }}.wasi.cjs
+            packages/engine-oxc/${{ env.APP_NAME }}.wasi-browser.js
           if-no-files-found: error
   node-interplay:
     name: Node exact-minor compatibility
@@ -317,12 +321,12 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bindings-x86_64-unknown-linux-gnu
-          path: .
+          path: packages/engine-oxc
       - name: Download generated JS glue
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: binding-glue
-          path: .
+          path: packages/engine-oxc
       - name: Cache exact Node releases
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
@@ -425,14 +429,14 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bindings-${{ matrix.target }}
-          path: .
+          path: packages/engine-oxc
       # gitignored, so a checkout does not have them — the .node above is
       # unreachable without the loader that resolves it
       - name: Download the generated JS glue
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: binding-glue
-          path: .
+          path: packages/engine-oxc
       - name: List packages
         run: ls -R .
         shell: bash
@@ -512,13 +516,13 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bindings-${{ matrix.target }}
-          path: .
+          path: packages/engine-oxc
       # gitignored — see the binding lane above
       - name: Download the generated JS glue
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: binding-glue
-          path: .
+          path: packages/engine-oxc
       - name: List packages
         run: ls -R .
         shell: bash
@@ -795,14 +799,14 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: .
+          path: packages/engine-oxc
       # gitignored — see the binding lane above. Runs on macOS and Windows too;
       # the artifact is plain text files, so there is nothing host-specific.
       - name: Download the generated JS glue
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: binding-glue
-          path: .
+          path: packages/engine-oxc
       - name: List packages
         run: ls -R .
         shell: bash
@@ -852,7 +856,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: bindings-wasm32-wasip1-threads
-          path: .
+          path: packages/engine-oxc
       # gitignored, and this lane needs more of the set than the others: the
       # assertion below resolves wrap-esm-lambda.wasi.cjs by name, not just
       # index.js. Both come from the same artifact.
@@ -860,7 +864,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: binding-glue
-          path: .
+          path: packages/engine-oxc
       - name: List packages
         run: ls -R .
         shell: bash
@@ -889,8 +893,8 @@ jobs:
       - name: Prove the WASI binding is the one under test
         run: |
           node -e "
-            require('./index.js')
-            if (!(require.resolve('./wrap-esm-lambda.wasi.cjs') in require.cache)) {
+            require('./packages/engine-oxc/index.js')
+            if (!(require.resolve('./packages/engine-oxc/wrap-esm-lambda.wasi.cjs') in require.cache)) {
               console.error('index.js did not load the wasi binding — this lane is testing something else')
               process.exit(1)
             }
@@ -945,10 +949,10 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: binding-glue
-          path: .
+          path: packages/engine-oxc
       - name: Test with no native binding present
         # The excluded specs are the ones that reach for the addon directly
-        # (`../index`) or pin WRAP_ESM_LAMBDA_ENGINE=oxc in a child process —
+        # or pin WRAP_ESM_LAMBDA_ENGINE=oxc in a child process —
         # both are native-by-construction and covered by test-linux-binding.
         run: |
           SPECS=$(ls tests/*.spec.ts | grep -vE 'index\.spec|orchestrion-compare|patch\.spec|engine-parity|bundlers|comment-preservation')
@@ -1215,18 +1219,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install
       - name: create npm dirs
-        run: pnpm exec napi create-npm-dirs
+        run: pnpm --dir packages/engine-oxc exec napi create-npm-dirs
       - name: Download all artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          path: artifacts
+          path: packages/engine-oxc/artifacts
       # index.js and index.d.ts are this package's `main` and its types — both
       # named in package.json "files" — and this job does not build, so without
       # this step the tarball would go up without an entry point.
       #
       # A second copy lands under artifacts/binding-glue/ from the step above;
       # `napi artifacts` only looks for .node/.wasm, so it ignores it. This
-      # download is what puts them at the repo root where "files" resolves.
+      # download is what puts them in the addon package where "files" resolves.
       #
       # Building here instead was the alternative and is worse: it would ship a
       # loader that no test lane ever exercised. This way the exact bytes the
@@ -1235,30 +1239,27 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: binding-glue
-          path: .
+          path: packages/engine-oxc
       - name: Move artifacts
         run: pnpm run artifacts
       - name: List packages
-        run: ls -R ./npm
+        run: ls -R packages/engine-oxc/npm
         shell: bash
       - name: Pack the workspace packages
         # `pnpm publish -r --dry-run` resolves the workspace: protocol, runs each
         # prepack, and reports exactly what would go up — without contacting the
         # registry. The tarball contents themselves are asserted by
         # tests/tarballs.spec.ts, which every test lane runs.
-        # --filter './packages/*': `-r` alone includes the workspace ROOT, and
-        # the root is the addon, which publishes through `npm publish` +
-        # `napi prepublish` below. Without the filter the addon would be
-        # attempted twice and the second attempt would fail on an existing
-        # version.
-        run: pnpm publish -r --dry-run --no-git-checks --filter './packages/*'
+        # The native addon is skipped here because its napi prepublish flow is
+        # validated separately below after all platform artifacts are assembled.
+        run: pnpm publish -r --dry-run --no-git-checks --filter './packages/*' --filter '!@wrap-esm-lambda/engine-oxc'
       - name: Prepublish the addon (dry run)
         # Contrary to what this step's comment used to claim, --dry-run does
         # NOT touch package.json: in the napi CLI the optionalDependencies
         # injection sits behind `if (!dryRun)` alongside the actual publish.
         # This step validates the flow; the injection a preview needs happens
         # in the next step.
-        run: pnpm exec napi prepublish -t npm --dry-run
+        run: pnpm --dir packages/engine-oxc exec napi prepublish -t npm --dry-run
       - name: Inject platform optionalDependencies for the preview
         # The step a real `napi prepublish` performs and the dry-run above
         # skips: write the per-platform packages into the addon's
@@ -1275,17 +1276,19 @@ jobs:
         run: |
           node -e '
             const fs = require("fs")
-            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"))
+            const root = "packages/engine-oxc"
+            const manifest = `${root}/package.json`
+            const pkg = JSON.parse(fs.readFileSync(manifest, "utf8"))
             pkg.optionalDependencies = Object.fromEntries(
               fs
-                .readdirSync("npm")
+                .readdirSync(`${root}/npm`)
                 .sort()
                 .map((dir) => {
-                  const p = JSON.parse(fs.readFileSync(`npm/${dir}/package.json`, "utf8"))
+                  const p = JSON.parse(fs.readFileSync(`${root}/npm/${dir}/package.json`, "utf8"))
                   return [p.name, p.version]
                 }),
             )
-            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\n")
+            fs.writeFileSync(manifest, JSON.stringify(pkg, null, 2) + "\n")
             console.log("injected:", Object.keys(pkg.optionalDependencies).join(", "))
           '
       - name: Publish preview (pkg.pr.new)
@@ -1311,7 +1314,7 @@ jobs:
         # frozen-lockfile in CI, so it hard-fails instead. Only the outer
         # exec needs the flag: `pnpm pack`, which pkg-pr-new spawns per
         # package, does not run that check (verified against pnpm 11.20).
-        run: pnpm --config.verify-deps-before-run=false exec pkg-pr-new publish '.' './npm/*' './packages/*'
+        run: pnpm --config.verify-deps-before-run=false exec pkg-pr-new publish './packages/engine-oxc/npm/*' './packages/*'
       - name: Publish
         # Two things must both be true to reach npm: a human dispatched this
         # workflow, and they typed the confirmation. A tag or a version-shaped
@@ -1332,10 +1335,10 @@ jobs:
           # the old-name compatibility package: it has to follow the addon it
           # forwards or a new install could briefly resolve an absent target.
           pnpm publish -r --access public --no-git-checks \
-            --filter './packages/*' --filter '!wrap-esm-lambda'
+            --filter './packages/*' --filter '!wrap-esm-lambda' --filter '!@wrap-esm-lambda/engine-oxc'
           # Publish the addon through the napi flow its prepublishOnly runs,
           # then publish the compatibility package last.
-          npm publish --access public
+          (cd packages/engine-oxc && npm publish --access public)
           pnpm --filter wrap-esm-lambda publish --access public --no-git-checks
       - name: Publish skipped
         if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish != 'publish'
@@ -1386,8 +1389,8 @@ jobs:
           body_path: release-body.md
           generate_release_notes: true
           files: |
-            ${{ env.APP_NAME }}.*.node
-            ${{ env.APP_NAME }}.*.wasm
+            packages/engine-oxc/${{ env.APP_NAME }}.*.node
+            packages/engine-oxc/${{ env.APP_NAME }}.*.wasm
             benchmarks/hooks/benchChart.svg
             benchmarks/hooks/tapEngineChart.svg
             examples/hono-lambda/coldStartChart.svg

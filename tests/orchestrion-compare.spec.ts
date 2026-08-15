@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as dc from 'node:diagnostics_channel'
 
-import { exportsTap } from '../index'
+import { exportsTap } from '@wrap-esm-lambda/engine-oxc'
 
 // Same target, both tools: orchestrion-js's declarative function query and
 // our exports tap, run over the identical @smithy/core client file the AWS

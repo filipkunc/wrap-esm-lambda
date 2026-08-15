@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { fileURLToPath } from 'node:url'
 import { captureThrows } from './helpers'
 
-import * as oxc from '../index.js'
+import * as oxc from '@wrap-esm-lambda/engine-oxc'
 import * as acorn from '@wrap-esm-lambda/engine-acorn'
 import { isMissingExportError } from '@wrap-esm-lambda/core'
 

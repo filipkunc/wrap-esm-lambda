@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { build } from 'esbuild'
 
-import { exportsTap, exportsTapFromBuffer } from '../index'
+import { exportsTap, exportsTapFromBuffer } from '@wrap-esm-lambda/engine-oxc'
 
 // Declarative patches end-to-end: one TypeScript config entry naming a
 // package, a version range and the exports to hand over, plus a plain

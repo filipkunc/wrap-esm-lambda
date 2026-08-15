@@ -20,7 +20,7 @@ import { dirname, resolve } from 'node:path'
 
 const WORKSPACE = process.env.GITHUB_WORKSPACE ?? process.cwd()
 const PNPM_LOCK = 'pnpm-lock.yaml'
-const CARGO_LOCK = 'Cargo.lock'
+const CARGO_LOCK = 'packages/engine-oxc/Cargo.lock'
 
 // GitHub renders at most ten annotations per level per step. Past that they are
 // silently dropped, which would be a worse failure than not emitting them: a
@@ -145,7 +145,7 @@ function pnpmLockLine(name, version) {
   return null
 }
 
-// Cargo.lock is TOML: a `[[package]]` table with `name` and `version` keys. The
+// The addon's Cargo.lock is TOML: a `[[package]]` table with `name` and `version` keys. The
 // annotation anchors to the `name` line of the block whose version matches.
 function cargoLockLine(name, version) {
   const lines = lockLines(CARGO_LOCK)
@@ -566,7 +566,12 @@ function main() {
     prod,
     '✅ No known vulnerabilities in anything this package ships.',
   )
-  section('Rust crates (`cargo audit`)', cargo, '✅ No advisories against anything in `Cargo.lock`.', 'Kind')
+  section(
+    'Rust crates (`cargo audit`)',
+    cargo,
+    '✅ No advisories against anything in `packages/engine-oxc/Cargo.lock`.',
+    'Kind',
+  )
   section('Dev-only dependencies (`pnpm audit`, informational)', devOnly, '✅ No advisories in the dev tree either.')
 
   if (devOnly.length) {

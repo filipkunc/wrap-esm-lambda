@@ -8,7 +8,7 @@
 # The publish flow itself is the rehearsal's, and the reasons behind its odd
 # parts are documented at length in publish-rehearsal.sh: `pnpm publish -r`
 # for the workspace packages, a real platform-package publish per built
-# .node, and the root addon packed → repointed → republished with the
+# .node, and the native addon packed → repointed → republished with the
 # optionalDependencies `napi prepublish` would have injected. What differs is
 # everything around it — the storage is persistent, publishing over a version
 # that is already there works, and the server outlives the script.
@@ -26,6 +26,7 @@
 set -eu
 
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+addon="$repo/packages/engine-oxc"
 state=${LOCAL_REGISTRY_HOME:-$repo/.local-registry}
 port=${LOCAL_REGISTRY_PORT:-4875}
 registry="http://localhost:$port"
@@ -138,7 +139,7 @@ published_names() {
 }
 
 host_suffixes() {
-  for binary in $(cd "$repo" && ls wrap-esm-lambda.*.node 2>/dev/null || true); do
+  for binary in $(cd "$addon" && ls wrap-esm-lambda.*.node 2>/dev/null || true); do
     suffix=${binary#wrap-esm-lambda.}
     printf '%s\n' "${suffix%.node}"
   done
@@ -147,7 +148,7 @@ host_suffixes() {
 # publishConfig.registry in package.json pins the real npmjs — correct for a
 # real release, and it OUTRANKS --registry at publish time, so every manifest
 # that goes out here has to be repointed first. Only ever applied to copies:
-# the platform dirs are generated, and the root goes through `npm pack`.
+# the platform dirs are generated, and the addon goes through `npm pack`.
 point_here() {
   node -e '
     const fs = require("node:fs")
@@ -160,7 +161,7 @@ point_here() {
 
 cmd_publish() {
   suffixes=$(host_suffixes)
-  [ -n "$suffixes" ] || { echo 'no wrap-esm-lambda.*.node in the repo root — run `pnpm build` first' >&2; exit 1; }
+  [ -n "$suffixes" ] || { echo 'no wrap-esm-lambda.*.node in packages/engine-oxc — run `pnpm build` first' >&2; exit 1; }
 
   up_already || cmd_up
   write_npmrc
@@ -176,31 +177,31 @@ cmd_publish() {
 
   echo 'publishing workspace packages except the compatibility shim ...'
   (cd "$repo" && pnpm publish -r --force --access public --no-git-checks \
-    --filter './packages/*' --filter '!wrap-esm-lambda' --registry "$registry")
+    --filter './packages/*' --filter '!wrap-esm-lambda' --filter '!@wrap-esm-lambda/engine-oxc' --registry "$registry")
 
   echo 'publishing platform packages ...'
-  (cd "$repo" && pnpm exec napi create-npm-dirs > /dev/null)
+  (cd "$addon" && pnpm exec napi create-npm-dirs > /dev/null)
   for suffix in $suffixes; do
-    [ -d "$repo/npm/$suffix" ] || { echo "no npm/$suffix dir for the built binary" >&2; exit 1; }
-    cp "$repo/wrap-esm-lambda.$suffix.node" "$repo/npm/$suffix/"
-    point_here "$repo/npm/$suffix/package.json"
-    (cd "$repo/npm/$suffix" && npm publish --access public > /dev/null)
+    [ -d "$addon/npm/$suffix" ] || { echo "no npm/$suffix dir for the built binary" >&2; exit 1; }
+    cp "$addon/wrap-esm-lambda.$suffix.node" "$addon/npm/$suffix/"
+    point_here "$addon/npm/$suffix/package.json"
+    (cd "$addon/npm/$suffix" && npm publish --access public > /dev/null)
     echo "  wrap-esm-lambda-$suffix"
   done
-  rm -rf "$repo/npm"
+  rm -rf "$addon/npm"
 
   # The pack → extract → publish detour is what lets publishConfig be
   # repointed without editing the repo's package.json. Two edits beyond that,
   # both standing in for `napi prepublish`, which cannot run on one host's
   # binary: it INJECTS the per-platform optionalDependencies into the
-  # published manifest (the repo's package.json deliberately carries none, so
+  # published manifest (the addon's package.json deliberately carries none, so
   # an installed root would find no binding without this), and dropping the
   # scripts takes out both prepublishOnly's `napi prepublish` and the husky
   # `prepare` that npm runs during pack even under --ignore-scripts.
-  echo 'publishing the root addon package ...'
+  echo 'publishing the native addon package ...'
   rm -rf "$state/root"
   mkdir -p "$state/root"
-  root_pack=$(cd "$repo" && npm pack --pack-destination "$state" 2>/dev/null | tail -1)
+  root_pack=$(cd "$addon" && npm pack --pack-destination "$state" 2>/dev/null | tail -1)
   tar -xzf "$state/$root_pack" -C "$state/root" --strip-components=1
   point_here "$state/root/package.json"
   node -e '
@@ -218,7 +219,7 @@ cmd_publish() {
   rm -f "$state/$root_pack"
   echo "  @wrap-esm-lambda/engine-oxc"
 
-  # The old package name forwards the root addon, so publish it last.
+  # The old package name forwards the native addon, so publish it last.
   echo 'publishing the compatibility package ...'
   (cd "$repo" && pnpm --filter wrap-esm-lambda publish --force --access public --no-git-checks --registry "$registry" > /dev/null)
   echo "  wrap-esm-lambda"
@@ -260,7 +261,7 @@ cmd_status() {
 }
 
 # A consumer that knows nothing about the repo: installed hooks, installed
-# core, installed root addon resolving its installed platform package. Left
+# core, installed native addon resolving its installed platform package. Left
 # on disk afterwards so it can be edited and rerun by hand.
 cmd_smoke() {
   up_already || { echo "registry is down — run '$(basename "$0") up' first" >&2; exit 1; }

@@ -19,7 +19,8 @@ import { fileURLToPath } from 'node:url'
 // an app whose node_modules contains ONLY the unpacked tarballs plus the
 // third-party dependencies they declare, and runs instrumentation through it.
 // No registry, so it works offline and in every lane; the engine is named
-// explicitly because the native addon is not part of what is being packed here.
+// explicitly because the platform-specific native package is not part of what
+// is being packed here.
 
 const execFileAsync = promisify(execFile)
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
@@ -53,7 +54,7 @@ const pnpm = await findPnpm()
 // not to re-check packaging.
 const testPacking = pnpm === null ? test.skip : test
 
-const PACKAGES = ['core', 'engine-acorn', 'engine-oxc-compat', 'hooks', 'unplugin'] as const
+const PACKAGES = ['core', 'engine-acorn', 'engine-oxc', 'engine-oxc-compat', 'hooks', 'unplugin'] as const
 /**
  * Third-party runtime deps of the packed packages, and which package declares
  * each: under pnpm's strict layout a dependency lives next to its dependent,
@@ -211,8 +212,8 @@ testPacking('an app installed from the tarballs alone instruments a package', as
     const env = {
       ...process.env,
       WRAP_ESM_LAMBDA_CONFIG: './wrap.config.mjs',
-      // the addon is not part of this test's tarballs; naming the JS engine
-      // keeps the run deliberate instead of relying on the fallback warning
+      // the addon's platform package is not part of these tarballs; naming the
+      // JS engine keeps the run deliberate instead of relying on fallback
       WRAP_ESM_LAMBDA_ENGINE: 'acorn',
     }
 

@@ -72,6 +72,9 @@ importers:
       '@wrap-esm-lambda/engine-acorn':
         specifier: workspace:^
         version: link:packages/engine-acorn
+      '@wrap-esm-lambda/engine-oxc':
+        specifier: workspace:^
+        version: link:packages/engine-oxc
       '@wrap-esm-lambda/hooks':
         specifier: workspace:^
         version: link:packages/hooks
@@ -238,7 +241,7 @@ importers:
     optionalDependencies:
       '@wrap-esm-lambda/engine-oxc':
         specifier: workspace:^
-        version: link:../..
+        version: link:../engine-oxc
 
   packages/engine-acorn:
     dependencies:
@@ -256,11 +259,13 @@ importers:
         specifier: ^24.2.0
         version: 24.2.0
 
+  packages/engine-oxc: {}
+
   packages/engine-oxc-compat:
     dependencies:
       '@wrap-esm-lambda/engine-oxc':
         specifier: workspace:^
-        version: link:../..
+        version: link:../engine-oxc
 
   packages/hooks:
     dependencies:

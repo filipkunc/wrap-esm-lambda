@@ -109,7 +109,7 @@ delivery mode. All of them share one config format
 | run with **no native binary** (unsupported platform, WASM edge)  | [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) — `WRAP_ESM_LAMBDA_ENGINE=acorn`, same output, pure JS                        |
 
 Under both shells sits the native transform: the root
-[`@wrap-esm-lambda/engine-oxc`](src/lib.rs) package, an [oxc](https://oxc.rs/) addon via
+[`@wrap-esm-lambda/engine-oxc`](packages/engine-oxc/src/lib.rs) package, an [oxc](https://oxc.rs/) addon via
 [napi.rs](https://napi.rs/). It is an implementation detail — the shells load
 it for you and fall back to the pure-JS acorn engine when no prebuilt binary
 exists for your platform.

@@ -21,8 +21,8 @@ jobs:
     timeout-minutes: 30
     env:
       # `cargo audit` goes through the runner's rustup shim, so without this
-      # the repo's rust-toolchain.toml (the local-machine MSRV pin) would make
-      # it download the floor toolchain first — the audit reads Cargo.lock and
+      # the addon's rust-toolchain.toml (the local-machine MSRV pin) would make
+      # it download the floor toolchain first — the audit reads its Cargo.lock and
       # does not care which rustc runs it
       RUSTUP_TOOLCHAIN: stable
     permissions:
@@ -80,11 +80,11 @@ jobs:
       - name: pnpm audit - full dev tree
         run: pnpm audit --json > reports/pnpm-dev.json || true
       # The Rust tree has no dev/prod split to make — every crate in
-      # Cargo.lock is linked into the addon that ships. `cargo audit` reports
+      # The addon's Cargo.lock is linked into what ships. `cargo audit` reports
       # vulnerabilities and, separately, unmaintained/yanked/unsound crates;
       # the first blocks, the rest warn, which is the right severity line.
       - name: Cargo audit
-        run: cargo audit --json > reports/cargo.json || true
+        run: cargo audit --file packages/engine-oxc/Cargo.lock --json > reports/cargo.json || true
       # Annotations, job summary and SARIF, and the pass/fail decision.
       - name: Report
         run: |

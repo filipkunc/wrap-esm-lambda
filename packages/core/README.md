@@ -3,7 +3,7 @@
 Shared core of the hybrid instrumentation setup: one declarative config
 (`defineConfig` / `definePatches`), one matcher (`matchEntries`), and one
 apply step (`applyMatched`) built on a pluggable transform engine — the
-native [`@wrap-esm-lambda/engine-oxc`](../..) addon by default, or the pure-JS
+native [`@wrap-esm-lambda/engine-oxc`](../engine-oxc) addon by default, or the pure-JS
 [`@wrap-esm-lambda/engine-acorn`](../engine-acorn) (see
 [Choosing the engine](#choosing-the-engine)).
 
@@ -38,7 +38,7 @@ Every transform call goes through [`src/engine.mts`](src/engine.mts), which
 binds once, **lazily on first use**, to one of two implementations of the
 same surface:
 
-- `oxc` (default) — [`@wrap-esm-lambda/engine-oxc`](../..): oxc parse/codegen in
+- `oxc` (default) — [`@wrap-esm-lambda/engine-oxc`](../engine-oxc): oxc parse/codegen in
   Rust, module sources crossing napi zero-copy as UTF-8 buffers;
 - `acorn` — [`@wrap-esm-lambda/engine-acorn`](../engine-acorn): acorn +
   magic-string, pure JS, no native binary anywhere.
