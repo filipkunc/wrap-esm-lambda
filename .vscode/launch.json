@@ -16,6 +16,7 @@
       // addon cannot be loaded, so an implicit run would have you debugging a
       // different engine than the one you think you are in.
       "name": "Debug spec file (oxc)",
+      "presentation": { "group": "JavaScript", "order": 2 },
       "type": "node",
       "request": "launch",
       "program": "${file}",
@@ -34,6 +35,7 @@
       // The acorn twin. Engine-parity bugs are the ones worth a debugger, and
       // they are found by running the same spec under both.
       "name": "Debug spec file (acorn)",
+      "presentation": { "group": "JavaScript", "order": 3 },
       "type": "node",
       "request": "launch",
       "program": "${file}",
@@ -47,6 +49,24 @@
       "console": "integratedTerminal"
     },
     {
+      // No active-editor dependency: this is the quickest fresh-clone check
+      // that CodeLLDB can bind and hit a breakpoint in the native package.
+      // packages/engine-oxc/src/lib.rs:exports_tap is exercised repeatedly.
+      "name": "Debug Rust addon (smoke)",
+      "presentation": { "group": "Rust", "order": 1 },
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/.vscode/node",
+      "args": ["--import", "@oxc-node/core/register", "--test", "--test-isolation=none", "tests/engine-parity.spec.ts"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "OXC_TSCONFIG_PATH": "./tests/tsconfig.json",
+        "WRAP_ESM_LAMBDA_ENGINE": "oxc"
+      },
+      "preLaunchTask": "prepare rust debug",
+      "sourceLanguages": ["rust"]
+    },
+    {
       // Breakpoints in packages/engine-oxc/src/*.rs. Requires CodeLLDB and a debug
       // addon — build:debug overwrites the release .node at the same path, so
       // run the "build (release addon)" task before benchmarking again.
@@ -58,10 +78,13 @@
       // symlinks whatever `node` is on PATH to .vscode/node (gitignored) and
       // the config points at the symlink.
       "name": "Debug Rust addon (spec file)",
+      "presentation": { "group": "Rust", "order": 2 },
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/.vscode/node",
-      "args": ["--import", "@oxc-node/core/register", "--test", "${file}"],
+      // Node normally runs each test file in a child process. LLDB launches the
+      // parent, so native breakpoints cannot bind unless this spec stays in it.
+      "args": ["--import", "@oxc-node/core/register", "--test", "--test-isolation=none", "${file}"],
       "cwd": "${workspaceFolder}",
       "env": {
         "OXC_TSCONFIG_PATH": "./tests/tsconfig.json",
@@ -81,6 +104,7 @@
       // once via the "build (release addon)" task — with the engine pinned to
       // oxc there is no silent acorn fallback to paper over a missing .node.
       "name": "Debug hooks bench (pick hook)",
+      "presentation": { "group": "Benchmarks", "order": 1 },
       "type": "node",
       "request": "launch",
       "program": "${workspaceFolder}/benchmarks/hooks/runtime.mjs",
@@ -103,6 +127,7 @@
       // attach half racing a cargo build it cannot see; the task belongs on
       // the compound, which does run once before either member starts.
       "name": "hooks bench: Rust half (compound member)",
+      "presentation": { "hidden": true },
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/.vscode/node",
@@ -115,6 +140,7 @@
       // no args, so the hook entry is prompted for exactly once (by the member
       // above) rather than once per session.
       "name": "hooks bench: JS half (compound member)",
+      "presentation": { "hidden": true },
       "type": "node",
       "request": "attach",
       "port": 9229,
@@ -138,6 +164,7 @@
       // build writes, so re-run "build (release addon)" before trusting a
       // bench number again.
       "name": "Debug hooks bench (Rust + JS)",
+      "presentation": { "group": "Benchmarks", "order": 2 },
       "configurations": ["hooks bench: Rust half (compound member)", "hooks bench: JS half (compound member)"],
       "preLaunchTask": "prepare rust debug",
       "stopAll": true

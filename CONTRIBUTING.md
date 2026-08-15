@@ -50,6 +50,22 @@ The packages import each other by their published specifiers, so the suite
 runs against the same `dist/` a consumer installs — `pnpm build:packages`
 first, or the imports resolve to nothing.
 
+### Debugging in VS Code
+
+After a fresh clone, run `pnpm install`, open the repository root in VS Code,
+and accept the recommended extensions. Choose **Debug Rust addon (smoke)** from
+Run and Debug for a first run that needs no file selection. Its pre-launch task
+builds the TypeScript packages and an unstripped native addon, then starts the
+engine-parity spec under CodeLLDB. Once that works, **Debug Rust addon (spec
+file)** runs whichever `tests/*.spec.ts` editor is focused.
+
+Set a breakpoint on `exports_tap` in `packages/engine-oxc/src/lib.rs` for the
+smoke run. It should become solid when the addon loads and stop on the first
+matching call. For focused work, set a breakpoint on any Rust path exercised
+by the selected spec. The debug build replaces the release
+`.node` artifact, so run the **build (release addon)** task before measuring
+performance afterward.
+
 The workspace packages are written in TypeScript (`src/*.mts`) and ship
 compiled ESM plus declarations (`dist/*.mjs` + `dist/*.d.mts`, with
 declaration and source maps back to the `.mts`), so a config file gets real

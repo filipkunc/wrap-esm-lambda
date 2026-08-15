@@ -61,9 +61,12 @@
     },
     {
       // What the "Debug Rust addon" launch config actually runs: the debug
-      // addon build plus the node symlink above.
+      // addon build, the JS packages a spec imports, and the node symlink above.
+      // Keeping all three here makes the launch work from a fresh clone rather
+      // than relying on dist/ left behind by an earlier test run.
       "label": "prepare rust debug",
-      "dependsOn": ["build:debug", "link node for lldb"],
+      "dependsOn": ["build:packages", "build:debug", "link node for lldb"],
+      "dependsOrder": "sequence",
       "problemMatcher": []
     },
     {
