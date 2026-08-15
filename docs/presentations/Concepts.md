@@ -10,31 +10,56 @@ style: |
   strong { color: #fbbf24; }
   code { background: #172033; }
   table { font-size: 24px; }
+  blockquote { border-color: #fbbf24; font-size: 28px; }
 ---
 
-# Patching Node.js modules at their exports
+<!-- _class: lead -->
 
-## One declarative model for ESM, CommonJS, runtime hooks, and bundlers
+# What if writing instrumentation did not mean writing a compiler?
 
-`wrap-esm-lambda`
-
----
-
-# Instrumentation should describe intent, not loader machinery
-
-An integration usually knows four things:
-
-- the **package and version** it supports
-- the **files** that expose the useful API
-- the exported **bindings** it needs
-- the **patch function** that wraps or replaces them
-
-The difficult part is delivering that intent consistently across `import`,
-`require()`, serverless runtimes, and build pipelines.
+## The idea behind `wrap-esm-lambda`
 
 ---
 
-# A patch entry is the shared contract
+# The patch we want to write is usually the easy part
+
+Suppose every AWS SDK request should pass through our wrapper:
+
+```js
+export function patchClient({ Client }) {
+  const original = Client.prototype.send
+  Client.prototype.send = function (command, ...rest) {
+    return trace(command, () => original.call(this, command, ...rest))
+  }
+}
+```
+
+That code says exactly what the integration does. It should be most of the
+work an instrumentation author has to own.
+
+---
+
+# Reaching that class is where compiler work begins
+
+Without a shared transform, every integration needs some version of this:
+
+```js
+const ast = parse(source)
+const exported = findExport(ast, 'Client')
+const local = resolveBinding(exported)
+makeReassignable(local)
+appendPatchCall(ast, './patches/aws.mjs')
+return { code: print(ast), map: generateMap(ast) }
+```
+
+And then the real cases arrive: CommonJS, re-exports, `export const`, star
+barrels, source maps, semantic comments, and different bundlers.
+
+> The AST is infrastructure. It should not leak into every patch.
+
+---
+
+# The declarative entry draws the boundary instead
 
 ```js
 {
@@ -48,14 +73,14 @@ The difficult part is delivering that intent consistently across `import`,
 }
 ```
 
-The entry is plain data. Runtime hooks and bundler plugins consume the same
-config and apply the same transform.
+The author names **where the API lives** and **which exports the patch needs**.
+The engine owns the syntax needed to make those exports patchable.
 
 ---
 
-# The exports tap runs at the module boundary
+# The exports tap turns that intent into live access
 
-The transform adds a small call at the end of a matched module's evaluation:
+For an ordinary class export, the generated code is conceptually this small:
 
 ```js
 patchClient({
@@ -68,111 +93,168 @@ patchClient({
 })
 ```
 
-The patch runs **after the module defines its exports** and **before an
-importer observes them**. Reading sees the live value; assigning rebinds it
-for every consumer.
+It runs after the module has created its exports, but before an importer sees
+them. The patch can mutate the class, wrap it, or replace it altogether.
 
 ---
 
-# Most modules take the append-only fast path
+# Easy modules stay untouched; awkward exports become the engine's problem
 
-| Export shape                                  | Transform                                 |
-| --------------------------------------------- | ----------------------------------------- |
-| Mutable local — function, class, `let`, `var` | Append the tap only                       |
-| `export const` or anonymous default           | Rewrite into a rebindable local           |
-| Re-export or `export *` chain                 | Resolve the provider, then expose a local |
-| CommonJS with a top-level `return`            | Use an evaluation wrap, then tap          |
+```js
+// already reassignable
+export class Client {}
 
-Requested bindings are validated first. A missing or ambiguous export is a
-version-drift signal, not a silent no-op.
+// needs a rewrite
+export const Client = class {}
+
+// provider may live several files away
+export * from './client.js'
+```
+
+The first shape only gets an appended tap. The others are rewritten once,
+with their source maps and meaningful comments preserved.
+
+The patch author still asks for `Client` in exactly the same way.
 
 ---
 
-# One engine supports two delivery modes
+# The same declaration works before or during execution
 
-## Runtime
+## At runtime
 
 ```sh
 WRAP_ESM_LAMBDA_CONFIG=./wrap.config.mjs \
   node --import @wrap-esm-lambda/hooks/register app.mjs
 ```
 
-Node's synchronous load hooks transform matching modules as they load.
+The tap is added while Node loads the matching module.
 
-## Build time
+## At build time
 
-The same config goes to `@wrap-esm-lambda/unplugin` adapters for esbuild,
-Rollup, Rolldown, Vite, webpack, and Rspack. The patch is bundled with the app,
-so no runtime hook is required.
-
----
-
-# The tap closes gaps left by neighboring mechanisms
-
-| Capability                   | `Module._load` patch | Loader proxy | Exports tap |
-| ---------------------------- | -------------------: | -----------: | ----------: |
-| ESM `import`                 |              Partial |          Yes |         Yes |
-| Pure `require()` chain       |                  Yes |           No |         Yes |
-| Rebind exported API          |                  Yes |          Yes |         Yes |
-| Reach non-exported internals |                   No |           No |          No |
-| Build-time delivery          |                   No |           No |         Yes |
-
-Body-rewriting transforms can reach non-exported internals, but solve a
-different problem and perform substantially more work per matched module.
+The same config goes to the bundler plugin. The transformed module and patch
+are bundled into the application, so no runtime hook is needed.
 
 ---
 
-# Platform presets turn runtime facts into ordinary entries
+# Why not use Orchestrion instead?
 
-## AWS Lambda
+Both tools can describe the same target without hand-written AST traversal:
 
-The `aws-lambda` preset reads `_HANDLER` and `LAMBDA_TASK_ROOT`, discovers the
-handler file and export, and emits a path-matched patch entry. The config stays
-inert outside Lambda.
+```js
+// Orchestrion: publish lifecycle events from Client#send
+{
+  channelName: 'smithy-send',
+  functionQuery: { className: 'Client', methodName: 'send' },
+}
 
-## Azure Functions
+// exports tap: hand the live Client binding to patchClient
+{ bindings: ['Client'], patch: { name: 'patchClient', from: './aws.mjs' } }
+```
 
-The `azure-functions` preset brackets the platform's own
-`preInvocation`/`postInvocation` pipeline instead of rewriting the handler.
-
-The platform-specific logic stops at discovery; the patch model stays the
-same.
-
----
-
-# Two engines uphold one output contract
-
-- **OXC engine** — native Rust addon, optimized for production transforms
-- **Acorn engine** — pure JavaScript fallback for unsupported native targets
-- byte-identical tap snippets and equivalent rewrite semantics
-- source maps preserved or regenerated, including upstream TypeScript maps
-- comments with bundler meaning remain intact
-
-The delivery shell selects the engine. Patch authors do not write
-engine-specific integrations.
+The difference is not **declarative versus imperative**. It is what the
+declaration lets user code do next.
 
 ---
 
-# Instrumentation fails soft—unless strict mode is requested
+# Observation and intervention solve different problems
 
-- a drifted binding, throwing patch, or unavailable engine is isolated
-- every recovered failure is reported and queryable
-- `WRAP_ESM_LAMBDA_DISABLE=1` is the operational kill switch
-- `WRAP_ESM_LAMBDA_STRICT=1` turns recovery into CI failures
-- `wrap-esm-lambda-validate` checks configs before deployment
+```js
+const result = await new Client().send('hello')
 
-The goal is to protect application startup without hiding compatibility
-regressions from maintainers.
+// Orchestrion
+// result === 'sent:hello'          + start/end events
+
+// exports tap
+// result === 'patched:sent:hello'  after patchClient wraps send
+```
+
+Orchestrion's diagnostic-channel subscriber observes the lifecycle; it cannot
+replace the method's return value. That is a good fit for event-based tracing,
+and its body rewrite can even reach **non-exported functions and call sites**.
+
+The exports tap chooses a narrower boundary but gives the patch the actual
+binding. It can wrap, short-circuit, or replace behavior when observation is
+not enough.
 
 ---
 
-# The core idea
+# Acorn answers an important question: how far can pure JavaScript go?
 
-**Describe the module boundary once. Deliver the same patch wherever the
-module graph is built.**
+The Acorn engine is not merely an emergency fallback. It implements the same
+contract in JavaScript and gives the native engine an honest control case.
+
+On the same real `@smithy/core` ESM module:
+
+| Transform                | Approximate latency |
+| ------------------------ | ------------------: |
+| OXC exports tap          |           **14 µs** |
+| Acorn exports tap        |           **86 µs** |
+| Orchestrion body rewrite |     **950–1200 µs** |
+
+Pure JavaScript is still roughly **11× ahead of the body-rewriting approach**.
+That shows the largest win comes from the tap's architecture, not from Rust.
+
+---
+
+# Rust earns its place where parsing dominates
+
+OXC takes the same design from roughly **86 µs to 14 µs** on that module—about
+a **6× improvement** in the parse-heavy transform.
+
+The cold-start difference is much smaller: the Acorn setup adds roughly
+**14 ms**, because process startup and package loading dominate there.
+
+So the two engines make the trade-off visible:
+
+- Acorn proves the design is viable in pure JavaScript.
+- OXC pays off when many or larger modules need full parsing.
+
+---
+
+# Choosing the exports boundary closes two practical gaps
+
+Traditional `Module._load` patching follows `require()`, but cannot cover the
+whole ESM world. Loader proxies cover ESM imports, but never see a pure
+`require()` chain—the path the AWS SDK commonly takes.
+
+The exports tap changes the module source itself, so the result is already in
+place whichever route consumes it:
+
+```text
+ESM import ─┐
+            ├─ sees the patched export
+require() ──┘
+```
+
+The same mechanism also works when a bundler owns the module graph.
+
+---
+
+# Lambda was the first use case, not the final abstraction
+
+Lambda decides the handler file and export through `_HANDLER` and
+`LAMBDA_TASK_ROOT`. The AWS preset turns those runtime facts into an ordinary
+path-matched entry, then the same tap does the patching.
+
+That original problem led to the more general question:
+
+> Can instrumentation describe the module boundary once, without caring who
+> loads it?
+
+The declarative config is the answer shared by Lambda, regular Node processes,
+and build pipelines.
+
+---
+
+# Keep the compiler machinery in one place
+
+Patch authors should spend their time on the behavior they want to add—not on
+AST traversal, module-format edge cases, or source-map repair.
+
+`wrap-esm-lambda` keeps those mechanics behind one declaration and tests them
+against both a pure-JavaScript engine and a native one.
 
 - Start: [`docs/getting-started.md`](../getting-started.md)
 - Mechanism: [`docs/how-it-works.md`](../how-it-works.md)
-- Configuration: [`docs/config.md`](../config.md)
-- Evidence: [`docs/real-packages.md`](../real-packages.md)
+- Measurements: [`docs/benchmarks.md`](../benchmarks.md)
 - Trade-offs: [`docs/comparisons.md`](../comparisons.md)
