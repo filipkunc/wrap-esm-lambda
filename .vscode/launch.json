@@ -47,7 +47,7 @@
       "console": "integratedTerminal"
     },
     {
-      // Breakpoints in src/*.rs. Requires the CodeLLDB extension and a debug
+      // Breakpoints in packages/engine-oxc/src/*.rs. Requires CodeLLDB and a debug
       // addon — build:debug overwrites the release .node at the same path, so
       // run the "build (release addon)" task before benchmarking again.
       //

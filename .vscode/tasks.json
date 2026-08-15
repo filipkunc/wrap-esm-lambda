@@ -110,6 +110,7 @@
       "label": "clippy (CI gate)",
       "type": "shell",
       "command": "cargo clippy --all-targets -- -D warnings",
+      "options": { "cwd": "${workspaceFolder}/packages/engine-oxc" },
       "group": "test",
       "problemMatcher": ["$rustc"]
     },
