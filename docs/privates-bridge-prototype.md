@@ -14,7 +14,7 @@ against each other; core does not send `privates` yet.
 
 - `packages/engine-acorn/src/privates.mts` — class lookup, private-name
   scan, validation, and the hand-printed bridge member (acorn engine).
-- `src/transform/privates.rs` — the native twin: same lookup/scan/validation
+- `packages/engine-oxc/src/transform/privates.rs` — the native twin: same lookup/scan/validation
   (messages shared verbatim), member injected by parsing a synthetic class
   and grafting the static block into the target class body, then printed by
   oxc codegen with the rest of the rewritten module.

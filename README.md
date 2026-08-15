@@ -108,7 +108,7 @@ delivery mode. All of them share one config format
 | bracket Azure Functions invocations                              | the [`azure-functions` preset](packages/hooks/README.md#azure-functions) in `@wrap-esm-lambda/hooks`                                   |
 | run with **no native binary** (unsupported platform, WASM edge)  | [`@wrap-esm-lambda/engine-acorn`](packages/engine-acorn) — `WRAP_ESM_LAMBDA_ENGINE=acorn`, same output, pure JS                        |
 
-Under both shells sits the native transform: the root
+Under both shells sits the native transform: the
 [`@wrap-esm-lambda/engine-oxc`](packages/engine-oxc/src/lib.rs) package, an [oxc](https://oxc.rs/) addon via
 [napi.rs](https://napi.rs/). It is an implementation detail — the shells load
 it for you and fall back to the pure-JS acorn engine when no prebuilt binary
@@ -252,7 +252,17 @@ pnpm test            # the whole suite, on node --test
 ```
 
 Then run any example, e.g. `pnpm --filter example-express-route start`.
-Rust-side checks are `cargo fmt`, `cargo clippy` and `cargo test`.
+Rust-side checks run from `packages/engine-oxc`: `cargo fmt`, `cargo clippy`
+and `cargo test` (or use the root `pnpm format:rs` script for formatting).
+
+For native debugging, open the repository root in VS Code, install its
+recommended extensions, and choose **Debug Rust addon (smoke)**. The task builds
+everything needed from a fresh clone and runs the engine-parity spec in the
+process launched by CodeLLDB. A breakpoint on `exports_tap` in
+[`packages/engine-oxc/src/lib.rs`](packages/engine-oxc/src/lib.rs) should bind
+when the addon loads and stop on its first call. **Debug Rust addon (spec
+file)** does the same for whichever test spec is focused. See
+[Debugging in VS Code](CONTRIBUTING.md#debugging-in-vs-code) for details.
 
 To try your build in a project of your own, `pnpm registry:publish` publishes
 every package into a local registry and prints the install command — the only

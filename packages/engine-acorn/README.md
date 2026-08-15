@@ -82,7 +82,8 @@ export statement, append the redirects — so untouched lines keep their
 exact bytes and the emitted source map is sparse. Maps still chain through
 an upstream (e.g. tsc) map, via `remapping` instead of `oxc_sourcemap`.
 
-The module layout mirrors the native side ([`src/transform/mod.rs`](../../src/transform/mod.rs)):
+The module layout mirrors the native side
+([`src/transform/mod.rs`](../engine-oxc/src/transform/mod.rs)):
 
 | module                                           | responsibility                                             |
 | ------------------------------------------------ | ---------------------------------------------------------- |

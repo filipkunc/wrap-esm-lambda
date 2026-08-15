@@ -81,7 +81,7 @@ patch author contract stays exactly what it is today.
   bridge member; this is enforced by `tests/engine-parity.spec.ts` and is
   a `TAP_CONTRACT_VERSION` bump (currently 2). The existing tap snippet is
   appended at module end; this injection lands _inside_ a class body — real
-  AST surgery in the Rust rewrite path (`src/transform/rewrite.rs`) and in
+  AST surgery in the Rust rewrite path (`packages/engine-oxc/src/transform/rewrite.rs`) and in
   the acorn engine (`packages/engine-acorn`, `tap.mts`), with honest
   source-map chaining through it (see `docs/source-maps.md`).
 - **Suggested sequencing:** prototype the acorn-engine injection first to
