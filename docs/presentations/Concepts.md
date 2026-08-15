@@ -170,11 +170,33 @@ const result = await new Client().send('hello')
 
 Orchestrion's diagnostic-channel subscriber observes the lifecycle; it cannot
 replace the method's return value. That is a good fit for event-based tracing,
-and its body rewrite can even reach **non-exported functions and call sites**.
+and today its body rewrite reaches **non-exported functions and call sites**.
 
-The exports tap chooses a narrower boundary but gives the patch the actual
-binding. It can wrap, short-circuit, or replace behavior when observation is
-not enough.
+Today the exports tap starts at a narrower boundary but gives the patch the
+actual binding. It can wrap, short-circuit, or replace behavior when
+observation is not enough.
+
+---
+
+# Today's exports boundary is a milestone, not a wall
+
+Orchestrion demonstrates that a declarative transform can reach deeper into a
+module. Our engines own the AST too; we simply have not extended the contract
+there yet.
+
+One concrete proposal keeps private access declarative:
+
+```js
+{
+  bindings: ['Db'],
+  privates: { Db: ['#url', '#pool'] },
+  patch: { name: 'traceDb', from: './db.mjs' },
+}
+```
+
+The transform would inject a scoped bridge inside the class body, where those
+names are legal. The patch still receives plain JavaScript capabilities—not
+an AST. Validation, engine parity, and evidence of real demand come first.
 
 ---
 
@@ -258,3 +280,4 @@ against both a pure-JavaScript engine and a native one.
 - Mechanism: [`docs/how-it-works.md`](../how-it-works.md)
 - Measurements: [`docs/benchmarks.md`](../benchmarks.md)
 - Trade-offs: [`docs/comparisons.md`](../comparisons.md)
+- Internals proposal: [`docs/design-private-bindings.md`](../design-private-bindings.md)
