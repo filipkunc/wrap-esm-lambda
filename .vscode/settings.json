@@ -6,6 +6,10 @@
   // target/ lock, so an on-save check can stall a build (and vice versa) for as
   // long as the other holds it. `true` gives rust-analyzer its own subdirectory.
   "rust-analyzer.cargo.targetDir": true,
+  // The native crate is a package inside the JS workspace, not a root Cargo
+  // workspace. Name its manifest explicitly so diagnostics, navigation and the
+  // Rust test explorer do not depend on recursive project auto-discovery.
+  "rust-analyzer.linkedProjects": ["./packages/engine-oxc/Cargo.toml"],
   // The lint job gates on `cargo clippy --all-targets -- -D warnings`; matching
   // it here means the editor shows those failures instead of CI doing it later.
   // `--all-targets` is NOT spelled out in extraArgs: rust-analyzer already adds
