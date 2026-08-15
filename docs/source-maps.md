@@ -82,7 +82,7 @@ map is composed through it, and the final map reaches the original `.ts`.
 The compose runs where each engine lives:
 
 - **Native**: `oxc_sourcemap` token lookup inside the addon
-  (`chain_source_maps` in `src/transform.rs`) — the rewrite map never
+  (`chain_source_maps` in `packages/engine-oxc/src/transform.rs`) — the rewrite map never
   leaves Rust, skipping a JSON serialize/re-parse round-trip across napi.
   The Rust unit test `test_exports_tap_chained_upstream_map` pins the
   chained map's `sources` at `handler.ts` with `sourcesContent` carried
