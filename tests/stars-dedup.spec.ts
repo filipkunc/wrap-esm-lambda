@@ -25,7 +25,7 @@ import { applyMatched } from '@wrap-esm-lambda/core'
 type Engine = typeof acornEngine
 let oxc: Engine | null = null
 try {
-  oxc = (await import('../index.js')) as unknown as Engine
+  oxc = (await import('@wrap-esm-lambda/engine-oxc')) as unknown as Engine
 } catch {
   // no native binding on this lane — acorn-only coverage below
 }

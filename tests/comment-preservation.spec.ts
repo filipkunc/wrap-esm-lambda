@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import * as oxc from '../index.js'
+import * as oxc from '@wrap-esm-lambda/engine-oxc'
 import * as acorn from '@wrap-esm-lambda/engine-acorn'
 
 // Comments are load-bearing in bundled code: /* @__PURE__ */ annotations

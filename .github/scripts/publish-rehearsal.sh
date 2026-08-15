@@ -24,6 +24,7 @@
 set -eu
 
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
+addon="$repo/packages/engine-oxc"
 port=${REHEARSAL_PORT:-4874}
 registry="http://localhost:$port"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/wrap-esm-lambda-rehearsal-XXXXXX")
@@ -40,7 +41,7 @@ stop_verdaccio() {
 }
 cleanup() {
   stop_verdaccio
-  rm -rf "$scratch" "$repo/npm"
+  rm -rf "$scratch" "$addon/npm"
 }
 trap cleanup EXIT
 
@@ -54,9 +55,9 @@ if curl -sf "http://localhost:$port/-/ping" > /dev/null 2>&1; then
   }
 fi
 
-binaries=$(cd "$repo" && ls wrap-esm-lambda.*.node 2>/dev/null || true)
+binaries=$(cd "$addon" && ls wrap-esm-lambda.*.node 2>/dev/null || true)
 if [ -z "$binaries" ]; then
-  echo 'no wrap-esm-lambda.*.node in the repo root — run `pnpm build` first' >&2
+  echo 'no wrap-esm-lambda.*.node in packages/engine-oxc — run `pnpm build` first' >&2
   exit 1
 fi
 
@@ -105,13 +106,13 @@ export npm_config_cache="$scratch/npm-cache"
 # --- publish, the same shapes the CI publish job runs
 echo 'publishing workspace packages except the compatibility shim ...'
 (cd "$repo" && pnpm publish -r --force --access public --no-git-checks \
-  --filter './packages/*' --filter '!wrap-esm-lambda' --registry "$registry")
+  --filter './packages/*' --filter '!wrap-esm-lambda' --filter '!@wrap-esm-lambda/engine-oxc' --registry "$registry")
 
 # package.json's publishConfig.registry pins the real npmjs — correct for
 # the real release, and it outranks every other registry setting at publish
 # time, so the rehearsal rewrites it in the PACKED COPIES only (the repo
 # files are never touched): the platform dirs are generated anyway, and the
-# root goes through `npm pack` into scratch first.
+# addon goes through `npm pack` into scratch first.
 point_at_rehearsal() {
   node -e '
     const fs = require("node:fs")
@@ -123,14 +124,14 @@ point_at_rehearsal() {
 }
 
 echo 'publishing the host platform package ...'
-(cd "$repo" && pnpm exec napi create-npm-dirs)
+(cd "$addon" && pnpm exec napi create-npm-dirs)
 for binary in $binaries; do
   suffix=${binary#wrap-esm-lambda.}
   suffix=${suffix%.node}
-  [ -d "$repo/npm/$suffix" ] || { echo "no npm/$suffix dir for $binary" >&2; exit 1; }
-  cp "$repo/$binary" "$repo/npm/$suffix/"
-  point_at_rehearsal "$repo/npm/$suffix/package.json"
-  (cd "$repo/npm/$suffix" && npm publish --access public)
+  [ -d "$addon/npm/$suffix" ] || { echo "no npm/$suffix dir for $binary" >&2; exit 1; }
+  cp "$addon/$binary" "$addon/npm/$suffix/"
+  point_at_rehearsal "$addon/npm/$suffix/package.json"
+  (cd "$addon/npm/$suffix" && npm publish --access public)
 done
 
 # --ignore-scripts skips prepublishOnly's `napi prepublish`, which wants all
@@ -138,15 +139,15 @@ done
 # and missing optionalDependencies are non-fatal at install time. The pack →
 # extract → publish detour exists so publishConfig can be repointed without
 # editing the repo's package.json.
-echo 'publishing the root addon package ...'
-root_pack=$(cd "$repo" && npm pack --pack-destination "$scratch" 2>/dev/null | tail -1)
+echo 'publishing the native addon package ...'
+root_pack=$(cd "$addon" && npm pack --pack-destination "$scratch" 2>/dev/null | tail -1)
 mkdir -p "$scratch/root-pkg"
 tar -xzf "$scratch/$root_pack" -C "$scratch/root-pkg" --strip-components=1
 point_at_rehearsal "$scratch/root-pkg/package.json"
 # Two more things `napi prepublish` would have done or made irrelevant:
 # it INJECTS the per-platform optionalDependencies into the published
-# manifest (the repo's package.json deliberately has none — the rehearsal
-# caught this by installing a root package that could not find its
+# manifest (the addon's package.json deliberately has none — the rehearsal
+# caught this by installing a native package that could not find its
 # binding), and its absence means publisher-side lifecycle must go too
 # (registry consumers never run prepare, and npm runs the pack lifecycle
 # even under --ignore-scripts, which fails here because the extracted copy
@@ -165,7 +166,7 @@ node -e '
 ' "$scratch/root-pkg/package.json" "$suffixes"
 (cd "$scratch/root-pkg" && npm publish --access public --ignore-scripts)
 
-# The old package name forwards the root addon, so publish it only after its
+# The old package name forwards the native addon, so publish it only after its
 # target exists in the registry.
 echo 'publishing the compatibility package ...'
 (cd "$repo" && pnpm --filter wrap-esm-lambda publish --force --access public --no-git-checks --registry "$registry")
@@ -173,7 +174,7 @@ echo 'publishing the compatibility package ...'
 # --- the consumer: a scratch project that knows nothing about the repo,
 # installing from the rehearsal registry and running the README quick-start
 # shape through the RUNTIME hook — installed hooks, installed core,
-# installed root addon resolving its installed platform package
+# installed native addon resolving its installed platform package
 echo 'installing into a scratch consumer ...'
 consumer="$scratch/consumer"
 mkdir -p "$consumer/patches"

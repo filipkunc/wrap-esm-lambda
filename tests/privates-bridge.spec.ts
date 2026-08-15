@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import * as acornEngine from '@wrap-esm-lambda/engine-acorn'
 import { isMissingExportError } from '@wrap-esm-lambda/core'
 import { captureThrows } from './helpers'
-import type * as OxcEngine from '../index.js'
+import type * as OxcEngine from '@wrap-esm-lambda/engine-oxc'
 
 // The privates bridge (docs/design-private-bindings.md), end to end on BOTH
 // engines: `privates: { Db: ['#url'] }` injects a static block into the
@@ -27,7 +27,7 @@ type Engine = Omit<typeof OxcEngine, 'resolveStarBindings'>
 // this file).
 const engines: [string, Engine][] = []
 try {
-  engines.push(['oxc', (await import('../index.js')) as Engine])
+  engines.push(['oxc', (await import('@wrap-esm-lambda/engine-oxc')) as Engine])
 } catch {
   // no native binding on this platform/lane — acorn-only run
 }

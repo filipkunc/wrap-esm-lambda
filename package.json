@@ -1,15 +1,8 @@
 {
-  "name": "@wrap-esm-lambda/engine-oxc",
+  "name": "wrap-esm-lambda-workspace",
   "version": "0.4.0",
+  "private": true,
   "description": "Declarative patching for Node.js modules — ESM, CJS, dual packages and core builtins — via a generic exports tap, delivered at runtime or build time from one config.",
-  "main": "index.js",
-  "types": "index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "default": "./index.js"
-    }
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/filipkunc/wrap-esm-lambda.git",
@@ -24,48 +17,25 @@
     "node-addon",
     "node-addon-api"
   ],
-  "files": [
-    "index.d.ts",
-    "index.js"
-  ],
-  "napi": {
-    "binaryName": "wrap-esm-lambda",
-    "targets": [
-      "x86_64-unknown-linux-gnu",
-      "aarch64-unknown-linux-gnu",
-      "x86_64-unknown-linux-musl",
-      "aarch64-unknown-linux-musl",
-      "x86_64-pc-windows-msvc",
-      "aarch64-pc-windows-msvc",
-      "aarch64-apple-darwin",
-      "x86_64-apple-darwin",
-      "wasm32-wasip1-threads"
-    ]
-  },
   "engines": {
     "node": ">= 22.0.0"
   },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org/",
-    "access": "public"
-  },
   "scripts": {
-    "artifacts": "napi artifacts",
+    "artifacts": "pnpm --dir packages/engine-oxc artifacts",
     "bench": "node --import @oxc-node/core/register benchmarks/transform/bench.ts",
     "matrix": "node tests/interplay-matrix/run.mjs",
     "corpus": "node tests/corpus/run.mts",
     "corpus:bench": "node tests/corpus/bench.mts",
     "bench:chart": "node --import @oxc-node/core/register benchmarks/transform/make-transform-chart.ts",
     "build:packages": "tsc -b packages/core packages/hooks packages/unplugin",
-    "build": "napi build --platform --release",
-    "build:debug": "napi build --platform",
+    "build": "pnpm --dir packages/engine-oxc build",
+    "build:debug": "pnpm --dir packages/engine-oxc build:debug",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:check": "prettier --check .",
     "format:toml": "taplo format",
-    "format:rs": "cargo fmt",
+    "format:rs": "pnpm --dir packages/engine-oxc exec cargo fmt",
     "lint": "oxlint . --deny-warnings",
-    "prepublishOnly": "napi prepublish -t npm",
     "publish:rehearsal": "sh .github/scripts/publish-rehearsal.sh",
     "registry:up": "sh .github/scripts/local-registry.sh up",
     "registry:publish": "sh .github/scripts/local-registry.sh publish",
@@ -73,7 +43,7 @@
     "registry:status": "sh .github/scripts/local-registry.sh status",
     "registry:down": "sh .github/scripts/local-registry.sh down",
     "test": "pnpm build:packages && cross-env OXC_TSCONFIG_PATH=./tests/tsconfig.json node --import @oxc-node/core/register --test \"tests/*.spec.ts\"",
-    "version": "napi version",
+    "version": "pnpm --dir packages/engine-oxc version",
     "prepare": "husky",
     "compile:bench": "tsc --project benchmarks/transform/tsconfig.json",
     "typecheck": "pnpm build:packages && tsc --noEmit -p tests/tsconfig.json && tsc --noEmit -p tests/corpus/tsconfig.json"
@@ -98,6 +68,7 @@
     "@types/semver": "^7.7.0",
     "@wrap-esm-lambda/core": "workspace:^",
     "@wrap-esm-lambda/engine-acorn": "workspace:^",
+    "@wrap-esm-lambda/engine-oxc": "workspace:^",
     "@wrap-esm-lambda/hooks": "workspace:^",
     "@wrap-esm-lambda/unplugin": "workspace:^",
     "chalk": "^5.4.1",

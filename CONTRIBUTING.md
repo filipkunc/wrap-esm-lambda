@@ -9,19 +9,18 @@ page keeps the details.
 The top-level directories are grouped by purpose:
 
 ```text
-packages/              published TypeScript packages
+packages/              published packages
+  engine-oxc/          native package (Rust source, Cargo and npm metadata)
 examples/              runnable consumer examples
 tests/                 specs, fixtures, compatibility matrix, and ecosystem corpus
 benchmarks/            cold-start and transform benchmarks
 experiments/           one-off research that is not part of CI or a published package
 docs/                  guides, release notes, and research presentations
-src/ + Cargo.toml       native @wrap-esm-lambda/engine-oxc implementation
 ```
 
-The native package remains at the repository root because the N-API build,
-platform artifacts, and release assembly currently share that boundary. Moving
-it under `packages/` is intentionally a separate release-infrastructure change,
-not part of a directory-only cleanup.
+The repository root is a private JavaScript workspace. The published native
+`@wrap-esm-lambda/engine-oxc` package owns its Rust and npm build boundary under
+`packages/engine-oxc/`, alongside the other published packages.
 
 ## Building and testing
 
@@ -30,19 +29,20 @@ not part of a directory-only cleanup.
    once after cloning**, and not only for the addon: the same command writes
    the package's entry point (`index.js`), its types (`index.d.ts`), and the
    wasi glue. Those are generated files and are not in git, so before the
-   first build `../index` resolves to nothing and the typecheck fails.
+   first build `@wrap-esm-lambda/engine-oxc` has no generated entry point and
+   the typecheck fails.
    `pnpm build:debug` writes the identical set if you only need the loader.
 3. `pnpm build:packages` — compile the workspace packages (`tsc -b`, project
    references, incremental); `pnpm test` runs it for you
 4. `pnpm test` — the test suite, on Node's built-in
    [test runner](https://nodejs.org/api/test.html) (`node --test`; TypeScript
    specs load through `@oxc-node/core`)
-5. `cargo fmt` and `cargo clippy` before committing
-6. `cargo test` — Rust tests
+5. `pnpm format:rs` and `(cd packages/engine-oxc && cargo clippy)` before committing
+6. `(cd packages/engine-oxc && cargo test)` — Rust tests
 
 The Rust toolchain takes care of itself on rustup-managed machines:
-`rust-toolchain.toml` pins the crate's MSRV (the `rust-version` floor from
-`Cargo.toml`), so the right rustc is installed on first use instead of a
+`packages/engine-oxc/rust-toolchain.toml` pins the crate's MSRV (the
+`rust-version` floor from its `Cargo.toml`), so the right rustc is installed on first use instead of a
 too-old stable failing the build. Working on the floor toolchain also means
 code that needs a newer rustc fails locally before CI's MSRV gate sees it.
 
@@ -134,11 +134,11 @@ find-all-references and rename are incomplete.
 
 ## Generated files
 
-`index.js`, `index.d.ts`, `browser.js`, `wasi-worker.mjs`,
+`packages/engine-oxc/index.js`, `index.d.ts`, `browser.js`, `wasi-worker.mjs`,
 `wasi-worker-browser.mjs`, `wrap-esm-lambda.wasi.cjs` and
 `wrap-esm-lambda.wasi-browser.js` are emitted by `napi build` and are
 gitignored. Any single build writes all of them — the set comes from
-`napi.targets` in `package.json`, so a native x64 build produces the wasi glue
+`napi.targets` in `packages/engine-oxc/package.json`, so a native x64 build produces the wasi glue
 too.
 
 They used to be committed, and that hid a real defect: the checked-in loader
@@ -199,13 +199,13 @@ alone actually instruments a package.
 Two more gates run beside it, and both block a release:
 
 - **MSRV** — `cargo check --all-targets --locked` on exactly the `rustc 1.95`
-  that `rust-version` in `Cargo.toml` (and `rust-toolchain.toml`, kept in
+  that `rust-version` in `packages/engine-oxc/Cargo.toml` (and its `rust-toolchain.toml`, kept in
   step) promises. Everything else Rust-side floats on stable — CI jobs set
   `RUSTUP_TOOLCHAIN` explicitly so the local-machine pin in
-  `rust-toolchain.toml` does not reach them — so without this a dependency
+  package-local `rust-toolchain.toml` does not reach them — so without this a dependency
   raising the real floor would surface as a contributor's build breaking
   rather than as a red check.
-- **Security audit** — `cargo audit` over the whole `Cargo.lock` (every crate
+- **Security audit** — `cargo audit` over `packages/engine-oxc/Cargo.lock` (every crate
   there links into the shipped addon, so there is no dev/prod split to make),
   and `pnpm audit --prod` over what the published packages actually depend on.
   The full dev tree is audited too but never blocks: bundlers, the benchmark
@@ -228,7 +228,7 @@ nothing automatic can reach the registry.
 
 Before tagging, run **`pnpm publish:rehearsal`**: one hermetic pass on a
 throwaway verdaccio — publish the workspace packages, publish the host's
-platform package, publish the root addon, install the lot into a scratch
+platform package, publish the native addon, install the lot into a scratch
 consumer, run the runtime hook end to end, tear it all down. It needs a release
 `pnpm build`, and it leaves nothing behind, which is what separates it from the
 persistent registry in
@@ -238,5 +238,5 @@ publish flow, opposite lifetime.
 Neither rehearses `napi prepublish` itself — it orchestrates all nine platform
 packages from CI's downloaded artifacts, and locally only the host's binary
 exists, so the rehearsal publishes that one platform package directly and sends
-the root out with `--ignore-scripts` — nor npm provenance, which is a
+the native package out with `--ignore-scripts` — nor npm provenance, which is a
 registry.npmjs.org feature.
