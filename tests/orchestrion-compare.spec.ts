@@ -15,7 +15,7 @@ import { exportsTap } from '@wrap-esm-lambda/engine-oxc'
 // package that shows the capability difference: orchestrion's output
 // publishes tracingChannel events around the method, while the exports tap
 // hands the user the class. Subscribers and patch code both change the same
-// return value below, making the behavioral overlap explicit.
+// Promise result below, making that deliberately narrow overlap explicit.
 
 const require = createRequire(import.meta.url)
 const { create } = require('@apm-js-collab/code-transformer')
@@ -53,7 +53,7 @@ test('orchestrion instruments the same real @smithy/core client file', async () 
   assert.ok(out.includes('smithy-send'), 'the configured channel name is in the output')
 })
 
-test('behavior: orchestrion observes events; the exports tap wraps the method', async () => {
+test('behavior: both mechanisms replace the Promise result', async () => {
   const source = await readFile(fixtureClientPath, 'utf8')
 
   // --- orchestrion: load its transformed module, subscribe, call send ---
