@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas'
 import type { Chart, Plugin } from 'chart.js'
