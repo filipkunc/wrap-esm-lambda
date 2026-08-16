@@ -234,8 +234,9 @@ Performance claims are split by what they actually measure:
 - [Engine diagnostics](docs/benchmarks.md#engine-transform-diagnostics) compare
   OXC and Acorn through the same production `applyMatched()` entry point.
 - The [Orchestrion comparison](docs/comparisons.md#performance-comparison)
-  measures an overlapping transform task in isolated processes. It is a
-  diagnostic, not a substitute for an end-to-end comparison of complete
+  measures warmed-up transform cost on the same Smithy fixture and overlapping
+  Promise-result outcome, using each project's native mechanism. It is not an
+  equal-work test or a substitute for an end-to-end comparison of complete
   integrations.
 
 Cross-project numbers are intentionally not quoted here. They belong in the
