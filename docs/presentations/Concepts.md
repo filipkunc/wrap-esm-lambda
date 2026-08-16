@@ -200,7 +200,7 @@ an AST. Validation, engine parity, and evidence of real demand come first.
 
 ---
 
-# Cross-project numbers require equivalent work
+# Cross-project numbers require explicit work boundaries
 
 Using the same source file is not enough. The old comparison timed an exports
 tap for `Client` against a body rewrite for `Client#send`, then described
@@ -208,14 +208,17 @@ the ratio as an architectural win. Those are different operations.
 
 The replacement benchmark requires:
 
-- the same source and overlapping behavioral intent;
+- the same source and overlapping Promise-result intent;
 - the same setup boundary and timing settings;
 - isolated processes and reported environment details;
-- output validation plus an executed behavioral test;
-- explicit separation of transform time from cold start.
+- expected-output markers plus an executed behavioral fixture;
+- explicit separation of transform time from cold start and from work deferred
+  to patch or subscriber execution.
 
-Until a measurement satisfies that contract, it does not belong in a headline.
-Run the scoped diagnostic with `pnpm bench:compare`.
+The diagnostic still does not claim equal internal work: Wrap appends an export
+tap and Orchestrion rewrites the method with generic tracing scaffolding. Until
+a measurement states that boundary, it does not belong in a headline. Run the
+scoped Promise-path diagnostic with `pnpm bench:compare`.
 
 ---
 
