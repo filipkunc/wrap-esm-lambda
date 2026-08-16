@@ -156,25 +156,25 @@ declaration lets user code do next.
 
 ---
 
-# Observation and intervention solve different problems
+# Different control surfaces can overlap
 
 ```js
 const result = await new Client().send('hello')
 
-// Orchestrion
-// result === 'sent:hello'          + start/end events
-
-// exports tap
-// result === 'patched:sent:hello'  after patchClient wraps send
+// Orchestrion subscriber: replace message.result on asyncEnd
+// exports tap patch: wrap Client.prototype.send
+// result === 'patched:sent:hello' in both cases
 ```
 
-Orchestrion's diagnostic-channel subscriber observes the lifecycle; it cannot
-replace the method's return value. That is a good fit for event-based tracing,
-and today its body rewrite reaches **non-exported functions and call sites**.
+Orchestrion can observe lifecycle events, replace supported return values, use
+custom transforms, and reach **private or nested implementation details**.
 
-Today the exports tap starts at a narrower boundary but gives the patch the
-actual binding. It can wrap, short-circuit, or replace behavior when
-observation is not enough.
+The exports tap starts at exported bindings and hands the actual value to
+ordinary patch code. That makes wrapping, short-circuiting or replacement
+direct, without requiring each patch author to manipulate an AST.
+
+The distinction is a trade-off in reach and control surface—not observation
+versus intervention.
 
 ---
 
@@ -200,21 +200,22 @@ an AST. Validation, engine parity, and evidence of real demand come first.
 
 ---
 
-# Acorn answers an important question: how far can pure JavaScript go?
+# Cross-project numbers require equivalent work
 
-The Acorn engine is not merely an emergency fallback. It implements the same
-contract in JavaScript and gives the native engine an honest control case.
+Using the same source file is not enough. The old comparison timed an exports
+tap for `Client` against a body rewrite for `Client#send`, then described
+the ratio as an architectural win. Those are different operations.
 
-On the same real `@smithy/core` ESM module:
+The replacement benchmark requires:
 
-| Transform                | Approximate latency |
-| ------------------------ | ------------------: |
-| OXC exports tap          |           **14 µs** |
-| Acorn exports tap        |           **86 µs** |
-| Orchestrion body rewrite |     **950–1200 µs** |
+- the same source and overlapping behavioral intent;
+- the same setup boundary and timing settings;
+- isolated processes and reported environment details;
+- output validation plus an executed behavioral test;
+- explicit separation of transform time from cold start.
 
-Pure JavaScript is still roughly **11× ahead of the body-rewriting approach**.
-That shows the largest win comes from the tap's architecture, not from Rust.
+Until a measurement satisfies that contract, it does not belong in a headline.
+Run the scoped diagnostic with `pnpm bench:compare`.
 
 ---
 
