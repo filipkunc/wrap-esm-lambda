@@ -61,13 +61,26 @@ parser call equals a complete instrumentation mechanism. Low-level
 `exportsTap()` or parser profiling belongs in temporary `perf`/flamegraph
 investigations when a production case behaves unexpectedly.
 
-## Equivalent Orchestrion transform diagnostic
+## Same-fixture Wrap/Orchestrion transform diagnostic
 
-`pnpm bench:compare` measures the overlapping transform task described in
-[the Orchestrion comparison](comparisons.md#performance-comparison). Both tools
-receive the same string containing the real `@smithy/core` ESM client, with a
-preselected matcher and one request to make `Client#send` interceptable. Each
-tool runs under identical Tinybench settings in its own child process.
+`pnpm bench:compare` measures the overlapping Promise-result task described
+in [the Orchestrion comparison](comparisons.md#performance-comparison). Both
+tools receive the same string containing the real `@smithy/core` ESM client,
+with a preselected matcher. Each tool runs under identical Tinybench settings
+in its own child process.
+
+This is the same fixture and overlapping outcome, not equal internal work.
+Wrap's timed path validates the exported `Client` binding and appends a tap;
+the method wrapper is supplied later by patch code during module evaluation.
+Orchestrion's timed path locates and rewrites `send`, generating its generic
+tracing lifecycle inside the transform. Module evaluation and patch/subscriber
+execution are excluded for both.
+
+The real `Client#send` also supports callback overloads. The Orchestrion
+configuration uses `kind: "Async"`, so this diagnostic covers only the
+Promise-return path whose resolved value both mechanisms can replace. It also
+measures warmed-up transform throughput: the untimed verification call and
+Tinybench warmup exclude first-transform initialization.
 
 The command prints the exact package versions, Node version, platform, CPU,
 p50, p95, p99, relative margin of error and sample count. Its launch order is
@@ -80,14 +93,15 @@ pnpm bench:compare
 ```
 
 The behavioral test executes a smaller transformed fixture and proves that
-both mechanisms change the same resolved value. The benchmark worker also
-rejects unchanged or structurally invalid output before collecting samples.
+both mechanisms change the same Promise result. Against the real Smithy source,
+the worker rejects unchanged output or missing mechanism-specific markers
+before collecting samples; it does not claim to execute that full client.
 
-These numbers cover transform time only. They exclude matcher construction,
-config loading, hook registration, module compilation and evaluation, patch
-or subscriber execution, and invocation overhead. Publish them only with this
-scope and the emitted environment metadata; do not turn their ratio into a
-whole-product claim.
+These numbers cover hot transform time only. They exclude matcher construction,
+config loading, hook registration, first-transform initialization, module
+compilation and evaluation, patch or subscriber execution, and invocation
+overhead. Publish them only with this scope and the emitted environment
+metadata; do not turn their ratio into a whole-product or equal-work claim.
 
 ## Real npm packages
 
