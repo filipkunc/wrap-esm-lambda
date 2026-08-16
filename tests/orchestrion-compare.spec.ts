@@ -13,8 +13,9 @@ import { exportsTap } from '@wrap-esm-lambda/engine-oxc'
 // our exports tap, run over the identical @smithy/core client file the AWS
 // capstone instruments — plus a behavioral side-by-side on the fixture
 // package that shows the capability difference: orchestrion's output
-// publishes tracingChannel events around the method (observe-only), the
-// exports tap hands the user the class and lets them wrap or replace it.
+// publishes tracingChannel events around the method, while the exports tap
+// hands the user the class. Subscribers and patch code both change the same
+// return value below, making the behavioral overlap explicit.
 
 const require = createRequire(import.meta.url)
 const { create } = require('@apm-js-collab/code-transformer')
@@ -68,7 +69,13 @@ test('behavior: orchestrion observes events; the exports tap wraps the method', 
     for (const base of bases) {
       for (const kind of kinds) {
         const full = `${base}:${kind}`
-        dc.subscribe(full, () => events.push(kind))
+        dc.subscribe(full, (message) => {
+          events.push(kind)
+          if (kind === 'asyncEnd') {
+            const result = message as { result?: unknown }
+            if (typeof result.result === 'string') result.result = `patched:${result.result}`
+          }
+        })
         subscribed.push(full)
       }
     }
@@ -80,7 +87,7 @@ test('behavior: orchestrion observes events; the exports tap wraps the method', 
     await writeFile(orchestrionFile, orchestrionOut)
     const orchestrionMod = await import(pathToFileURL(orchestrionFile).href)
     const observed = await new orchestrionMod.Client().send('hello')
-    assert.strictEqual(observed, 'sent:hello', 'orchestrion cannot change the result — observe-only')
+    assert.strictEqual(observed, 'patched:sent:hello', 'orchestrion subscriber rewrites the resolved value')
     assert.ok(events.includes('start'), `send() published events (saw: ${events.join(',') || 'none'})`)
 
     // --- exports tap: registry delivery, wrap and rewrite the result ---
