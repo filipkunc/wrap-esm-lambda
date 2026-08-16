@@ -12,14 +12,14 @@ Both tools start from declarative module matching, but expose different control
 surfaces after a match. The exports tap hands exported bindings to ordinary
 patch code. Orchestrion queries the module AST and rewrites the matched node.
 
-| capability | exports tap | Orchestrion |
-| --- | --- | --- |
-| wrap or rebind an exported value | direct live-binding access | possible through a matching rewrite or custom transform |
-| observe a function invocation | patch code chooses how | built-in `TracingChannel` transforms |
-| change a returned value | patch code controls the wrapper | subscribers can replace `message.result` for supported return shapes |
-| target private or nested code | not currently implemented | private-method queries and arbitrary `astQuery` selectors |
-| define a non-tracing rewrite | patch code runs at module evaluation | registered custom AST transforms |
-| runtime and build-time delivery | hooks and unplugin share one transform | tracing hooks and bundler plugins |
+| capability                       | exports tap                            | Orchestrion                                                          |
+| -------------------------------- | -------------------------------------- | -------------------------------------------------------------------- |
+| wrap or rebind an exported value | direct live-binding access             | possible through a matching rewrite or custom transform              |
+| observe a function invocation    | patch code chooses how                 | built-in `TracingChannel` transforms                                 |
+| change a returned value          | patch code controls the wrapper        | subscribers can replace `message.result` for supported return shapes |
+| target private or nested code    | not currently implemented              | private-method queries and arbitrary `astQuery` selectors            |
+| define a non-tracing rewrite     | patch code runs at module evaluation   | registered custom AST transforms                                     |
+| runtime and build-time delivery  | hooks and unplugin share one transform | tracing hooks and bundler plugins                                    |
 
 Neither mechanism is a strict superset of the other. Orchestrion reaches
 non-exported implementation details today. The exports tap keeps the injected
