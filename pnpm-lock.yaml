@@ -16,8 +16,8 @@ importers:
   .:
     devDependencies:
       '@apm-js-collab/code-transformer':
-        specifier: ^0.18.0
-        version: 0.18.0
+        specifier: ^0.18.1
+        version: 0.18.1
       '@aws-sdk/client-s3':
         specifier: ^3.1090.0
         version: 3.1090.0
@@ -427,7 +427,7 @@ importers:
 
 packages:
 
-  '@apm-js-collab/code-transformer@0.18.0':
+  '@apm-js-collab/code-transformer@0.18.1':
     resolution: {integrity: sha512-aN3Oq8r1J3gPJtCwErP664gM0+HhM1I1lujPr9TMTCcEl/joQQbpGpeMdts9B1+W2wHMsvioDMv5F4PvMWE6gw==}
     hasBin: true
 
@@ -4300,7 +4300,7 @@ packages:
 
 snapshots:
 
-  '@apm-js-collab/code-transformer@0.18.0':
+  '@apm-js-collab/code-transformer@0.18.1':
     dependencies:
       '@types/estree': 1.0.9
       astring: 1.9.0
