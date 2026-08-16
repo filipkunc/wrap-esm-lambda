@@ -226,16 +226,22 @@ The full failure table, the validator, and engine selection are in
 
 ## Performance
 
-Headline numbers (methodology in [docs/benchmarks.md](docs/benchmarks.md)):
+Performance claims are split by what they actually measure:
 
-- The exports tap costs **~14 µs** per matched ESM module and **~2.4 µs** per
-  CJS tap; orchestrion's body-rewriting transform on the same file costs
-  ~950–1200 µs.
-- Runtime-hook cold start overhead on a real fixture app is **~29 ms** — on
-  par with import-in-the-middle's sync mode, ~3x cheaper than the off-thread
-  loader OTel ships by default.
-- The pure-JS acorn engine runs the same setup with no native binary: same
-  emitted code, ~6x slower on the parse-dominated tap, ~14 ms more cold start.
+- [Cold-start benchmarks](docs/benchmarks.md#cold-start) launch a fresh Node
+  process for every sample and include initialization, matching and
+  transformation.
+- [Engine diagnostics](docs/benchmarks.md#engine-transform-diagnostics) compare
+  OXC and Acorn through the same production `applyMatched()` entry point.
+- The [Orchestrion comparison](docs/comparisons.md#performance-comparison)
+  measures an overlapping transform task in isolated processes. It is a
+  diagnostic, not a substitute for an end-to-end comparison of complete
+  integrations.
+
+Cross-project numbers are intentionally not quoted here. They belong in the
+repository only when both tools receive the same input, implement the same
+verified behavior, use equivalent lifecycle boundaries, and report enough
+environment and distribution data for somebody else to reproduce the result.
 
 ## Building and running locally
 
