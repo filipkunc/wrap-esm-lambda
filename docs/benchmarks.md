@@ -23,7 +23,7 @@ cd benchmarks/hooks && ./bench_hooks.sh
 
 The committed result is [benchmarks/hooks/benchTable.md](../benchmarks/hooks/benchTable.md):
 
-![Cold start benchmark chart](../benchmarks/hooks/benchChart.svg 'Cold start benchmark chart')
+![Cold start benchmark chart](../benchmarks/hooks/benchChart.svg "Cold start benchmark chart")
 
 On pull requests, CI builds base and head side by side and interleaves their
 commands in one Hyperfine invocation. This avoids comparing numbers from
@@ -49,7 +49,7 @@ The cases cover:
 Tinybench reports p50, p99, relative margin of error, and sample count. The
 chart uses p50 bars and prints p99 beside them:
 
-![The two engines in detail](../benchmarks/hooks/tapEngineChart.svg 'Production transform latency under OXC and Acorn')
+![The two engines in detail](../benchmarks/hooks/tapEngineChart.svg "Production transform latency under OXC and Acorn")
 
 ```sh
 pnpm bench        # transform distributions
@@ -60,7 +60,6 @@ These measurements answer where engine time goes; they do not pretend that a
 parser call equals a complete instrumentation mechanism. Low-level
 `exportsTap()` or parser profiling belongs in temporary `perf`/flamegraph
 investigations when a production case behaves unexpectedly.
-
 
 ## Equivalent Orchestrion transform diagnostic
 
