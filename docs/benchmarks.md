@@ -9,10 +9,12 @@ not the user-visible headline.
 [`benchmarks/hooks/bench_hooks.sh`](../benchmarks/hooks/bench_hooks.sh) uses
 [`hyperfine`](https://github.com/sharkdp/hyperfine) to launch a fresh Node
 process for every sample. It compares the baseline, a no-op synchronous hook,
-the runtime tap under OXC and Acorn, and neighboring instrumentation
-mechanisms. Each command performs its real initialization and transformation
-work; unlike parser microbenchmarks, the rows are comparable as complete
-processes.
+the production runtime tap under OXC and Acorn, plus hand-written probes of
+neighboring mechanisms. Every row is a complete process, but the adapters are
+not equivalent products: the Wrap rows load its production registration and
+config path, while the Orchestrion rows use a small benchmark-local hook.
+Those neighboring rows are exploratory and are not a sound basis for a
+cross-project headline.
 
 ```sh
 sudo apt update && sudo apt install -y hyperfine
@@ -59,6 +61,33 @@ parser call equals a complete instrumentation mechanism. Low-level
 `exportsTap()` or parser profiling belongs in temporary `perf`/flamegraph
 investigations when a production case behaves unexpectedly.
 
+
+## Equivalent Orchestrion transform diagnostic
+
+`pnpm bench:compare` measures the overlapping transform task described in
+[the Orchestrion comparison](comparisons.md#performance-comparison). Both tools
+receive the same string containing the real `@smithy/core` ESM client, with a
+preselected matcher and one request to make `Client#send` interceptable. Each
+tool runs under identical Tinybench settings in its own child process.
+
+The command prints the exact package versions, Node version, platform, CPU,
+p50, p95, p99, relative margin of error and sample count. Its launch order is
+randomized to avoid always favoring the first process:
+
+```sh
+pnpm bench:compare
+```
+
+The behavioral test executes a smaller transformed fixture and proves that
+both mechanisms change the same resolved value. The benchmark worker also
+rejects unchanged or structurally invalid output before collecting samples.
+
+These numbers cover transform time only. They exclude matcher construction,
+config loading, hook registration, module compilation and evaluation, patch
+or subscriber execution, and invocation overhead. Publish them only with this
+scope and the emitted environment metadata; do not turn their ratio into a
+whole-product claim.
+
 ## Real npm packages
 
 The wider engine comparison is [`tests/corpus/bench.mts`](../tests/corpus/bench.mts). It
@@ -69,4 +98,6 @@ fast result cannot hide broken output. See the [corpus README](../tests/corpus/R
 
 Transform diagnostics intentionally exclude config loading, package matching,
 Node compilation, and patch execution. Hyperfine cold starts include those
-costs and remain the metric to use for user-facing performance claims.
+costs and remain the regression metric for this project's production path.
+Cross-project cold-start claims additionally require equivalent production
+adapters and verified behavior.
