@@ -46,7 +46,8 @@
     "version": "pnpm --dir packages/engine-oxc version",
     "prepare": "husky",
     "compile:bench": "tsc --project benchmarks/transform/tsconfig.json",
-    "typecheck": "pnpm build:packages && tsc --noEmit -p tests/tsconfig.json && tsc --noEmit -p tests/corpus/tsconfig.json"
+    "typecheck": "pnpm build:packages && tsc --noEmit -p tests/tsconfig.json && tsc --noEmit -p tests/corpus/tsconfig.json",
+    "bench:compare": "node --import @oxc-node/core/register benchmarks/comparison/bench.ts"
   },
   "devDependencies": {
     "@apm-js-collab/code-transformer": "^0.18.0",
