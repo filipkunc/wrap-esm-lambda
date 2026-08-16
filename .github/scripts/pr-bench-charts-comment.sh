@@ -23,7 +23,7 @@ body_file=$(mktemp)
   echo "$marker"
   echo '### Benchmark charts'
   echo
-  echo "The committed reference charts at $HEAD_SHA — the set the release page embeds. This run reports the base-vs-head cold-start table, transform diagnostics and the equivalent Orchestrion comparison table in the [run summary]($RUN_URL). The `bench-charts` artifact on the same page includes the freshly rendered Orchestrion comparison chart, its Markdown table and raw JSON."
+  echo "The committed reference charts at $HEAD_SHA — the set the release page embeds. This run reports the base-vs-head cold-start table, transform diagnostics and the equivalent Orchestrion comparison table in the [run summary]($RUN_URL). The bench-charts artifact on the same page includes the freshly rendered Orchestrion comparison chart, its Markdown table and raw JSON."
   echo
   echo '**The two engines in detail** (production transform pipeline, Tinybench p50/p99):'
   echo
@@ -33,7 +33,7 @@ body_file=$(mktemp)
   echo
   echo "![Cold start by hooking mechanism]($raw/benchmarks/hooks/benchChart.svg)"
   echo
-  echo "**Wrap vs Orchestrion** (equivalent transform diagnostic): see the table in the [run summary]($RUN_URL) and `orchestrionComparison.svg` in the `bench-charts` artifact."
+  echo "**Wrap vs Orchestrion** (equivalent transform diagnostic): see the table in the [run summary]($RUN_URL) and orchestrionComparison.svg in the bench-charts artifact."
 } > "$body_file"
 
 auth="Authorization: Bearer $GITHUB_TOKEN"
