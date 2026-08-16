@@ -71,7 +71,9 @@ tool runs under identical Tinybench settings in its own child process.
 
 The command prints the exact package versions, Node version, platform, CPU,
 p50, p95, p99, relative margin of error and sample count. Its launch order is
-randomized to avoid always favoring the first process:
+randomized to avoid always favoring the first process. In CI the same sample
+set produces a table in the job summary plus an SVG chart, Markdown table and
+raw JSON in the `bench-charts` artifact:
 
 ```sh
 pnpm bench:compare
