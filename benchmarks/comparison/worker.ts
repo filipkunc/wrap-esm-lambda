@@ -69,9 +69,7 @@ const orchestrionTransformer = matcher.getTransformer('@smithy/core', smithyPack
 assert.ok(orchestrionTransformer, 'Orchestrion did not select the Smithy target')
 
 function transformWithWrap(): string {
-  const result = applyMatched(source, wrapEntries, sourceUrl, { delivery: 'registry', format: 'module' })
-  assert.ok(result, 'Wrap did not transform the Smithy target')
-  return result.code
+  return applyMatched(source, wrapEntries, sourceUrl, { delivery: 'registry', format: 'module' })!.code
 }
 
 function transformWithOrchestrion(): string {
@@ -91,7 +89,13 @@ if (tool === 'wrap-esm-lambda') {
 let sink = 0
 const duration = Number(process.env.BENCH_COMPARE_TIME_MS ?? 1_000)
 assert.ok(Number.isFinite(duration) && duration > 0, 'BENCH_COMPARE_TIME_MS must be positive')
-const bench = new Bench({ time: duration, warmupTime: 250, iterations: 20, warmupIterations: 10 })
+const bench = new Bench({
+  time: duration,
+  warmupTime: 250,
+  iterations: 20,
+  warmupIterations: 10,
+  retainSamples: true,
+})
 bench.add(tool, () => {
   sink ^= transform().length
 })
@@ -102,13 +106,18 @@ const task = bench.tasks[0]
 const result = task?.result
 assert.ok(result?.state === 'completed', `${tool} benchmark did not complete`)
 
+const samples = result.latency.samples
+assert.ok(samples, 'Tinybench did not retain latency samples')
+const p95 = samples[Math.ceil(samples.length * 0.95) - 1]
+assert.ok(p95 !== undefined, 'Tinybench returned no p95 sample')
+
 const rootPackage = require('../../package.json') as { version: string }
 const orchestrionPackage = require('@apm-js-collab/code-transformer/package.json') as { version: string }
 const report: ComparisonResult = {
   tool,
   operation: `enable Client#send result interception on @smithy/core ESM (${(source.length / 1024).toFixed(1)} KB)`,
   p50Us: result.latency.p50 * 1_000,
-  p95Us: result.latency.p95 * 1_000,
+  p95Us: p95 * 1_000,
   p99Us: result.latency.p99 * 1_000,
   rme: result.latency.rme,
   samples: result.latency.samplesCount,
