@@ -42,17 +42,26 @@ at all. Those numbers have been removed.
 - reads the same real `@smithy/core` ESM source for both tools;
 - preselects one Wrap entry and one Orchestrion transformer, so setup is
   excluded on both sides;
-- gives both transforms the same string input and the same intent: enable user
-  code to change the result of `Client#send`;
+- gives both transforms the same string input and the same overlapping intent:
+  make the Promise-return result of `Client#send` replaceable;
 - runs each tool in its own child process with identical Tinybench settings;
-- fails unless each transform actually changes the source in the expected way;
+- checks that each transform changes the source and emits its expected markers;
 - prints Node, platform, CPU and exact package versions beside p50, p95, p99,
   relative margin of error and sample count.
 
-This is deliberately a **transform diagnostic**, not a whole-product verdict.
-It excludes config loading, hook registration, module compilation, patch or
-subscriber execution, and steady-state invocation cost. In particular, it
-must not be combined with the snippet-only CJS diagnostic or described as an
+The fixture and Promise-result outcome overlap; the internal work does not.
+Wrap validates the exported `Client` binding and appends a tap, deferring the
+prototype wrapper to patch execution during module evaluation. Orchestrion
+locates and rewrites `send` during the timed call, generating its generic
+tracing lifecycle. The real method also supports callbacks, which the
+benchmark's `kind: "Async"` configuration deliberately does not cover.
+
+This is therefore a **hot, same-fixture transform diagnostic**, not an
+equal-work or whole-product verdict. An untimed verification call and
+Tinybench warmup exclude first-transform initialization. The measurement also
+excludes config loading, hook registration, module compilation and evaluation,
+patch or subscriber execution, and invocation cost. In particular, it must
+not be combined with the snippet-only CJS diagnostic or described as an
 architectural speedup.
 
 Whole-process cold starts remain in
