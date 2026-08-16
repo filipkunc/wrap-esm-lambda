@@ -51,6 +51,7 @@ const wrapEntries: InstrumentEntry[] = [
     },
     patch: {
       name: 'patchClientSend',
+      // Transform-only registry key: patch loading/execution is outside this diagnostic.
       from: '/benchmarks/comparison/patch.mjs',
     },
     bindings: ['Client'],
@@ -78,6 +79,8 @@ const matcher = create([
       versionRange: smithyPackage.version,
       filePath,
     },
+    // Smithy's send() also has callback overloads. Async deliberately measures only
+    // the Promise-return path whose resolved value both mechanisms can replace.
     functionQuery: { className: 'Client', methodName: 'send', kind: 'Async' },
   },
 ])
@@ -136,7 +139,7 @@ const orchestrionPackage = require('@apm-js-collab/code-transformer/package.json
 }
 const report: ComparisonResult = {
   tool,
-  operation: `enable Client#send result interception on @smithy/core ESM (${(source.length / 1024).toFixed(1)} KB)`,
+  operation: `transform cost for Client#send's Promise-return path using each project's native mechanism on @smithy/core ESM (${(source.length / 1024).toFixed(1)} KB)`,
   p50Us: result.latency.p50 * 1_000,
   p95Us: p95 * 1_000,
   p99Us: result.latency.p99 * 1_000,
