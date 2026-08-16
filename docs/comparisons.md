@@ -8,71 +8,58 @@ targets.
 
 ## Compared to orchestrion-js
 
-Both tools express the same intent declaratively — a module matcher with a
-semver range plus a description of what to instrument — but differ in what
-the transform does and where user code runs.
+Both tools start from declarative module matching, but expose different control
+surfaces after a match. The exports tap hands exported bindings to ordinary
+patch code. Orchestrion queries the module AST and rewrites the matched node.
+
+| capability | exports tap | Orchestrion |
+| --- | --- | --- |
+| wrap or rebind an exported value | direct live-binding access | possible through a matching rewrite or custom transform |
+| observe a function invocation | patch code chooses how | built-in `TracingChannel` transforms |
+| change a returned value | patch code controls the wrapper | subscribers can replace `message.result` for supported return shapes |
+| target private or nested code | not currently implemented | private-method queries and arbitrary `astQuery` selectors |
+| define a non-tracing rewrite | patch code runs at module evaluation | registered custom AST transforms |
+| runtime and build-time delivery | hooks and unplugin share one transform | tracing hooks and bundler plugins |
+
+Neither mechanism is a strict superset of the other. Orchestrion reaches
+non-exported implementation details today. The exports tap keeps the injected
+transform generic and defers policy to normal JavaScript, which makes exported
+objects easy to wrap, short-circuit or replace. The behavioral comparison in
 [`tests/orchestrion-compare.spec.ts`](../tests/orchestrion-compare.spec.ts)
-runs orchestrion's `{ className: 'Client', methodName: 'send' }` function
-query over the identical `@smithy/core` file and demonstrates the capability
-split: orchestrion rewrites the method body into `tracingChannel` publishes —
-subscribers _observe_ start/end/asyncEnd events but the return value is
-untouchable — while the exports tap hands the class to user code that can
-wrap, short-circuit, or rebind. `pnpm bench` measures the transform on
-that real file:
+uses the same `Client#send` fixture and verifies that both mechanisms can
+change `sent:hello` to `patched:sent:hello`.
 
-| transform (same `@smithy/core` client file)         |  latency |
-| --------------------------------------------------- | -------: |
-| oxc exports tap (`dist-es`, parse + validate)       |   ~14 µs |
-| oxc exports tap (CJS snippet, nothing crosses napi) |  ~2.4 µs |
-| orchestrion `Client#send` query (stock)             | ~1200 µs |
-| orchestrion `Client#send` query (cached selector)   |  ~950 µs |
+### Performance comparison
 
-(The tap's napi contract now takes all of a module's patch entries as one
-array-of-objects call — one parse for N entries and room for the rewrite
-path's `code`/`map` results. That object plumbing costs a fixed couple of
-microseconds over the old scalar per-entry call, which is why the CJS
-snippet row reads ~2.4 µs; the per-module totals below absorb it.)
+The old table compared unlike operations: validating and tapping the exported
+`Client` binding on one side, and locating plus rewriting the body of
+`Client#send` on the other. Sharing a source file did not make those
+operations equivalent, and the CJS snippet-only row did not parse that source
+at all. Those numbers have been removed.
 
-A profiling pass changed the tap's napi contract: originally the whole module
-source round-tripped across the boundary just to append a few hundred bytes,
-and the two O(n) UTF-16<->UTF-8 conversions dominated (the 42 KB CJS file
-measured ~39 µs round-tripped vs ~0.7 µs snippet-only). Rust now returns just
-the snippet and JS concatenates; the CJS path sends no source at all. What
-remains of the ESM cost is dominated by the full-AST oxc parse
-itself — the price of validation `lexEsm` doesn't attempt (const-ness, local
-binding resolution, loud missing-export errors).
+`pnpm bench:compare` is the narrower replacement. It:
 
-A second pass removed the string conversions that were left, exploiting that
-`registerHooks`' `nextLoad` hands the hook the module source as UTF-8 bytes
-and accepts bytes back. `exportsTapFromBuffer` (and
-`transformLambdaFromBuffer` for the wrap) take that Buffer as-is: it crosses
-napi zero-copy and oxc parses the UTF-8 in place, so the hook no longer pays
-`source.toString()` nor the UTF-16 -> UTF-8 conversion of a napi string
-argument — the patch-only runtime path now never materializes a UTF-16 copy
-of a matched module (`applyMatched` accepts the Buffer and returns one, via
-a single `Buffer.concat`). Two boundary lessons from measuring it: returning
-the few-hundred-byte _snippet_ as a napi external Buffer costs a fixed ~3 µs
-(more than the conversion it avoids — snippets stay strings), and the win on
-the source side is proportional to module size: the complete hook operation
-is a wash on the 1.8 KB `dist-es` file and a few percent ahead on a
-42 KB module even before counting the string path's deferred rope flatten
-and the retired UTF-16 allocation (`pnpm bench` measures both paths,
-small and large).
+- reads the same real `@smithy/core` ESM source for both tools;
+- preselects one Wrap entry and one Orchestrion transformer, so setup is
+  excluded on both sides;
+- gives both transforms the same string input and the same intent: enable user
+  code to change the result of `Client#send`;
+- runs each tool in its own child process with identical Tinybench settings;
+- fails unless each transform actually changes the source in the expected way;
+- prints Node, platform, CPU and exact package versions beside p50, p95, p99,
+  relative margin of error and sample count.
 
-The ~100x gap is architectural, not incidental: the tap's oxc parse only
-validates exports and appends (regenerating the module solely for export
-shapes that need restructuring), while orchestrion parses, queries and
-regenerates the method body through its wasm/esquery pipeline — and unlike
-the handler benchmark, memoizing `esquery.parse` no longer rescues it,
-because the body rewrite itself dominates. The clean proof that the gap is
-architecture rather than Rust: running the tap through the pure-JS acorn
-engine (same contract, no native code — see
-[benchmarks.md](benchmarks.md#js-only-vs-js--rust-the-two-engines)) costs
-~86 µs on the same file, still ~11x ahead of orchestrion while parsing with
-a JS parser just like it does. The flip side is honest:
-orchestrion's body injection can instrument _non-exported_ functions and
-call-site interiors, which the exports tap by design cannot reach — its
-reach is exactly what `Module._load` monkey-patching ever had.
+This is deliberately a **transform diagnostic**, not a whole-product verdict.
+It excludes config loading, hook registration, module compilation, patch or
+subscriber execution, and steady-state invocation cost. In particular, it
+must not be combined with the snippet-only CJS diagnostic or described as an
+architectural speedup.
+
+Whole-process cold starts remain in
+[`benchmarks/hooks`](../benchmarks/hooks). They are useful for measuring this
+project against its own baseline. A cross-project cold-start headline requires
+equivalent production adapters and verified behavior on both sides; the
+current hand-written Orchestrion hook is not used for such a claim.
 
 ## Compared to import-in-the-middle
 
