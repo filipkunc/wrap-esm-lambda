@@ -25,7 +25,7 @@ for (const tool of tools) {
 
 const environment = results[0]?.environment
 if (!environment) throw new Error('comparison produced no results')
-console.log('Equivalent transform diagnostic (isolated child process per tool)')
+console.log('Same-fixture transform diagnostic (isolated child process per tool)')
 console.log(results[0].operation)
 console.log(
   `Node ${environment.node} · ${environment.platform}/${environment.arch} · ${environment.cpu}\n` +
@@ -43,7 +43,11 @@ const table = [
 ].join('\n')
 console.log(table)
 console.log('')
-const scope = 'Transform only: setup, module evaluation, patch/subscriber execution and invocation cost are excluded.'
+const scope = [
+  'Hot transform only: same source and overlapping Promise-result outcome, not equal internal work.',
+  "Wrap appends an export tap and defers method wrapping to module-evaluation-time patch code; Orchestrion's timed path locates and rewrites send with its generic tracing lifecycle.",
+  'Setup, module evaluation, patch/subscriber execution and invocation cost are excluded.',
+].join(' ')
 console.log(scope)
 
 const outputDir = process.env.BENCH_COMPARE_OUTPUT_DIR
@@ -55,7 +59,7 @@ if (outputDir) {
     `Node ${environment.node} · ${environment.platform}/${environment.arch} · ${environment.cpu}\n\n` +
     `wrap-esm-lambda ${environment.wrapEsmLambda} · orchestrion ${environment.orchestrion} · @smithy/core ${environment.smithyCore}`
   const markdown = [
-    '## Equivalent Orchestrion transform diagnostic',
+    '## Same-fixture Wrap/Orchestrion transform diagnostic',
     '',
     results[0].operation,
     '',
@@ -125,7 +129,7 @@ if (outputDir) {
       plugins: {
         title: {
           display: true,
-          text: 'Equivalent Client#send transform diagnostic',
+          text: 'Client#send Promise-path transform cost — different mechanisms',
           color: '#f2f0f0ff',
         },
         legend: { display: true, labels: { color: '#f2f0f0ff' } },
